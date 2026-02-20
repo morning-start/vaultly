@@ -271,8 +271,6 @@ class _InputConfirmDialogState extends State<InputConfirmDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return AlertDialog(
       title: Text(widget.title),
       content: Form(
