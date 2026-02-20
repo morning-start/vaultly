@@ -1,7 +1,7 @@
 # Vaultly
 
 <p align="center">
-  <img src="assets/icon/icon.png" width="120" alt="Vaultly Logo">
+  <img src="assets/logo.png" width="120" alt="Vaultly Logo">
 </p>
 
 <p align="center">
