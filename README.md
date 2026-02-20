@@ -29,7 +29,6 @@
 - **保险库管理** - 安全存储密码、银行卡、笔记等敏感信息
 - **TOTP 双因素认证** - 支持二维码扫描和手动添加 2FA
 - **密码生成器** - 生成高强度随机密码
-- **生物识别解锁** - 支持指纹和面部识别快速解锁
 - **自动锁定** - 离开应用后自动锁定保护隐私
 
 ### 同步与备份
@@ -67,7 +66,7 @@
 
 - **Android**: 6.0 (API 23) 或更高版本
 - **存储空间**: 至少 50MB 可用空间
-- **权限**: 相机（用于二维码扫描）、生物识别
+- **权限**: 相机（用于二维码扫描）
 
 ---
 
@@ -76,9 +75,8 @@
 ### 首次使用
 
 1. **设置主密码** - 创建强密码保护您的保险库
-2. **启用生物识别** - 可选，用于快速解锁
-3. **添加条目** - 点击"+"添加密码或其他敏感信息
-4. **配置同步** - 可选，设置 WebDAV 同步实现多设备备份
+2. **添加条目** - 点击"+"添加密码或其他敏感信息
+3. **配置同步** - 可选，设置 WebDAV 同步实现多设备备份
 
 ### 添加 TOTP
 
@@ -97,7 +95,6 @@
 - **本地存储**: [Shared Preferences](https://pub.dev/packages/shared_preferences) + [Flutter Secure Storage](https://pub.dev/packages/flutter_secure_storage) + JSON 文件存储
 - **加密**: [encrypt](https://pub.dev/packages/encrypt) + [crypto](https://pub.dev/packages/crypto)
 - **二维码**: [mobile_scanner](https://pub.dev/packages/mobile_scanner)
-- **生物识别**: [local_auth](https://pub.dev/packages/local_auth)
 - **WebDAV 同步**: [webdav_client](https://pub.dev/packages/webdav_client)
 
 ---
@@ -190,9 +187,8 @@ vaultly/
 ### 安全建议
 
 1. 设置强主密码（至少 12 位，包含大小写字母、数字和符号）
-2. 启用生物识别解锁增加便利性
-3. 定期通过 WebDAV 备份数据
-4. 不要在公共设备上保存主密码
+2. 定期通过 WebDAV 备份数据
+3. 不要在公共设备上保存主密码
 
 ---
 

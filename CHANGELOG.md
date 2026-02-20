@@ -10,6 +10,18 @@
 ### 新增
 - 计划中的功能...
 
+## [2.0.0] - 2025-02-21
+
+### 移除
+- **生物识别功能** - 移除指纹和面部识别解锁功能
+  - 简化认证流程
+  - 减少应用权限需求
+  - 仅使用主密码进行身份验证
+
+### 变更
+- 认证方式变更为仅支持主密码
+- 移除 `local_auth` 依赖
+
 ## [1.5.0] - 2025-02-21
 
 ### 新增
@@ -96,7 +108,8 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v1.5.0...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/morning-start/vaultly/releases/tag/v2.0.0
 [1.5.0]: https://github.com/morning-start/vaultly/releases/tag/v1.5.0
 [1.0.0]: https://github.com/morning-start/vaultly/releases/tag/v1.0.0
 [0.1.0]: https://github.com/morning-start/vaultly/releases/tag/v0.1.0
