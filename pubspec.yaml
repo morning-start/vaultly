@@ -49,6 +49,9 @@ dependencies:
   # URL Launcher
   url_launcher: ^6.3.2
 
+  # WebDAV 同步
+  webdav_client: ^1.2.2
+
   # 国际化
   intl: ^0.20.2
 

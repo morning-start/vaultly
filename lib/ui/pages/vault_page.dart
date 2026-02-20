@@ -116,6 +116,11 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Vaultly'),
+        leading: IconButton(
+          icon: const Icon(Icons.cloud_outlined),
+          onPressed: () => context.push('/webdav'),
+          tooltip: '云同步',
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),

@@ -7,6 +7,8 @@ import '../../ui/pages/unlock_page.dart';
 import '../../ui/pages/vault_page.dart';
 import '../../ui/pages/add_entry_page.dart';
 import '../../ui/pages/entry_detail_page.dart';
+import '../../ui/pages/webdav_config_page.dart';
+import '../../ui/pages/webdav_sync_page.dart';
 import '../providers/auth_provider.dart';
 import '../models/vault_entry.dart';
 
@@ -114,6 +116,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return AddEntryPage(entryId: id);
         },
+      ),
+
+      // WebDAV 同步页
+      GoRoute(
+        path: '/webdav',
+        builder: (context, state) => const WebDAVSyncPage(),
+      ),
+
+      // WebDAV 配置页
+      GoRoute(
+        path: '/webdav/config',
+        builder: (context, state) => const WebDAVConfigPage(),
       ),
     ],
 
