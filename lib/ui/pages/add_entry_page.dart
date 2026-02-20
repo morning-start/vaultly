@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/models/vault_entry.dart';
@@ -12,10 +11,12 @@ import '../widgets/password_generator_dialog.dart';
 /// 支持多种条目类型：登录凭证、银行卡、安全笔记、身份信息
 class AddEntryPage extends ConsumerStatefulWidget {
   final String? entryId;
+  final EntryType? initialEntryType;
 
   const AddEntryPage({
     super.key,
     this.entryId,
+    this.initialEntryType,
   });
 
   @override
@@ -71,7 +72,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   @override
   void initState() {
     super.initState();
-    _selectedType = EntryType.login;
+    _selectedType = widget.initialEntryType ?? EntryType.login;
     _passwordController.addListener(_updatePasswordStrength);
 
     // 如果是编辑模式，加载现有条目
@@ -303,23 +304,27 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           children: [
             // 条目类型选择（仅在添加时显示）
             if (!_isEditing)
-              DropdownButtonFormField<EntryType>(
-                value: _selectedType,
+              InputDecorator(
                 decoration: const InputDecoration(
                   labelText: '条目类型',
                   prefixIcon: Icon(Icons.category),
                 ),
-                items: const [
-                  DropdownMenuItem(value: EntryType.login, child: Text('登录凭证')),
-                  DropdownMenuItem(value: EntryType.bankCard, child: Text('银行卡')),
-                  DropdownMenuItem(value: EntryType.secureNote, child: Text('安全笔记')),
-                  DropdownMenuItem(value: EntryType.identity, child: Text('身份信息')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _selectedType = value);
-                  }
-                },
+                child: DropdownButton<EntryType>(
+                  value: _selectedType,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  items: const [
+                    DropdownMenuItem(value: EntryType.login, child: Text('登录凭证')),
+                    DropdownMenuItem(value: EntryType.bankCard, child: Text('银行卡')),
+                    DropdownMenuItem(value: EntryType.secureNote, child: Text('安全笔记')),
+                    DropdownMenuItem(value: EntryType.identity, child: Text('身份信息')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _selectedType = value);
+                    }
+                  },
+                ),
               ),
             if (!_isEditing) const SizedBox(height: 16),
 
@@ -487,23 +492,27 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         },
       ),
       const SizedBox(height: 16),
-      DropdownButtonFormField<CardType>(
-        value: _cardType,
+      InputDecorator(
         decoration: const InputDecoration(
           labelText: '卡类型',
           prefixIcon: Icon(Icons.payment),
         ),
-        items: CardType.values.map((type) {
-          return DropdownMenuItem(
-            value: type,
-            child: Text(_getCardTypeName(type)),
-          );
-        }).toList(),
-        onChanged: (value) {
-          if (value != null) {
-            setState(() => _cardType = value);
-          }
-        },
+        child: DropdownButton<CardType>(
+          value: _cardType,
+          isExpanded: true,
+          underline: const SizedBox.shrink(),
+          items: CardType.values.map((type) {
+            return DropdownMenuItem(
+              value: type,
+              child: Text(_getCardTypeName(type)),
+            );
+          }).toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() => _cardType = value);
+            }
+          },
+        ),
       ),
       const SizedBox(height: 16),
       TextFormField(
@@ -519,7 +528,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         leading: const Icon(Icons.calendar_today),
         title: const Text('有效期'),
         subtitle: Text(_expiryMonth != null && _expiryYear != null
-            ? '${_expiryMonth.toString().padLeft(2, '0')}/${_expiryYear}'
+            ? '${_expiryMonth.toString().padLeft(2, '0')}/$_expiryYear'
             : '未设置'),
         trailing: TextButton(
           onPressed: _selectExpiryDate,
@@ -732,34 +741,42 @@ class _ExpiryDatePickerState extends State<_ExpiryDatePicker> {
       content: Row(
         children: [
           Expanded(
-            child: DropdownButtonFormField<int>(
-              value: _month,
+            child: InputDecorator(
               decoration: const InputDecoration(labelText: '月'),
-              items: List.generate(12, (i) => i + 1).map((m) {
-                return DropdownMenuItem(
-                  value: m,
-                  child: Text(m.toString().padLeft(2, '0')),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => _month = value);
-              },
+              child: DropdownButton<int>(
+                value: _month,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                items: List.generate(12, (i) => i + 1).map((m) {
+                  return DropdownMenuItem(
+                    value: m,
+                    child: Text(m.toString().padLeft(2, '0')),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _month = value);
+                },
+              ),
             ),
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: DropdownButtonFormField<int>(
-              value: _year,
+            child: InputDecorator(
               decoration: const InputDecoration(labelText: '年'),
-              items: years.map((y) {
-                return DropdownMenuItem(
-                  value: y,
-                  child: Text(y.toString()),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => _year = value);
-              },
+              child: DropdownButton<int>(
+                value: _year,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                items: years.map((y) {
+                  return DropdownMenuItem(
+                    value: y,
+                    child: Text(y.toString()),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _year = value);
+                },
+              ),
             ),
           ),
         ],

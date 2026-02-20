@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -324,7 +323,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.markdown, color: Theme.of(context).colorScheme.primary),
+                    Icon(Icons.description, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
                       'Markdown 内容',
@@ -565,7 +564,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
             const SizedBox(height: 8),
             _buildMetadataRow('创建时间', _formatDateTime(entry.createdAt)),
             _buildMetadataRow('更新时间', _formatDateTime(entry.updatedAt)),
-            _buildMetadataRow('UUID', entry.uuid.substring(0, 8) + '...'),
+            _buildMetadataRow('UUID', '${entry.uuid.substring(0, 8)}...'),
           ],
         ),
       ),

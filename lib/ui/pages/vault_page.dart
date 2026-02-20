@@ -75,7 +75,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   }
 
   void _navigateToAddEntry() async {
-    final result = await Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AddEntryPage()),
     );
     if (mounted) {
