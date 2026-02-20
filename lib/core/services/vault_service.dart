@@ -41,7 +41,7 @@ class VaultService {
       final entriesJson = data['entries'] as List<dynamic>;
 
       _entries = entriesJson.map((e) {
-        final entry = VaultEntry.fromJson(e as Map<String, dynamic>);
+        final entry = _entryFromJson(e as Map<String, dynamic>);
         return _decryptEntry(entry);
       }).toList();
     } catch (e) {
@@ -67,46 +67,82 @@ class VaultService {
     await _secureStorage.write(key: _keyVaultData, value: data);
   }
 
+  /// 根据类型将 JSON 转换为对应的条目类型
+  VaultEntry _entryFromJson(Map<String, dynamic> json) {
+    final type = EntryType.values.firstWhere(
+      (e) => e.name == json['type'],
+      orElse: () => EntryType.custom,
+    );
+
+    switch (type) {
+      case EntryType.login:
+        return LoginEntry.fromJson(json);
+      case EntryType.bankCard:
+        return BankCardEntry.fromJson(json);
+      case EntryType.secureNote:
+        return SecureNoteEntry.fromJson(json);
+      case EntryType.identity:
+        return IdentityEntry.fromJson(json);
+      case EntryType.custom:
+        return VaultEntry.fromJson(json);
+    }
+  }
+
   VaultEntry _encryptEntry(VaultEntry entry) {
     if (_encryptionKey == null) return entry;
 
     final encrypted = entry.toJson();
 
     // 加密登录凭证字段
-    if (entry.type == EntryType.login) {
-      if (entry.passwordEncrypted != null && entry.passwordEncrypted!.isNotEmpty) {
-        encrypted['passwordEncrypted'] = CryptoService.encrypt(entry.passwordEncrypted!, _encryptionKey!).toJson();
+    if (entry is LoginEntry) {
+      if (entry.password != null && entry.password!.isNotEmpty) {
+        encrypted['passwordEncrypted'] = CryptoService.encrypt(entry.password!, _encryptionKey!).toJson();
       }
-      if (entry.totpSecretEncrypted != null && entry.totpSecretEncrypted!.isNotEmpty) {
-        encrypted['totpSecretEncrypted'] = CryptoService.encrypt(entry.totpSecretEncrypted!, _encryptionKey!).toJson();
+      if (entry.totpSecret != null && entry.totpSecret!.isNotEmpty) {
+        encrypted['totpSecretEncrypted'] = CryptoService.encrypt(entry.totpSecret!, _encryptionKey!).toJson();
       }
-      if (entry.notesEncrypted != null && entry.notesEncrypted!.isNotEmpty) {
-        encrypted['notesEncrypted'] = CryptoService.encrypt(entry.notesEncrypted!, _encryptionKey!).toJson();
+      if (entry.notes != null && entry.notes!.isNotEmpty) {
+        encrypted['notesEncrypted'] = CryptoService.encrypt(entry.notes!, _encryptionKey!).toJson();
+      }
+      if (entry.username != null && entry.username!.isNotEmpty) {
+        encrypted['usernameEncrypted'] = CryptoService.encrypt(entry.username!, _encryptionKey!).toJson();
+      }
+      if (entry.email != null && entry.email!.isNotEmpty) {
+        encrypted['emailEncrypted'] = CryptoService.encrypt(entry.email!, _encryptionKey!).toJson();
       }
     }
     // 加密银行卡字段
-    else if (entry.type == EntryType.bankCard) {
-      if (entry.cardNumberEncrypted != null && entry.cardNumberEncrypted!.isNotEmpty) {
-        encrypted['cardNumberEncrypted'] = CryptoService.encrypt(entry.cardNumberEncrypted!, _encryptionKey!).toJson();
+    else if (entry is BankCardEntry) {
+      if (entry.cardNumber != null && entry.cardNumber!.isNotEmpty) {
+        encrypted['cardNumberEncrypted'] = CryptoService.encrypt(entry.cardNumber!, _encryptionKey!).toJson();
       }
-      if (entry.cvvEncrypted != null && entry.cvvEncrypted!.isNotEmpty) {
-        encrypted['cvvEncrypted'] = CryptoService.encrypt(entry.cvvEncrypted!, _encryptionKey!).toJson();
+      if (entry.cvv != null && entry.cvv!.isNotEmpty) {
+        encrypted['cvvEncrypted'] = CryptoService.encrypt(entry.cvv!, _encryptionKey!).toJson();
       }
     }
     // 加密安全笔记字段
-    else if (entry.type == EntryType.secureNote) {
-      if (entry.noteContentEncrypted != null && entry.noteContentEncrypted!.isNotEmpty) {
-        encrypted['noteContentEncrypted'] = CryptoService.encrypt(entry.noteContentEncrypted!, _encryptionKey!).toJson();
+    else if (entry is SecureNoteEntry) {
+      if (entry.content != null && entry.content!.isNotEmpty) {
+        encrypted['noteContentEncrypted'] = CryptoService.encrypt(entry.content!, _encryptionKey!).toJson();
       }
     }
     // 加密身份信息字段
-    else if (entry.type == EntryType.identity) {
-      if (entry.idNumberEncrypted != null && entry.idNumberEncrypted!.isNotEmpty) {
-        encrypted['idNumberEncrypted'] = CryptoService.encrypt(entry.idNumberEncrypted!, _encryptionKey!).toJson();
+    else if (entry is IdentityEntry) {
+      if (entry.idNumber != null && entry.idNumber!.isNotEmpty) {
+        encrypted['idNumberEncrypted'] = CryptoService.encrypt(entry.idNumber!, _encryptionKey!).toJson();
+      }
+      if (entry.phone != null && entry.phone!.isNotEmpty) {
+        encrypted['phoneEncrypted'] = CryptoService.encrypt(entry.phone!, _encryptionKey!).toJson();
+      }
+      if (entry.email != null && entry.email!.isNotEmpty) {
+        encrypted['emailEncrypted'] = CryptoService.encrypt(entry.email!, _encryptionKey!).toJson();
+      }
+      if (entry.address != null && entry.address!.isNotEmpty) {
+        encrypted['addressEncrypted'] = CryptoService.encrypt(entry.address!, _encryptionKey!).toJson();
       }
     }
 
-    return VaultEntry.fromJson(encrypted);
+    return _entryFromJson(encrypted);
   }
 
   VaultEntry _decryptEntry(VaultEntry entry) {
@@ -115,47 +151,67 @@ class VaultService {
     final data = entry.toJson();
 
     // 解密登录凭证字段
-    if (entry.type == EntryType.login) {
+    if (entry is LoginEntry) {
       if (data['passwordEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['passwordEncrypted'] as Map<String, dynamic>);
-        data['passwordEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['password'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
       if (data['totpSecretEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['totpSecretEncrypted'] as Map<String, dynamic>);
-        data['totpSecretEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['totpSecret'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
       if (data['notesEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['notesEncrypted'] as Map<String, dynamic>);
-        data['notesEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['notes'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      }
+      if (data['usernameEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['usernameEncrypted'] as Map<String, dynamic>);
+        data['username'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      }
+      if (data['emailEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['emailEncrypted'] as Map<String, dynamic>);
+        data['email'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
     }
     // 解密银行卡字段
-    else if (entry.type == EntryType.bankCard) {
+    else if (entry is BankCardEntry) {
       if (data['cardNumberEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['cardNumberEncrypted'] as Map<String, dynamic>);
-        data['cardNumberEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['cardNumber'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
       if (data['cvvEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['cvvEncrypted'] as Map<String, dynamic>);
-        data['cvvEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['cvv'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
     }
     // 解密安全笔记字段
-    else if (entry.type == EntryType.secureNote) {
+    else if (entry is SecureNoteEntry) {
       if (data['noteContentEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['noteContentEncrypted'] as Map<String, dynamic>);
-        data['noteContentEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['content'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
     }
     // 解密身份信息字段
-    else if (entry.type == EntryType.identity) {
+    else if (entry is IdentityEntry) {
       if (data['idNumberEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['idNumberEncrypted'] as Map<String, dynamic>);
-        data['idNumberEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+        data['idNumber'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      }
+      if (data['phoneEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['phoneEncrypted'] as Map<String, dynamic>);
+        data['phone'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      }
+      if (data['emailEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['emailEncrypted'] as Map<String, dynamic>);
+        data['email'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      }
+      if (data['addressEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['addressEncrypted'] as Map<String, dynamic>);
+        data['address'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
     }
 
-    return VaultEntry.fromJson(data);
+    return _entryFromJson(data);
   }
 
   Future<String> addEntry(VaultEntry entry) async {

@@ -5,181 +5,202 @@ import '../providers/auth_provider.dart';
 
 /// 自动锁定服务
 ///
-/// 参考文档: wiki/02-架构设计/安全架构.md 第 3.1 节
-/// 管理应用自动锁定逻辑
+/// 负责监控用户活动，在闲置一段时间后自动锁定应用
+/// 支持的时间间隔：5分钟、15分钟、30分钟
 class AutoLockService extends ChangeNotifier {
-  final Ref _ref;
+  static const List<int> lockDurations = [5, 15, 30]; // 分钟
+  static const int defaultLockDuration = 5; // 默认5分钟
+
   Timer? _inactivityTimer;
-  DateTime? _lastActivity;
+  DateTime? _lastActivityTime;
+  int _lockDurationMinutes;
+  bool _isMonitoring = false;
 
-  // 锁定超时设置（分钟）
-  static const int _defaultLockTimeout = 5;
-  int _lockTimeoutMinutes = _defaultLockTimeout;
+  // 用户活动监听器
+  final List<VoidCallback> _onLockCallbacks = [];
 
-  // 是否在后台时立即锁定
-  bool _lockOnBackground = false;
-
-  // 是否启用自动锁定
-  bool _enabled = true;
-
-  AutoLockService(this._ref) {
-    _startTimer();
-  }
+  AutoLockService({int lockDurationMinutes = defaultLockDuration})
+      : _lockDurationMinutes = lockDurationMinutes;
 
   // ==================== 配置 ====================
 
-  /// 获取锁定超时时间（分钟）
-  int get lockTimeoutMinutes => _lockTimeoutMinutes;
+  /// 获取当前锁定时间（分钟）
+  int get lockDurationMinutes => _lockDurationMinutes;
 
-  /// 设置锁定超时时间
-  set lockTimeoutMinutes(int minutes) {
-    _lockTimeoutMinutes = minutes;
-    _restartTimer();
-    notifyListeners();
-  }
-
-  /// 是否在后台时立即锁定
-  bool get lockOnBackground => _lockOnBackground;
-
-  /// 设置是否在后台时立即锁定
-  set lockOnBackground(bool value) {
-    _lockOnBackground = value;
-    notifyListeners();
-  }
-
-  /// 是否启用自动锁定
-  bool get enabled => _enabled;
-
-  /// 设置是否启用自动锁定
-  set enabled(bool value) {
-    _enabled = value;
-    if (value) {
-      _startTimer();
-    } else {
-      _stopTimer();
+  /// 设置锁定时间
+  set lockDurationMinutes(int minutes) {
+    if (!lockDurations.contains(minutes)) {
+      throw ArgumentError('锁定时间必须是 5、15 或 30 分钟');
     }
+    _lockDurationMinutes = minutes;
+    _resetTimer();
     notifyListeners();
   }
 
-  // ==================== 活动追踪 ====================
+  /// 是否正在监控
+  bool get isMonitoring => _isMonitoring;
 
-  /// 记录用户活动
-  void recordActivity() {
-    _lastActivity = DateTime.now();
-  }
-
-  /// 获取上次活动时间
-  DateTime? get lastActivity => _lastActivity;
-
-  /// 获取不活动时间（秒）
-  int get inactiveSeconds {
-    if (_lastActivity == null) return 0;
-    return DateTime.now().difference(_lastActivity!).inSeconds;
-  }
-
-  /// 获取不活动时间（分钟）
-  int get inactiveMinutes => inactiveSeconds ~/ 60;
-
-  /// 检查是否应该锁定
-  bool get shouldLock {
-    if (!_enabled) return false;
-    if (_lastActivity == null) return false;
-    return inactiveMinutes >= _lockTimeoutMinutes;
-  }
-
-  // ==================== 定时器管理 ====================
-
-  void _startTimer() {
-    _stopTimer();
-    if (!_enabled) return;
-
-    _inactivityTimer = Timer.periodic(
-      const Duration(seconds: 10), // 每 10 秒检查一次
-      (_) => _checkAndLock(),
-    );
-  }
-
-  void _stopTimer() {
-    _inactivityTimer?.cancel();
-    _inactivityTimer = null;
-  }
-
-  void _restartTimer() {
-    _startTimer();
-  }
-
-  void _checkAndLock() {
-    if (shouldLock) {
-      _performLock();
+  /// 获取剩余时间（秒）
+  int? get remainingSeconds {
+    if (_lastActivityTime == null || _inactivityTimer == null) {
+      return null;
     }
-  }
-
-  void _performLock() {
-    final authNotifier = _ref.read(authNotifierProvider.notifier);
-    authNotifier.lock();
+    final elapsed = DateTime.now().difference(_lastActivityTime!).inSeconds;
+    final total = _lockDurationMinutes * 60;
+    return total - elapsed;
   }
 
   // ==================== 生命周期 ====================
 
-  /// 应用进入前台
-  void onAppResumed() {
-    if (_enabled && shouldLock) {
-      _performLock();
-    }
-    recordActivity();
+  /// 开始监控用户活动
+  void startMonitoring() {
+    if (_isMonitoring) return;
+
+    _isMonitoring = true;
+    _lastActivityTime = DateTime.now();
+    _startTimer();
+    notifyListeners();
   }
 
-  /// 应用进入后台
-  void onAppPaused() {
-    if (_lockOnBackground) {
-      _performLock();
-    }
-    recordActivity();
+  /// 停止监控
+  void stopMonitoring() {
+    _isMonitoring = false;
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
+    notifyListeners();
   }
 
-  /// 应用变为非活动状态
-  void onAppInactive() {
-    // 可以在这里添加额外的逻辑
+  /// 释放资源
+  @override
+  void dispose() {
+    stopMonitoring();
+    _onLockCallbacks.clear();
+    super.dispose();
   }
+
+  // ==================== 活动跟踪 ====================
+
+  /// 记录用户活动
+  ///
+  /// 应在用户交互时调用（点击、输入等）
+  void recordActivity() {
+    if (!_isMonitoring) return;
+
+    _lastActivityTime = DateTime.now();
+    _resetTimer();
+  }
+
+  /// 重置计时器
+  void _resetTimer() {
+    _inactivityTimer?.cancel();
+    _startTimer();
+  }
+
+  /// 启动计时器
+  void _startTimer() {
+    _inactivityTimer = Timer(
+      Duration(minutes: _lockDurationMinutes),
+      _onLockTriggered,
+    );
+  }
+
+  /// 锁定触发
+  void _onLockTriggered() {
+    stopMonitoring();
+
+    // 触发所有注册的回调
+    for (final callback in _onLockCallbacks) {
+      callback();
+    }
+
+    notifyListeners();
+  }
+
+  // ==================== 回调注册 ====================
+
+  /// 注册锁定回调
+  void addOnLockListener(VoidCallback callback) {
+    _onLockCallbacks.add(callback);
+  }
+
+  /// 移除锁定回调
+  void removeOnLockListener(VoidCallback callback) {
+    _onLockCallbacks.remove(callback);
+  }
+
+  // ==================== 快捷方法 ====================
 
   /// 立即锁定
   void lockNow() {
-    _performLock();
+    _onLockTriggered();
   }
 
-  @override
-  void dispose() {
-    _stopTimer();
-    super.dispose();
+  /// 暂停监控（例如：在设置页面）
+  void pause() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
+  }
+
+  /// 恢复监控
+  void resume() {
+    if (_isMonitoring) {
+      recordActivity();
+    }
   }
 }
 
 /// 自动锁定服务 Provider
 final autoLockServiceProvider = ChangeNotifierProvider<AutoLockService>((ref) {
-  return AutoLockService(ref);
+  final service = AutoLockService();
+
+  // 监听锁定事件，触发认证状态锁定
+  service.addOnLockListener(() {
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    authNotifier.lock();
+  });
+
+  // 应用生命周期监听
+  ref.onDispose(() {
+    service.dispose();
+  });
+
+  return service;
 });
 
-/// 自动锁定包装器
+/// 自动锁定配置 Provider
+final autoLockDurationProvider = StateProvider<int>((ref) {
+  return AutoLockService.defaultLockDuration;
+});
+
+/// 自动锁定启用状态 Provider
+final autoLockEnabledProvider = StateProvider<bool>((ref) {
+  return true;
+});
+
+/// 全局活动监听器 Widget
 ///
-/// 包装应用以监听用户活动
-class AutoLockWrapper extends ConsumerStatefulWidget {
+/// 将此 Widget 放在应用顶层，监听所有用户活动
+class AutoLockActivityListener extends ConsumerStatefulWidget {
   final Widget child;
 
-  const AutoLockWrapper({
+  const AutoLockActivityListener({
     super.key,
     required this.child,
   });
 
   @override
-  ConsumerState<AutoLockWrapper> createState() => _AutoLockWrapperState();
+  ConsumerState<AutoLockActivityListener> createState() =>
+      _AutoLockActivityListenerState();
 }
 
-class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
+class _AutoLockActivityListenerState
+    extends ConsumerState<AutoLockActivityListener>
     with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _startMonitoring();
   }
 
   @override
@@ -194,90 +215,42 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
 
     switch (state) {
       case AppLifecycleState.resumed:
-        autoLockService.onAppResumed();
+        // 应用回到前台，恢复监控
+        autoLockService.resume();
         break;
       case AppLifecycleState.paused:
-        autoLockService.onAppPaused();
-        break;
       case AppLifecycleState.inactive:
-        autoLockService.onAppInactive();
+      case AppLifecycleState.hidden:
+        // 应用进入后台，暂停监控
+        autoLockService.pause();
         break;
-      default:
+      case AppLifecycleState.detached:
+        // 应用被销毁
+        autoLockService.stopMonitoring();
         break;
+    }
+  }
+
+  void _startMonitoring() {
+    final isEnabled = ref.read(autoLockEnabledProvider);
+    if (isEnabled) {
+      final autoLockService = ref.read(autoLockServiceProvider);
+      autoLockService.startMonitoring();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final autoLockService = ref.watch(autoLockServiceProvider);
-
     return Listener(
-      onPointerDown: (_) => autoLockService.recordActivity(),
-      onPointerMove: (_) => autoLockService.recordActivity(),
-      onPointerUp: (_) => autoLockService.recordActivity(),
-      child: GestureDetector(
-        onTap: () => autoLockService.recordActivity(),
-        onDoubleTap: () => autoLockService.recordActivity(),
-        onLongPress: () => autoLockService.recordActivity(),
-        onPanUpdate: (_) => autoLockService.recordActivity(),
-        onScaleUpdate: (_) => autoLockService.recordActivity(),
-        child: widget.child,
-      ),
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _onActivity(),
+      onPointerMove: (_) => _onActivity(),
+      child: widget.child,
     );
   }
-}
 
-/// 自动锁定设置对话框
-class AutoLockSettingsDialog extends ConsumerWidget {
-  const AutoLockSettingsDialog({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final autoLockService = ref.watch(autoLockServiceProvider);
-
-    return AlertDialog(
-      title: const Text('自动锁定设置'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SwitchListTile(
-            title: const Text('启用自动锁定'),
-            subtitle: const Text('在一段时间不活动后自动锁定应用'),
-            value: autoLockService.enabled,
-            onChanged: (value) => autoLockService.enabled = value,
-          ),
-          if (autoLockService.enabled) ...[
-            const Divider(),
-            ListTile(
-              title: const Text('锁定超时时间'),
-              subtitle: Text('${autoLockService.lockTimeoutMinutes} 分钟'),
-            ),
-            Slider(
-              value: autoLockService.lockTimeoutMinutes.toDouble(),
-              min: 1,
-              max: 30,
-              divisions: 29,
-              label: '${autoLockService.lockTimeoutMinutes} 分钟',
-              onChanged: (value) {
-                autoLockService.lockTimeoutMinutes = value.round();
-              },
-            ),
-            const Divider(),
-            SwitchListTile(
-              title: const Text('进入后台时立即锁定'),
-              subtitle: const Text('应用切换到后台时立即锁定'),
-              value: autoLockService.lockOnBackground,
-              onChanged: (value) => autoLockService.lockOnBackground = value,
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
-    );
+  void _onActivity() {
+    final autoLockService = ref.read(autoLockServiceProvider);
+    autoLockService.recordActivity();
   }
 }
