@@ -1,38 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 
-class SplashPage extends ConsumerStatefulWidget {
+/// 启动页
+///
+/// 显示应用 Logo 和加载指示器
+/// 导航逻辑由路由守卫处理，此页面仅负责显示 UI
+class SplashPage extends ConsumerWidget {
   const SplashPage({super.key});
 
   @override
-  ConsumerState<SplashPage> createState() => _SplashPageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 监听认证状态，用于调试（可选）
+    final authState = ref.watch(authNotifierProvider);
 
-class _SplashPageState extends ConsumerState<SplashPage> {
-  @override
-  void initState() {
-    super.initState();
-    _checkAuth();
-  }
-
-  Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(seconds: 1));
-    
-    if (!mounted) return;
-
-    final authState = ref.read(authNotifierProvider);
-
-    if (authState.isPasswordSet) {
-      context.go('/unlock');
-    } else {
-      context.go('/setup');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
         child: Column(
@@ -59,6 +40,16 @@ class _SplashPageState extends ConsumerState<SplashPage> {
             ),
             const SizedBox(height: 48),
             const CircularProgressIndicator(),
+            // 调试信息（仅在开发时显示）
+            if (authState.isLoading) ...[
+              const SizedBox(height: 16),
+              Text(
+                '正在初始化...',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),

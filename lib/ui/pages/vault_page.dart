@@ -34,11 +34,25 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     
     // 设置加密密钥
     final encryptionKey = authService.encryptionKey;
-    if (encryptionKey != null) {
-      vaultService.setEncryptionKey(encryptionKey);
+    if (encryptionKey == null) {
+      // 如果加密密钥为空，说明用户未解锁
+      // 路由守卫会自动处理重定向，这里直接返回
+      return;
     }
     
-    await vaultService.loadVault();
+    vaultService.setEncryptionKey(encryptionKey);
+    
+    try {
+      await vaultService.loadVault();
+    } catch (e) {
+      // 加载失败时显示错误
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载保险库失败: $e')),
+        );
+      }
+    }
+    
     if (mounted) setState(() {});
   }
 
@@ -50,14 +64,15 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
   List<VaultEntry> _getFilteredEntries() {
     final vaultService = ref.read(vaultServiceProvider);
-    var entries = vaultService.getAllEntries();
+    // 创建可变副本，因为 getAllEntries() 返回的是不可修改列表
+    var entries = vaultService.getAllEntries().toList();
 
     if (_selectedFilter != null) {
       entries = entries.where((e) => e.type == _selectedFilter).toList();
     }
 
     if (_searchQuery.isNotEmpty) {
-      entries = vaultService.searchEntries(_searchQuery);
+      entries = vaultService.searchEntries(_searchQuery).toList();
       if (_selectedFilter != null) {
         entries = entries.where((e) => e.type == _selectedFilter).toList();
       }
