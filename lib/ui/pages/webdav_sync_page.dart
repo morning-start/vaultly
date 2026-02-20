@@ -134,11 +134,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       configNotifier.updateSyncTime(DateTime.now());
       syncNotifier.completeSync('下载成功');
 
-      // 刷新 Vault 数据提供者，通知 UI 更新
-      ref.invalidate(vaultEntriesProvider);
-      ref.invalidate(vaultEntriesByTypeProvider);
-      ref.invalidate(vaultFavoritesProvider);
-      ref.invalidate(vaultTagsProvider);
+      // 通知 Vault 数据已变更，触发所有相关 Provider 刷新
+      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('数据已从 WebDAV 恢复，导入 $importedCount 条记录')),
