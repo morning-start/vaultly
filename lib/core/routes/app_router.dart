@@ -8,6 +8,7 @@ import '../../ui/pages/vault_page.dart';
 import '../../ui/pages/add_entry_page.dart';
 import '../../ui/pages/entry_detail_page.dart';
 import '../providers/auth_provider.dart';
+import '../models/vault_entry.dart';
 
 /// 应用路由配置
 ///
@@ -78,8 +79,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/add',
         builder: (context, state) {
-          final type = state.uri.queryParameters['type'];
-          return AddEntryPage(entryType: type);
+          final typeStr = state.uri.queryParameters['type'];
+          final type = typeStr != null ? EntryType.values.firstWhere(
+            (e) => e.name == typeStr,
+            orElse: () => EntryType.login,
+          ) : null;
+          return AddEntryPage(initialEntryType: type);
         },
       ),
 

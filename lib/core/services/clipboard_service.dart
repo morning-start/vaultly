@@ -34,6 +34,17 @@ class ClipboardService {
     }
   }
 
+  /// 复制文本到剪贴板（静态方法）
+  ///
+  /// 默认 30 秒后自动清除
+  static Future<void> copy(String text, {int? clearAfterSeconds}) async {
+    final service = ClipboardService();
+    await service.copyText(
+      text,
+      clearAfterSeconds: clearAfterSeconds ?? defaultClearDelaySeconds,
+    );
+  }
+
   /// 从剪贴板读取文本
   Future<String?> getText() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
