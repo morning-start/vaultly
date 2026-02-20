@@ -94,10 +94,11 @@
 - **框架**: [Flutter](https://flutter.dev/) 3.38.9
 - **状态管理**: [Riverpod](https://riverpod.dev/)
 - **路由**: [Go Router](https://pub.dev/packages/go_router)
-- **本地存储**: [Shared Preferences](https://pub.dev/packages/shared_preferences) + [Flutter Secure Storage](https://pub.dev/packages/flutter_secure_storage)
-- **加密**: [encrypt](https://pub.dev/packages/encrypt)
+- **本地存储**: [Shared Preferences](https://pub.dev/packages/shared_preferences) + [Flutter Secure Storage](https://pub.dev/packages/flutter_secure_storage) + JSON 文件存储
+- **加密**: [encrypt](https://pub.dev/packages/encrypt) + [crypto](https://pub.dev/packages/crypto)
 - **二维码**: [mobile_scanner](https://pub.dev/packages/mobile_scanner)
 - **生物识别**: [local_auth](https://pub.dev/packages/local_auth)
+- **WebDAV 同步**: [webdav_client](https://pub.dev/packages/webdav_client)
 
 ---
 
@@ -176,7 +177,7 @@ vaultly/
 
 ### 数据加密
 
-- 主密码使用 PBKDF2 派生密钥
+- 主密码使用 Argon2id 密钥派生
 - 保险库数据使用 AES-256-GCM 加密
 - 密钥存储在系统安全区域（Android Keystore / iOS Keychain）
 

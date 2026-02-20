@@ -10,6 +10,19 @@
 ### 新增
 - 计划中的功能...
 
+## [1.5.0] - 2025-02-21
+
+### 新增
+- **UI 组件库**
+  - 基础输入组件（文本输入框、密码输入框）
+  - 加载按钮组件
+  - 空状态、错误状态组件
+  - 确认对话框组件
+
+### 改进
+- 优化确认对话框的用户体验
+- 完善 UI 组件的可复用性
+
 ## [1.0.0] - 2025-02-20
 
 ### 新增
@@ -83,6 +96,7 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v1.0.0...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/morning-start/vaultly/releases/tag/v1.5.0
 [1.0.0]: https://github.com/morning-start/vaultly/releases/tag/v1.0.0
 [0.1.0]: https://github.com/morning-start/vaultly/releases/tag/v0.1.0
