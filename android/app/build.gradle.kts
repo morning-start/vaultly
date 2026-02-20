@@ -46,10 +46,11 @@ android {
             // CI 环境: storeFile 是相对 app 模块的路径 (如 "keystore.jks")
             // 本地开发: storeFile 是相对项目根目录的路径 (如 "../../my-release-key.jks")
             storeFile = keystoreProperties["storeFile"]?.let {
-                if (it.startsWith("../") || it.startsWith("/")) {
-                    rootProject.file(it)  // 本地开发: 使用相对根目录的路径
+                val path = it as String
+                if (path.startsWith("../") || path.startsWith("/")) {
+                    rootProject.file(path)  // 本地开发: 使用相对根目录的路径
                 } else {
-                    file(it)  // CI 环境: 使用相对 app 目录的路径
+                    file(path)  // CI 环境: 使用相对 app 目录的路径
                 }
             }
             storePassword = keystoreProperties["storePassword"] as String
