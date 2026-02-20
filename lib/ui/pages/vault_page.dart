@@ -10,6 +10,7 @@ import 'entry_detail_page.dart';
 /// 保险库主页
 ///
 /// 显示所有条目，支持搜索、筛选、添加新条目
+/// 使用 Riverpod 监听数据变化，自动刷新 UI
 class VaultPage extends ConsumerStatefulWidget {
   const VaultPage({super.key});
 
@@ -25,13 +26,16 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   @override
   void initState() {
     super.initState();
-    _loadEntries();
+    _initializeVault();
   }
 
-  Future<void> _loadEntries() async {
+  /// 初始化保险库
+  /// 
+  /// 设置加密密钥并加载数据
+  Future<void> _initializeVault() async {
     final vaultService = ref.read(vaultServiceProvider);
     final authService = ref.read(authServiceProvider);
-    
+
     // 设置加密密钥
     final encryptionKey = authService.encryptionKey;
     if (encryptionKey == null) {
@@ -39,11 +43,13 @@ class _VaultPageState extends ConsumerState<VaultPage> {
       // 路由守卫会自动处理重定向，这里直接返回
       return;
     }
-    
+
     vaultService.setEncryptionKey(encryptionKey);
-    
+
     try {
       await vaultService.loadVault();
+      // 加载完成后通知 Provider 刷新
+      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
     } catch (e) {
       // 加载失败时显示错误
       if (mounted) {
@@ -52,8 +58,6 @@ class _VaultPageState extends ConsumerState<VaultPage> {
         );
       }
     }
-    
-    if (mounted) setState(() {});
   }
 
   @override
@@ -62,39 +66,47 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     super.dispose();
   }
 
-  List<VaultEntry> _getFilteredEntries() {
-    final vaultService = ref.read(vaultServiceProvider);
-    // 创建可变副本，因为 getAllEntries() 返回的是不可修改列表
-    var entries = vaultService.getAllEntries().toList();
+  /// 获取筛选后的条目列表
+  /// 
+  /// 使用 vaultEntriesProvider 监听数据变化
+  List<VaultEntry> _getFilteredEntries(List<VaultEntry> entries) {
+    // 创建可变副本
+    var filtered = entries.toList();
 
     if (_selectedFilter != null) {
-      entries = entries.where((e) => e.type == _selectedFilter).toList();
+      filtered = filtered.where((e) => e.type == _selectedFilter).toList();
     }
 
     if (_searchQuery.isNotEmpty) {
-      entries = vaultService.searchEntries(_searchQuery).toList();
-      if (_selectedFilter != null) {
-        entries = entries.where((e) => e.type == _selectedFilter).toList();
-      }
+      filtered = filtered.where((e) {
+        if (e.title.toLowerCase().contains(_searchQuery.toLowerCase())) {
+          return true;
+        }
+        if (e.tags.any((t) => t.toLowerCase().contains(_searchQuery.toLowerCase()))) {
+          return true;
+        }
+        return false;
+      }).toList();
     }
 
     // 按收藏和时间排序
-    entries.sort((a, b) {
+    filtered.sort((a, b) {
       if (a.isFavorite != b.isFavorite) {
         return a.isFavorite ? -1 : 1;
       }
       return b.updatedAt.compareTo(a.updatedAt);
     });
 
-    return entries;
+    return filtered;
   }
 
   void _navigateToAddEntry() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AddEntryPage()),
     );
+    // 返回后通知数据变更
     if (mounted) {
-      setState(() {});
+      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
     }
   }
 
@@ -104,14 +116,16 @@ class _VaultPageState extends ConsumerState<VaultPage> {
         builder: (_) => EntryDetailPage(entryId: entry.uuid),
       ),
     );
+    // 返回后通知数据变更
     if (mounted) {
-      setState(() {});
+      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final entries = _getFilteredEntries();
+    // 使用 Riverpod 监听 Vault 数据变化
+    final entriesAsync = ref.watch(vaultEntriesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -139,101 +153,143 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 搜索栏
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '搜索条目...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-              ),
-              onChanged: (value) {
-                setState(() => _searchQuery = value);
-              },
-            ),
-          ),
+      body: entriesAsync.when(
+        data: (entries) {
+          final filteredEntries = _getFilteredEntries(entries);
 
-          // 筛选器
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                FilterChip(
-                  label: const Text('全部'),
-                  selected: _selectedFilter == null,
-                  onSelected: (_) {
-                    setState(() => _selectedFilter = null);
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('登录'),
-                  selected: _selectedFilter == EntryType.login,
-                  onSelected: (_) {
-                    setState(() => _selectedFilter = EntryType.login);
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('银行卡'),
-                  selected: _selectedFilter == EntryType.bankCard,
-                  onSelected: (_) {
-                    setState(() => _selectedFilter = EntryType.bankCard);
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('笔记'),
-                  selected: _selectedFilter == EntryType.secureNote,
-                  onSelected: (_) {
-                    setState(() => _selectedFilter = EntryType.secureNote);
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('身份'),
-                  selected: _selectedFilter == EntryType.identity,
-                  onSelected: (_) {
-                    setState(() => _selectedFilter = EntryType.identity);
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // 条目列表
-          Expanded(
-            child: entries.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    itemCount: entries.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      return _EntryCard(
-                        entry: entry,
-                        onTap: () => _navigateToEntryDetail(entry),
-                      );
-                    },
+          return Column(
+            children: [
+              // 搜索栏
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: '搜索条目...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value);
+                  },
+                ),
+              ),
+
+              // 筛选器
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('全部'),
+                      selected: _selectedFilter == null,
+                      onSelected: (_) {
+                        setState(() => _selectedFilter = null);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('登录'),
+                      selected: _selectedFilter == EntryType.login,
+                      onSelected: (_) {
+                        setState(() => _selectedFilter = EntryType.login);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('银行卡'),
+                      selected: _selectedFilter == EntryType.bankCard,
+                      onSelected: (_) {
+                        setState(() => _selectedFilter = EntryType.bankCard);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('笔记'),
+                      selected: _selectedFilter == EntryType.secureNote,
+                      onSelected: (_) {
+                        setState(() => _selectedFilter = EntryType.secureNote);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('身份'),
+                      selected: _selectedFilter == EntryType.identity,
+                      onSelected: (_) {
+                        setState(() => _selectedFilter = EntryType.identity);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // 条目列表
+              Expanded(
+                child: filteredEntries.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        itemCount: filteredEntries.length,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemBuilder: (context, index) {
+                          final entry = filteredEntries[index];
+                          return _EntryCard(
+                            entry: entry,
+                            onTap: () => _navigateToEntryDetail(entry),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
+        loading: () => const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('加载中...'),
+            ],
           ),
-        ],
+        ),
+        error: (error, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '加载失败: $error',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () {
+                  ref.invalidate(vaultEntriesProvider);
+                },
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _navigateToAddEntry,
