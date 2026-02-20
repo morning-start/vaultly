@@ -26,6 +26,9 @@ dependencies:
   encrypt: ^5.0.3
   crypto: ^3.0.6
 
+  # 密钥派生 (Argon2id)
+  pointycastle: ^3.9.1
+
   # 数据库 - 使用 JSON 文件存储，无需代码生成
 
   # 路由
