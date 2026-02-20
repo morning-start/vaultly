@@ -60,7 +60,7 @@ class AuthService {
   /// 设置主密码
   Future<void> setupMasterPassword(String password) async {
     // 生成新的密钥材料
-    final keyMaterial = await CryptoService.generateKeyMaterial(password);
+    final keyMaterial = CryptoService.generateKeyMaterial(password);
 
     // 保存到安全存储
     await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
@@ -90,13 +90,14 @@ class AuthService {
     }
 
     final salt = base64Decode(saltBase64);
-    final computedHash = CryptoService.hashPassword(password, salt);
-    final key = CryptoService.deriveKey(password, salt);
 
-    if (computedHash == storedHash) {
+    // 使用 Argon2id 派生密钥材料
+    final keyMaterial = CryptoService.deriveKeyMaterial(password, salt);
+
+    if (keyMaterial.hash == storedHash) {
       // 验证成功，重置失败计数
       await _resetFailedAttempts();
-      _encryptionKey = key;
+      _encryptionKey = keyMaterial.key;
       _isUnlocked = true;
       return true;
     } else {
@@ -171,7 +172,7 @@ class AuthService {
     }
 
     // 生成新密钥
-    final keyMaterial = await CryptoService.generateKeyMaterial(newPassword);
+    final keyMaterial = CryptoService.generateKeyMaterial(newPassword);
 
     await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
     await _secureStorage.write(key: _keySalt, value: keyMaterial.saltBase64);

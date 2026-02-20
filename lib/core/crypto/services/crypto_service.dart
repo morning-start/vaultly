@@ -3,16 +3,24 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:crypto/crypto.dart';
+import 'package:pointycastle/key_derivators/api.dart';
+import 'package:pointycastle/key_derivators/argon2.dart';
 
 /// 加密服务
-/// 
+///
 /// 参考文档: wiki/02-架构设计/安全架构.md
 /// 使用 AES-256-GCM 加密算法
-/// 使用 SHA-256 进行密钥派生
+/// 使用 Argon2id 进行密钥派生（符合文档要求）
 class CryptoService {
   static const int _keyLength = 32; // 256 bits
   static const int _ivLength = 12; // 96 bits for GCM
   static const int _saltLength = 32; // 256 bits
+
+  // Argon2id 参数配置（符合安全标准）
+  static const int _argon2MemoryPowerOf2 = 16; // 2^16 = 65536 KB = 64MB
+  static const int _argon2Iterations = 3;
+  static const int _argon2Parallelism = 4;
+  static const int _argon2HashLength = 32; // 256 bits
 
   static Uint8List _generateRandomBytes(int length) {
     final random = Random.secure();
@@ -41,7 +49,7 @@ class CryptoService {
   }
 
   /// 使用 AES-256-GCM 加密数据
-  /// 
+  ///
   /// 返回加密数据，包含密文、IV 和认证标签
   static EncryptedData encrypt(String plainText, Uint8List key) {
     final iv = generateIV();
@@ -78,7 +86,8 @@ class CryptoService {
     return encrypter.decrypt(encrypted, iv: encrypt_lib.IV(iv));
   }
 
-  /// 使用 SHA-256 哈希密码
+  /// 使用 SHA-256 哈希密码（向后兼容）
+  @Deprecated('使用 deriveKeyWithArgon2id 替代')
   static String hashPassword(String password, Uint8List salt) {
     final bytes = utf8.encode(password);
     final salted = Uint8List.fromList([...bytes, ...salt]);
@@ -86,7 +95,8 @@ class CryptoService {
     return digest.toString();
   }
 
-  /// 使用 SHA-256 派生密钥
+  /// 使用 SHA-256 派生密钥（向后兼容）
+  @Deprecated('使用 deriveKeyWithArgon2id 替代')
   static Uint8List deriveKey(String password, Uint8List salt) {
     final bytes = utf8.encode(password);
     final salted = Uint8List.fromList([...bytes, ...salt]);
@@ -94,25 +104,62 @@ class CryptoService {
     return Uint8List.fromList(digest.bytes);
   }
 
-  /// 使用 SHA-256 派生密钥材料（替代 Argon2id）
+  /// 使用 Argon2id 派生密钥
   ///
-  /// 使用 hashPassword 生成哈希，确保注册和登录使用相同的哈希算法
-  static Future<KeyMaterial> deriveKeyMaterial(
+  /// 参数符合安全标准：
+  /// - memory: 64MB (2^16 KB)
+  /// - iterations: 3
+  /// - parallelism: 4
+  static Uint8List deriveKeyWithArgon2id(
     String password,
     Uint8List salt,
-  ) async {
-    final key = deriveKey(password, salt);
-    final hash = hashPassword(password, salt);
+  ) {
+    // 使用 Argon2id 参数
+    final parameters = Argon2Parameters(
+      Argon2Parameters.ARGON2_id,
+      salt,
+      desiredKeyLength: _argon2HashLength,
+      version: Argon2Parameters.ARGON2_VERSION_13,
+      iterations: _argon2Iterations,
+      memoryPowerOf2: _argon2MemoryPowerOf2,
+      lanes: _argon2Parallelism,
+    );
+
+    final argon2 = Argon2BytesGenerator();
+    argon2.init(parameters);
+
+    final passwordBytes = Uint8List.fromList(utf8.encode(password));
+    final result = argon2.process(passwordBytes);
+
+    return result;
+  }
+
+  /// 使用 Argon2id 派生密钥材料
+  ///
+  /// 符合文档要求的安全标准
+  static KeyMaterial deriveKeyMaterial(
+    String password,
+    Uint8List salt,
+  ) {
+    // 使用 Argon2id 派生密钥
+    final key = deriveKeyWithArgon2id(password, salt);
+
+    // 使用 SHA-256 生成验证哈希（用于快速验证密码）
+    final bytes = utf8.encode(password);
+    final salted = Uint8List.fromList([...bytes, ...salt]);
+    final hash = sha256.convert(salted).toString();
 
     return KeyMaterial(
       key: key,
       salt: salt,
       hash: hash,
+      algorithm: 'argon2id',
+      version: 2, // 标记使用 Argon2id
     );
   }
 
   /// 生成新的密钥材料
-  static Future<KeyMaterial> generateKeyMaterial(String password) async {
+  static KeyMaterial generateKeyMaterial(String password) {
     final salt = generateSalt();
     return deriveKeyMaterial(password, salt);
   }
@@ -125,12 +172,25 @@ class CryptoService {
   }
 
   /// 安全清除 Uint8List 内容
-  /// 
+  ///
   /// 将内存中的敏感数据覆写为零
   static void secureClear(Uint8List data) {
     for (var i = 0; i < data.length; i++) {
       data[i] = 0;
     }
+  }
+
+  /// 获取 Argon2id 参数信息
+  static Map<String, dynamic> getArgon2Params() {
+    return {
+      'algorithm': 'Argon2id',
+      'version': '1.3',
+      'memoryPowerOf2': _argon2MemoryPowerOf2,
+      'memoryKB': 1 << _argon2MemoryPowerOf2,
+      'iterations': _argon2Iterations,
+      'parallelism': _argon2Parallelism,
+      'hashLength': _argon2HashLength,
+    };
   }
 }
 
@@ -164,17 +224,21 @@ class EncryptedData {
 }
 
 /// 密钥材料
-/// 
+///
 /// 包含派生密钥、盐值和哈希
 class KeyMaterial {
   final Uint8List key;
   final Uint8List salt;
   final String hash;
+  final String algorithm;
+  final int version;
 
   KeyMaterial({
     required this.key,
     required this.salt,
     required this.hash,
+    this.algorithm = 'sha256',
+    this.version = 1,
   });
 
   /// 获取 Base64 编码的密钥
@@ -182,4 +246,12 @@ class KeyMaterial {
 
   /// 获取 Base64 编码的盐值
   String get saltBase64 => base64Encode(salt);
+
+  /// 获取参数信息
+  Map<String, dynamic> toJson() => {
+    'saltBase64': saltBase64,
+    'hash': hash,
+    'algorithm': algorithm,
+    'version': version,
+  };
 }
