@@ -106,7 +106,6 @@ jobs:
           cd build/app/outputs/flutter-apk
           mv app-arm64-v8a-release.apk vaultly-${{ github.ref_name }}-android-arm64.apk
           mv app-armeabi-v7a-release.apk vaultly-${{ github.ref_name }}-android-arm.apk
-          mv app-x86_64-release.apk vaultly-${{ github.ref_name }}-android-x86_64.apk
           ls -la
 
       - name: 上传 APK 产物
@@ -216,13 +215,12 @@ jobs:
 
             ### 下载
 
-            **Android APK (分架构):**
+            **Android APK (ARM 架构):**
             - `vaultly-${{ github.ref_name }}-android-arm64.apk` - ARM64 设备（推荐，现代 Android 设备）
             - `vaultly-${{ github.ref_name }}-android-arm.apk` - ARMv7 设备（旧设备）
-            - `vaultly-${{ github.ref_name }}-android-x86_64.apk` - x86_64 设备（模拟器）
 
             **Android App Bundle:**
-            - `vaultly-${{ github.ref_name }}-android.aab` - Google Play 商店分发格式
+            - `vaultly-${{ github.ref_name }}-android.aab` - Google Play 商店分发格式（包含所有架构）
 
             ### 安装说明
 
