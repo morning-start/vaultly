@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
-import 'vault_page.dart';
 
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
@@ -32,9 +32,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const VaultPage()));
+      context.go('/vault');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('密码错误，请重试'), backgroundColor: Colors.red),
@@ -50,9 +48,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const VaultPage()),
-      );
+      context.go('/vault');
     }
   }
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/utils/password_generator.dart';
-import 'unlock_page.dart';
 
 class SetupPasswordPage extends ConsumerStatefulWidget {
   const SetupPasswordPage({super.key});
@@ -48,9 +48,7 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
     final success = await ref.read(authNotifierProvider.notifier).setupPassword(password);
 
     if (success && mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const UnlockPage()),
-      );
+      context.go('/unlock');
     }
   }
 

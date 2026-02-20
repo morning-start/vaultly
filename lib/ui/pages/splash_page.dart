@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
-import 'setup_password_page.dart';
-import 'unlock_page.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
@@ -22,17 +21,13 @@ class _SplashPageState extends ConsumerState<SplashPage> {
     await Future.delayed(const Duration(seconds: 1));
     
     if (!mounted) return;
-    
+
     final authState = ref.read(authNotifierProvider);
-    
+
     if (authState.isPasswordSet) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const UnlockPage()),
-      );
+      context.go('/unlock');
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const SetupPasswordPage()),
-      );
+      context.go('/setup');
     }
   }
 

@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/models/vault_entry.dart';
-import '../../core/services/vault_service.dart';
-import 'unlock_page.dart';
+import '../../core/providers/vault_service_provider.dart';
+import '../../core/providers/auth_provider.dart';
 import 'add_entry_page.dart';
 import 'entry_detail_page.dart';
-
-final vaultServiceProvider = Provider<VaultService>((ref) {
-  return VaultService();
-});
 
 class VaultPage extends ConsumerStatefulWidget {
   const VaultPage({super.key});
@@ -30,6 +27,14 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
   Future<void> _loadEntries() async {
     final vaultService = ref.read(vaultServiceProvider);
+    final authService = ref.read(authServiceProvider);
+    
+    // 设置加密密钥
+    final encryptionKey = authService.encryptionKey;
+    if (encryptionKey != null) {
+      vaultService.setEncryptionKey(encryptionKey);
+    }
+    
     await vaultService.loadVault();
     if (mounted) setState(() {});
   }
@@ -69,9 +74,8 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           IconButton(
             icon: const Icon(Icons.lock),
             onPressed: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const UnlockPage()),
-              );
+              ref.read(authNotifierProvider.notifier).lock();
+              context.go('/unlock');
             },
           ),
         ],
@@ -197,15 +201,14 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const AddEntryPage()),
           );
           setState(() {});
         },
-        icon: const Icon(Icons.add),
-        label: const Text('添加'),
+        child: const Icon(Icons.add),
       ),
     );
   }
