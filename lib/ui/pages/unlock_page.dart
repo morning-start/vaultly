@@ -41,17 +41,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
   }
 
-  Future<void> _unlockWithBiometric() async {
-    final biometricService = ref.read(authServiceProvider);
-    final success = await biometricService.unlockWithBiometric();
-
-    if (!mounted) return;
-
-    if (success) {
-      context.go('/vault');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
@@ -152,12 +141,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('解锁'),
-                ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: _unlockWithBiometric,
-                  icon: const Icon(Icons.fingerprint),
-                  label: const Text('使用生物识别'),
                 ),
               ],
             ),
