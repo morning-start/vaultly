@@ -1,0 +1,260 @@
+name: Build Android
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+env:
+  FLUTTER_VERSION: '3.38.9'
+  JAVA_VERSION: '17'
+
+jobs:
+  # 代码检查和测试
+  analyze-and-test:
+    name: 代码分析和测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 运行代码分析
+        run: flutter analyze
+
+      - name: 运行测试
+        run: flutter test
+
+  # 构建 Android APK (分架构)
+  build-android-apk:
+    name: 构建 Android APK
+    needs: analyze-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 设置 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 配置签名密钥
+        run: |
+          # 从 Secrets 解码密钥库文件
+          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > android/app/keystore.jks
+          
+          # 创建 key.properties 文件
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=keystore.jks
+          EOF
+          
+          echo "签名配置完成"
+
+      - name: 构建多架构 APK
+        run: |
+          flutter build apk \
+            --release \
+            --split-per-abi \
+            --build-name=${{ github.ref_name }} \
+            --build-number=${{ github.run_number }}
+
+      - name: 重命名 APK 文件
+        run: |
+          cd build/app/outputs/flutter-apk
+          mv app-arm64-v8a-release.apk vaultly-${{ github.ref_name }}-android-arm64.apk
+          mv app-armeabi-v7a-release.apk vaultly-${{ github.ref_name }}-android-arm.apk
+          mv app-x86_64-release.apk vaultly-${{ github.ref_name }}-android-x86_64.apk
+          ls -la
+
+      - name: 上传 APK 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/vaultly-*.apk
+          retention-days: 30
+
+  # 构建 Android App Bundle (AAB)
+  build-android-aab:
+    name: 构建 Android AAB
+    needs: analyze-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 设置 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 配置签名密钥
+        run: |
+          # 从 Secrets 解码密钥库文件
+          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > android/app/keystore.jks
+          
+          # 创建 key.properties 文件
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=keystore.jks
+          EOF
+          
+          echo "签名配置完成"
+
+      - name: 构建 AAB
+        run: |
+          flutter build appbundle \
+            --release \
+            --build-name=${{ github.ref_name }} \
+            --build-number=${{ github.run_number }}
+
+      - name: 重命名 AAB 文件
+        run: |
+          cd build/app/outputs/bundle/release
+          mv app-release.aab vaultly-${{ github.ref_name }}-android.aab
+          ls -la
+
+      - name: 上传 AAB 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: build/app/outputs/bundle/release/vaultly-*.aab
+          retention-days: 30
+
+  # 发布到 GitHub Releases
+  release:
+    name: 发布到 GitHub Releases
+    needs: [build-android-apk, build-android-aab]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 下载所有产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: android-*
+
+      - name: 整理产物文件
+        run: |
+          mkdir -p release
+          find artifacts -name "*.apk" -exec cp {} release/ \;
+          find artifacts -name "*.aab" -exec cp {} release/ \;
+          ls -la release/
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          generate_release_notes: true
+          body: |
+            ## Vaultly ${{ github.ref_name }}
+
+            ### 下载
+
+            **Android APK (分架构):**
+            - `vaultly-${{ github.ref_name }}-android-arm64.apk` - ARM64 设备（推荐，现代 Android 设备）
+            - `vaultly-${{ github.ref_name }}-android-arm.apk` - ARMv7 设备（旧设备）
+            - `vaultly-${{ github.ref_name }}-android-x86_64.apk` - x86_64 设备（模拟器）
+
+            **Android App Bundle:**
+            - `vaultly-${{ github.ref_name }}-android.aab` - Google Play 商店分发格式
+
+            ### 安装说明
+
+            1. 根据您的设备架构选择合适的 APK 版本
+            2. 下载后在设备上点击安装
+            3. 如提示"未知来源"，请在设置中允许安装
+
+            ### 校验
+
+            所有文件均通过 GitHub Actions 自动构建和签名。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 构建状态通知
+  notify:
+    name: 构建通知
+    needs: [build-android-apk, build-android-aab]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: 构建成功通知
+        if: needs.build-android-apk.result == 'success' && needs.build-android-aab.result == 'success'
+        run: |
+          echo "✅ Android 构建成功！"
+          echo "版本: ${{ github.ref_name }}"
+          echo "提交: ${{ github.sha }}"
+
+      - name: 构建失败通知
+        if: needs.build-android-apk.result == 'failure' || needs.build-android-aab.result == 'failure'
+        run: |
+          echo "❌ Android 构建失败！"
+          echo "版本: ${{ github.ref_name }}"
+          echo "提交: ${{ github.sha }}"
+          exit 1
