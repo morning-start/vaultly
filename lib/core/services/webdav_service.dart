@@ -9,6 +9,10 @@ import 'package:path_provider/path_provider.dart';
 ///
 /// 参考文档: wiki/03-模块设计/同步模块.md
 /// 负责与 WebDAV 服务器通信，实现数据同步
+/// // 性能优化:
+/// - 使用内存缓存减少 SecureStorage 读取
+/// - 异步初始化避免阻塞 UI
+/// - 批量操作减少 IO 次数
 class WebDAVService {
   static const _keyWebDavUrl = 'webdav_url';
   static const _keyWebDavUsername = 'webdav_username';
@@ -19,24 +23,71 @@ class WebDAVService {
 
   final FlutterSecureStorage _secureStorage;
   Client? _client;
+  
+  // 内存缓存，避免重复读取 SecureStorage
+  WebDAVConfig? _cachedConfig;
+  bool? _cachedIsConfigured;
+  DateTime? _configCacheTime;
+  static const _cacheValidityDuration = Duration(seconds: 30);
 
   WebDAVService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
+  /// 检查缓存是否有效
+  bool get _isCacheValid {
+    if (_configCacheTime == null || _cachedConfig == null) return false;
+    return DateTime.now().difference(_configCacheTime!) < _cacheValidityDuration;
+  }
+
+  /// 清除内存缓存
+  void clearCache() {
+    _cachedConfig = null;
+    _cachedIsConfigured = null;
+    _configCacheTime = null;
+  }
+
   /// 检查是否已配置 WebDAV
+  /// 
+  /// 优先使用内存缓存，避免重复读取 SecureStorage
   Future<bool> isConfigured() async {
+    // 使用缓存结果
+    if (_cachedIsConfigured != null && _isCacheValid) {
+      return _cachedIsConfigured!;
+    }
+
     final url = await _secureStorage.read(key: _keyWebDavUrl);
     final username = await _secureStorage.read(key: _keyWebDavUsername);
     final password = await _secureStorage.read(key: _keyWebDavPassword);
-    return url != null &&
+    
+    final isConfigured = url != null &&
         url.isNotEmpty &&
         username != null &&
         password != null;
+    
+    // 更新缓存
+    _cachedIsConfigured = isConfigured;
+    _configCacheTime = DateTime.now();
+    
+    return isConfigured;
+  }
+
+  /// 快速检查是否已配置（同步方法，可能返回过期的缓存结果）
+  /// 
+  /// 用于 UI 快速响应，实际状态以 isConfigured() 为准
+  bool isConfiguredSync() {
+    return _cachedIsConfigured ?? false;
   }
 
   /// 获取 WebDAV 配置
+  /// 
+  /// 优先使用内存缓存
   Future<WebDAVConfig?> getConfig() async {
+    // 使用缓存
+    if (_cachedConfig != null && _isCacheValid) {
+      return _cachedConfig;
+    }
+
     final url = await _secureStorage.read(key: _keyWebDavUrl);
     final username = await _secureStorage.read(key: _keyWebDavUsername);
     final password = await _secureStorage.read(key: _keyWebDavPassword);
@@ -45,11 +96,17 @@ class WebDAVService {
       return null;
     }
 
-    return WebDAVConfig(
+    final config = WebDAVConfig(
       url: url,
       username: username,
       password: password,
     );
+    
+    // 更新缓存
+    _cachedConfig = config;
+    _configCacheTime = DateTime.now();
+    
+    return config;
   }
 
   /// 保存 WebDAV 配置
@@ -59,6 +116,11 @@ class WebDAVService {
         key: _keyWebDavUsername, value: config.username);
     await _secureStorage.write(
         key: _keyWebDavPassword, value: config.password);
+
+    // 更新缓存
+    _cachedConfig = config;
+    _cachedIsConfigured = true;
+    _configCacheTime = DateTime.now();
 
     // 重新初始化客户端
     _initClient(config);
@@ -71,6 +133,9 @@ class WebDAVService {
     await _secureStorage.delete(key: _keyWebDavPassword);
     await _secureStorage.delete(key: _keyLastSyncTime);
     _client = null;
+    
+    // 清除缓存
+    clearCache();
   }
 
   /// 初始化 WebDAV 客户端
@@ -238,6 +303,8 @@ class WebDAVService {
   }
 
   /// 检查远程备份是否存在
+  /// 
+  /// 注意: 这是一个网络操作，可能耗时较长
   Future<bool> checkRemoteBackup() async {
     try {
       final config = await getConfig();
