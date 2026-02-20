@@ -7,6 +7,9 @@ import '../../core/providers/auth_provider.dart';
 import 'add_entry_page.dart';
 import 'entry_detail_page.dart';
 
+/// 保险库主页
+///
+/// 显示所有条目，支持搜索、筛选、添加新条目
 class VaultPage extends ConsumerStatefulWidget {
   const VaultPage({super.key});
 
@@ -60,7 +63,35 @@ class _VaultPageState extends ConsumerState<VaultPage> {
       }
     }
 
+    // 按收藏和时间排序
+    entries.sort((a, b) {
+      if (a.isFavorite != b.isFavorite) {
+        return a.isFavorite ? -1 : 1;
+      }
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
+
     return entries;
+  }
+
+  void _navigateToAddEntry() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AddEntryPage()),
+    );
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _navigateToEntryDetail(VaultEntry entry) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EntryDetailPage(entryId: entry.uuid),
+      ),
+    );
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -72,16 +103,25 @@ class _VaultPageState extends ConsumerState<VaultPage> {
         title: const Text('Vaultly'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              // 聚焦到搜索框
+              FocusScope.of(context).requestFocus(FocusNode());
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.lock),
             onPressed: () {
               ref.read(authNotifierProvider.notifier).lock();
               context.go('/unlock');
             },
+            tooltip: '锁定',
           ),
         ],
       ),
       body: Column(
         children: [
+          // 搜索栏
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -98,12 +138,16 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         },
                       )
                     : null,
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
               onChanged: (value) {
                 setState(() => _searchQuery = value);
               },
             ),
           ),
+
+          // 筛选器
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -152,34 +196,11 @@ class _VaultPageState extends ConsumerState<VaultPage> {
             ),
           ),
           const SizedBox(height: 8),
+
+          // 条目列表
           Expanded(
             child: entries.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.inbox_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          '暂无条目',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '点击下方按钮添加您的第一个条目',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+                ? _buildEmptyState()
                 : ListView.builder(
                     itemCount: entries.length,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -187,28 +208,48 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                       final entry = entries[index];
                       return _EntryCard(
                         entry: entry,
-                        onTap: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => EntryDetailPage(entryId: entry.uuid),
-                            ),
-                          );
-                          setState(() {});
-                        },
+                        onTap: () => _navigateToEntryDetail(entry),
                       );
                     },
                   ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AddEntryPage()),
-          );
-          setState(() {});
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navigateToAddEntry,
+        icon: const Icon(Icons.add),
+        label: const Text('添加'),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inbox_outlined,
+            size: 64,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _searchQuery.isNotEmpty ? '未找到匹配的条目' : '暂无条目',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _searchQuery.isNotEmpty
+                ? '尝试其他搜索词'
+                : '点击下方按钮添加您的第一个条目',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -236,14 +277,23 @@ class _EntryCard extends StatelessWidget {
             size: 20,
           ),
         ),
-        title: Text(entry.title),
+        title: Text(
+          entry.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: entry.tags.isNotEmpty
             ? Text(
                 entry.tags.join(', '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               )
-            : Text(_getTypeName(entry.type)),
+            : Text(
+                _getTypeName(entry.type),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
         trailing: entry.isFavorite
             ? const Icon(Icons.star, color: Colors.amber)
             : null,
