@@ -8,6 +8,8 @@
     "macos": true,
     "ios": true,
     "android": true,
-    "windows": true
+    "windows": true,
+    "web": true,
+    ".idea": true
   }
 }
