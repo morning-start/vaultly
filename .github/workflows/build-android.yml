@@ -104,8 +104,8 @@ jobs:
       - name: 重命名 APK 文件
         run: |
           cd build/app/outputs/flutter-apk
-          mv app-arm64-v8a-release.apk vaultly-${{ github.ref_name }}-android-arm64.apk
-          mv app-armeabi-v7a-release.apk vaultly-${{ github.ref_name }}-android-arm.apk
+          mv app-arm64-v8a-release.apk vaultly-${{ github.ref_name }}-android-v8.apk
+          mv app-armeabi-v7a-release.apk vaultly-${{ github.ref_name }}-android-v7.apk
           ls -la
 
       - name: 上传 APK 产物
@@ -216,8 +216,8 @@ jobs:
             ### 下载
 
             **Android APK (ARM 架构):**
-            - `vaultly-${{ github.ref_name }}-android-arm64.apk` - ARM64 设备（推荐，现代 Android 设备）
-            - `vaultly-${{ github.ref_name }}-android-arm.apk` - ARMv7 设备（旧设备）
+            - `vaultly-${{ github.ref_name }}-android-v8.apk` - ARMv8 (ARM64) 设备（推荐，现代 Android 设备）
+            - `vaultly-${{ github.ref_name }}-android-v7.apk` - ARMv7 设备（旧设备）
 
             **Android App Bundle:**
             - `vaultly-${{ github.ref_name }}-android.aab` - Google Play 商店分发格式（包含所有架构）
