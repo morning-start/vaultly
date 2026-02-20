@@ -50,7 +50,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     final entry = vaultService.getEntry(widget.entryId);
     if (entry != null && mounted) {
       setState(() => _entry = entry);
-      if (entry.type == EntryType.login && entry.totpSecretEncrypted != null) {
+      if (entry is LoginEntry && entry.totpSecret != null) {
         _startTotpTimer();
       }
     }
@@ -64,25 +64,28 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   void _updateTotp() {
-    if (_entry?.totpSecretEncrypted != null) {
-      final totpService = TOTPService();
-      final code = totpService.generateTOTP(_entry!.totpSecretEncrypted!);
-      final remaining = totpService.getRemainingSeconds();
-      
-      if (mounted) {
-        setState(() {
-          _totpCode = code;
-          _totpRemainingSeconds = remaining;
-        });
+    if (_entry is LoginEntry) {
+      final loginEntry = _entry as LoginEntry;
+      if (loginEntry.totpSecret != null) {
+        final totpService = TOTPService();
+        final code = totpService.generateTOTP(loginEntry.totpSecret!);
+        final remaining = totpService.getRemainingSeconds();
+
+        if (mounted) {
+          setState(() {
+            _totpCode = code;
+            _totpRemainingSeconds = remaining;
+          });
+        }
       }
     }
   }
 
   Future<void> _copyToClipboard(String? text, String label) async {
     if (text == null || text.isEmpty) return;
-    
+
     await ClipboardService.copy(text);
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$label 已复制到剪贴板（30秒后自动清除）')),
@@ -92,7 +95,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Future<void> _deleteEntry() async {
     if (_entry == null) return;
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -130,13 +133,13 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Future<void> _editEntry() async {
     if (_entry == null) return;
-    
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AddEntryPage(entryId: _entry!.uuid),
       ),
     );
-    
+
     // 刷新条目数据
     await _loadEntry();
   }
@@ -239,36 +242,38 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   List<Widget> _buildTypeSpecificFields(VaultEntry entry) {
     switch (entry.type) {
       case EntryType.login:
-        return _buildLoginFields(entry);
+        return entry is LoginEntry ? _buildLoginFields(entry) : [];
       case EntryType.bankCard:
-        return _buildBankCardFields(entry);
+        return entry is BankCardEntry ? _buildBankCardFields(entry) : [];
       case EntryType.secureNote:
-        return _buildSecureNoteFields(entry);
+        return entry is SecureNoteEntry ? _buildSecureNoteFields(entry) : [];
       case EntryType.identity:
-        return _buildIdentityFields(entry);
+        return entry is IdentityEntry ? _buildIdentityFields(entry) : [];
+      case EntryType.custom:
+        return [];
     }
   }
 
-  List<Widget> _buildLoginFields(VaultEntry entry) {
+  List<Widget> _buildLoginFields(LoginEntry entry) {
     return [
-      if (entry.usernameEncrypted != null && entry.usernameEncrypted!.isNotEmpty)
+      if (entry.username != null && entry.username!.isNotEmpty)
         _buildCopyableField(
           '用户名',
-          entry.usernameEncrypted!,
+          entry.username!,
           Icons.person,
           isSensitive: false,
         ),
-      if (entry.emailEncrypted != null && entry.emailEncrypted!.isNotEmpty)
+      if (entry.email != null && entry.email!.isNotEmpty)
         _buildCopyableField(
           '邮箱',
-          entry.emailEncrypted!,
+          entry.email!,
           Icons.email,
           isSensitive: false,
         ),
-      if (entry.passwordEncrypted != null && entry.passwordEncrypted!.isNotEmpty)
+      if (entry.password != null && entry.password!.isNotEmpty)
         _buildCopyableField(
           '密码',
-          entry.passwordEncrypted!,
+          entry.password!,
           Icons.lock,
           isSensitive: true,
         ),
@@ -276,17 +281,17 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
         _buildUrlField('网站', entry.url!, Icons.link),
       if (_totpCode != null)
         _buildTotpField('验证码', _totpCode!, _totpRemainingSeconds ?? 30),
-      if (entry.notesEncrypted != null && entry.notesEncrypted!.isNotEmpty)
-        _buildNoteField('备注', entry.notesEncrypted!),
+      if (entry.notes != null && entry.notes!.isNotEmpty)
+        _buildNoteField('备注', entry.notes!),
     ];
   }
 
-  List<Widget> _buildBankCardFields(VaultEntry entry) {
+  List<Widget> _buildBankCardFields(BankCardEntry entry) {
     return [
-      if (entry.cardNumberEncrypted != null && entry.cardNumberEncrypted!.isNotEmpty)
+      if (entry.cardNumber != null && entry.cardNumber!.isNotEmpty)
         _buildCopyableField(
           '卡号',
-          entry.cardNumberEncrypted!,
+          entry.cardNumber!,
           Icons.credit_card,
           isSensitive: true,
         ),
@@ -298,10 +303,10 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
           '${entry.expiryMonth.toString().padLeft(2, '0')}/${entry.expiryYear}',
           Icons.calendar_today,
         ),
-      if (entry.cvvEncrypted != null && entry.cvvEncrypted!.isNotEmpty)
+      if (entry.cvv != null && entry.cvv!.isNotEmpty)
         _buildCopyableField(
           'CVV',
-          entry.cvvEncrypted!,
+          entry.cvv!,
           Icons.security,
           isSensitive: true,
         ),
@@ -312,7 +317,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     ];
   }
 
-  List<Widget> _buildSecureNoteFields(VaultEntry entry) {
+  List<Widget> _buildSecureNoteFields(SecureNoteEntry entry) {
     return [
       if (entry.isMarkdown)
         Card(
@@ -332,17 +337,17 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
                   ],
                 ),
                 const Divider(),
-                Text(entry.noteContentEncrypted ?? ''),
+                Text(entry.content ?? ''),
               ],
             ),
           ),
         )
       else
-        _buildNoteField('内容', entry.noteContentEncrypted ?? ''),
+        _buildNoteField('内容', entry.content ?? ''),
     ];
   }
 
-  List<Widget> _buildIdentityFields(VaultEntry entry) {
+  List<Widget> _buildIdentityFields(IdentityEntry entry) {
     final nameParts = [
       entry.lastName,
       entry.middleName,
@@ -354,31 +359,31 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
         _buildDisplayField('姓名', nameParts, Icons.person),
       if (entry.birthDate != null)
         _buildDisplayField('出生日期', _formatDate(entry.birthDate!), Icons.cake),
-      if (entry.idNumberEncrypted != null && entry.idNumberEncrypted!.isNotEmpty)
+      if (entry.idNumber != null && entry.idNumber!.isNotEmpty)
         _buildCopyableField(
           '证件号码',
-          entry.idNumberEncrypted!,
+          entry.idNumber!,
           Icons.badge,
           isSensitive: true,
         ),
-      if (entry.phoneEncrypted != null && entry.phoneEncrypted!.isNotEmpty)
+      if (entry.phone != null && entry.phone!.isNotEmpty)
         _buildCopyableField(
           '电话',
-          entry.phoneEncrypted!,
+          entry.phone!,
           Icons.phone,
           isSensitive: false,
         ),
-      if (entry.emailEncrypted != null && entry.emailEncrypted!.isNotEmpty)
+      if (entry.email != null && entry.email!.isNotEmpty)
         _buildCopyableField(
           '邮箱',
-          entry.emailEncrypted!,
+          entry.email!,
           Icons.email,
           isSensitive: false,
         ),
-      if (entry.addressEncrypted != null && entry.addressEncrypted!.isNotEmpty)
+      if (entry.address != null && entry.address!.isNotEmpty)
         _buildCopyableField(
           '地址',
-          entry.addressEncrypted!,
+          entry.address!,
           Icons.location_on,
           isSensitive: false,
         ),
@@ -594,6 +599,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       EntryType.bankCard => Icons.credit_card,
       EntryType.secureNote => Icons.note,
       EntryType.identity => Icons.person,
+      EntryType.custom => Icons.folder,
     };
   }
 
@@ -603,6 +609,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       EntryType.bankCard => Colors.green,
       EntryType.secureNote => Colors.orange,
       EntryType.identity => Colors.purple,
+      EntryType.custom => Colors.grey,
     };
   }
 
@@ -612,6 +619,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       EntryType.bankCard => '银行卡',
       EntryType.secureNote => '安全笔记',
       EntryType.identity => '身份信息',
+      EntryType.custom => '自定义',
     };
   }
 
@@ -620,6 +628,8 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       CardType.visa => 'Visa',
       CardType.mastercard => 'Mastercard',
       CardType.amex => 'American Express',
+      CardType.discover => 'Discover',
+      CardType.jcb => 'JCB',
       CardType.unionPay => 'UnionPay',
       CardType.other => '其他',
     };

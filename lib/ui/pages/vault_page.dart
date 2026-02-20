@@ -384,6 +384,7 @@ class _EntryCard extends StatelessWidget {
       EntryType.bankCard => Icons.credit_card,
       EntryType.secureNote => Icons.note,
       EntryType.identity => Icons.person,
+      EntryType.custom => Icons.folder,
     };
   }
 
@@ -393,6 +394,7 @@ class _EntryCard extends StatelessWidget {
       EntryType.bankCard => Colors.green,
       EntryType.secureNote => Colors.orange,
       EntryType.identity => Colors.purple,
+      EntryType.custom => Colors.grey,
     };
   }
 
@@ -402,6 +404,7 @@ class _EntryCard extends StatelessWidget {
       EntryType.bankCard => '银行卡',
       EntryType.secureNote => '安全笔记',
       EntryType.identity => '身份信息',
+      EntryType.custom => '自定义',
     };
   }
 }

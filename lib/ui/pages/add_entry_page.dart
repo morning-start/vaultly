@@ -5,6 +5,7 @@ import '../../core/models/vault_entry.dart';
 import '../../core/providers/vault_service_provider.dart';
 import '../../core/utils/password_generator.dart';
 import '../widgets/password_generator_dialog.dart';
+import 'qr_scanner_page.dart';
 
 /// 添加/编辑条目页面
 ///
@@ -96,35 +97,46 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         // 加载类型特定字段
         switch (entry.type) {
           case EntryType.login:
-            _usernameController.text = entry.usernameEncrypted ?? '';
-            _emailController.text = entry.emailEncrypted ?? '';
-            _passwordController.text = entry.passwordEncrypted ?? '';
-            _urlController.text = entry.url ?? '';
-            _notesController.text = entry.notesEncrypted ?? '';
-            _totpSecretController.text = entry.totpSecretEncrypted ?? '';
+            if (entry is LoginEntry) {
+              _usernameController.text = entry.username ?? '';
+              _emailController.text = entry.email ?? '';
+              _passwordController.text = entry.password ?? '';
+              _urlController.text = entry.url ?? '';
+              _notesController.text = entry.notes ?? '';
+              _totpSecretController.text = entry.totpSecret ?? '';
+            }
             break;
           case EntryType.bankCard:
-            _cardNumberController.text = entry.cardNumberEncrypted ?? '';
-            _cardHolderController.text = entry.cardHolderName ?? '';
-            _cvvController.text = entry.cvvEncrypted ?? '';
-            _bankNameController.text = entry.bankName ?? '';
-            _expiryMonth = entry.expiryMonth;
-            _expiryYear = entry.expiryYear;
-            _cardType = entry.cardType ?? CardType.other;
+            if (entry is BankCardEntry) {
+              _cardNumberController.text = entry.cardNumber ?? '';
+              _cardHolderController.text = entry.cardHolderName ?? '';
+              _cvvController.text = entry.cvv ?? '';
+              _bankNameController.text = entry.bankName ?? '';
+              _expiryMonth = entry.expiryMonth;
+              _expiryYear = entry.expiryYear;
+              _cardType = entry.cardType ?? CardType.other;
+            }
             break;
           case EntryType.secureNote:
-            _noteContentController.text = entry.noteContentEncrypted ?? '';
-            _isMarkdown = entry.isMarkdown;
+            if (entry is SecureNoteEntry) {
+              _noteContentController.text = entry.content ?? '';
+              _isMarkdown = entry.isMarkdown;
+            }
             break;
           case EntryType.identity:
-            _firstNameController.text = entry.firstName ?? '';
-            _lastNameController.text = entry.lastName ?? '';
-            _middleNameController.text = entry.middleName ?? '';
-            _idNumberController.text = entry.idNumberEncrypted ?? '';
-            _phoneController.text = entry.phoneEncrypted ?? '';
-            _emailController.text = entry.emailEncrypted ?? '';
-            _addressController.text = entry.addressEncrypted ?? '';
-            _birthDate = entry.birthDate;
+            if (entry is IdentityEntry) {
+              _firstNameController.text = entry.firstName ?? '';
+              _lastNameController.text = entry.lastName ?? '';
+              _middleNameController.text = entry.middleName ?? '';
+              _idNumberController.text = entry.idNumber ?? '';
+              _phoneController.text = entry.phone ?? '';
+              _emailController.text = entry.email ?? '';
+              _addressController.text = entry.address ?? '';
+              _birthDate = entry.birthDate;
+            }
+            break;
+          case EntryType.custom:
+            // 自定义类型不加载特定字段
             break;
         }
       });
@@ -175,6 +187,32 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     }
   }
 
+  Future<void> _scanTotpQrCode() async {
+    final result = await Navigator.push<TotpScanResult>(
+      context,
+      MaterialPageRoute(builder: (context) => const QrScannerPage()),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _totpSecretController.text = result.secret;
+      });
+
+      // 如果标题为空，使用扫描到的标签
+      if (_titleController.text.isEmpty && result.label.isNotEmpty) {
+        setState(() {
+          _titleController.text = result.label;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已扫描: ${result.issuer.isNotEmpty ? result.issuer : result.label}'),
+        ),
+      );
+    }
+  }
+
   Future<void> _saveEntry() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -186,56 +224,94 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         .where((t) => t.isNotEmpty)
         .toList();
 
+    final now = DateTime.now();
+    final id = _isEditing && _originalEntry != null
+        ? _originalEntry!.id
+        : DateTime.now().millisecondsSinceEpoch.toString();
+
     VaultEntry entry;
 
-    if (_isEditing && _originalEntry != null) {
-      // 更新现有条目
-      entry = _originalEntry!;
-      entry.title = _titleController.text;
-      entry.type = _selectedType;
-      entry.tags = tags;
-      entry.updatedAt = DateTime.now();
-    } else {
-      // 创建新条目
-      entry = VaultEntry(
-        title: _titleController.text,
-        type: _selectedType,
-        tags: tags,
-      );
-    }
-
-    // 根据类型设置字段
+    // 根据类型创建对应的条目子类
     switch (_selectedType) {
       case EntryType.login:
-        entry.usernameEncrypted = _usernameController.text.isNotEmpty ? _usernameController.text : null;
-        entry.emailEncrypted = _emailController.text.isNotEmpty ? _emailController.text : null;
-        entry.passwordEncrypted = _passwordController.text.isNotEmpty ? _passwordController.text : null;
-        entry.url = _urlController.text.isNotEmpty ? _urlController.text : null;
-        entry.notesEncrypted = _notesController.text.isNotEmpty ? _notesController.text : null;
-        entry.totpSecretEncrypted = _totpSecretController.text.isNotEmpty ? _totpSecretController.text : null;
+        entry = LoginEntry(
+          id: id,
+          title: _titleController.text,
+          createdAt: _isEditing && _originalEntry != null
+              ? _originalEntry!.createdAt
+              : now,
+          updatedAt: now,
+          tags: tags,
+          username: _usernameController.text.isNotEmpty ? _usernameController.text : null,
+          email: _emailController.text.isNotEmpty ? _emailController.text : null,
+          password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
+          url: _urlController.text.isNotEmpty ? _urlController.text : null,
+          notes: _notesController.text.isNotEmpty ? _notesController.text : null,
+          totpSecret: _totpSecretController.text.isNotEmpty ? _totpSecretController.text : null,
+        );
         break;
       case EntryType.bankCard:
-        entry.cardNumberEncrypted = _cardNumberController.text.isNotEmpty ? _cardNumberController.text : null;
-        entry.cardHolderName = _cardHolderController.text.isNotEmpty ? _cardHolderController.text : null;
-        entry.cvvEncrypted = _cvvController.text.isNotEmpty ? _cvvController.text : null;
-        entry.bankName = _bankNameController.text.isNotEmpty ? _bankNameController.text : null;
-        entry.expiryMonth = _expiryMonth;
-        entry.expiryYear = _expiryYear;
-        entry.cardType = _cardType;
+        entry = BankCardEntry(
+          id: id,
+          title: _titleController.text,
+          createdAt: _isEditing && _originalEntry != null
+              ? _originalEntry!.createdAt
+              : now,
+          updatedAt: now,
+          tags: tags,
+          cardNumber: _cardNumberController.text.isNotEmpty ? _cardNumberController.text : null,
+          cardHolderName: _cardHolderController.text.isNotEmpty ? _cardHolderController.text : null,
+          cvv: _cvvController.text.isNotEmpty ? _cvvController.text : null,
+          bankName: _bankNameController.text.isNotEmpty ? _bankNameController.text : null,
+          expiryMonth: _expiryMonth,
+          expiryYear: _expiryYear,
+          cardType: _cardType,
+        );
         break;
       case EntryType.secureNote:
-        entry.noteContentEncrypted = _noteContentController.text.isNotEmpty ? _noteContentController.text : null;
-        entry.isMarkdown = _isMarkdown;
+        entry = SecureNoteEntry(
+          id: id,
+          title: _titleController.text,
+          createdAt: _isEditing && _originalEntry != null
+              ? _originalEntry!.createdAt
+              : now,
+          updatedAt: now,
+          tags: tags,
+          content: _noteContentController.text.isNotEmpty ? _noteContentController.text : null,
+          isMarkdown: _isMarkdown,
+        );
         break;
       case EntryType.identity:
-        entry.firstName = _firstNameController.text.isNotEmpty ? _firstNameController.text : null;
-        entry.lastName = _lastNameController.text.isNotEmpty ? _lastNameController.text : null;
-        entry.middleName = _middleNameController.text.isNotEmpty ? _middleNameController.text : null;
-        entry.idNumberEncrypted = _idNumberController.text.isNotEmpty ? _idNumberController.text : null;
-        entry.phoneEncrypted = _phoneController.text.isNotEmpty ? _phoneController.text : null;
-        entry.emailEncrypted = _emailController.text.isNotEmpty ? _emailController.text : null;
-        entry.addressEncrypted = _addressController.text.isNotEmpty ? _addressController.text : null;
-        entry.birthDate = _birthDate;
+        entry = IdentityEntry(
+          id: id,
+          title: _titleController.text,
+          createdAt: _isEditing && _originalEntry != null
+              ? _originalEntry!.createdAt
+              : now,
+          updatedAt: now,
+          tags: tags,
+          firstName: _firstNameController.text.isNotEmpty ? _firstNameController.text : null,
+          lastName: _lastNameController.text.isNotEmpty ? _lastNameController.text : null,
+          middleName: _middleNameController.text.isNotEmpty ? _middleNameController.text : null,
+          idNumber: _idNumberController.text.isNotEmpty ? _idNumberController.text : null,
+          phone: _phoneController.text.isNotEmpty ? _phoneController.text : null,
+          email: _emailController.text.isNotEmpty ? _emailController.text : null,
+          address: _addressController.text.isNotEmpty ? _addressController.text : null,
+          birthDate: _birthDate,
+        );
+        break;
+      case EntryType.custom:
+        // 自定义类型使用基础 VaultEntry
+        entry = VaultEntry(
+          id: id,
+          title: _titleController.text,
+          createdAt: _isEditing && _originalEntry != null
+              ? _originalEntry!.createdAt
+              : now,
+          updatedAt: now,
+          type: EntryType.custom,
+          tags: tags,
+        );
         break;
     }
 
@@ -318,6 +394,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
                     DropdownMenuItem(value: EntryType.bankCard, child: Text('银行卡')),
                     DropdownMenuItem(value: EntryType.secureNote, child: Text('安全笔记')),
                     DropdownMenuItem(value: EntryType.identity, child: Text('身份信息')),
+                    DropdownMenuItem(value: EntryType.custom, child: Text('自定义')),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -383,6 +460,8 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         return _buildSecureNoteFields();
       case EntryType.identity:
         return _buildIdentityFields();
+      case EntryType.custom:
+        return [];
     }
   }
 
@@ -456,10 +535,15 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       const SizedBox(height: 16),
       TextFormField(
         controller: _totpSecretController,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'TOTP 密钥',
           hintText: '用于双因素认证',
-          prefixIcon: Icon(Icons.timer),
+          prefixIcon: const Icon(Icons.timer),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            onPressed: _scanTotpQrCode,
+            tooltip: '扫描二维码',
+          ),
         ),
       ),
       const SizedBox(height: 16),
@@ -700,6 +784,8 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       CardType.visa => 'Visa',
       CardType.mastercard => 'Mastercard',
       CardType.amex => 'American Express',
+      CardType.discover => 'Discover',
+      CardType.jcb => 'JCB',
       CardType.unionPay => 'UnionPay',
       CardType.other => '其他',
     };
