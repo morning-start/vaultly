@@ -25,27 +25,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isPasswordSet = authState.isPasswordSet;
       final isLoading = authState.isLoading;
 
-      // 加载中不跳转
-      if (isLoading) return null;
-
       final location = state.uri.path;
 
-      // 允许访问 splash 页面
-      if (location == '/') return null;
+      // 加载中：如果在启动页则停留，否则不处理
+      if (isLoading) {
+        if (location == '/') return null;
+        // 加载期间不允许访问其他页面，回到启动页等待
+        return '/';
+      }
 
-      // 未设置密码，只能访问设置页面
-      if (!isPasswordSet && location != '/setup') {
+      // 已解锁状态
+      if (isAuthenticated) {
+        // 已解锁用户不能访问启动页、设置页、解锁页
+        if (location == '/' || location == '/setup' || location == '/unlock') {
+          return '/vault';
+        }
+        return null;
+      }
+
+      // 未解锁状态
+      if (isPasswordSet) {
+        // 已设置密码但未解锁，只能访问解锁页
+        if (location != '/unlock') {
+          return '/unlock';
+        }
+        return null;
+      }
+
+      // 未设置密码状态
+      // 只能访问设置页
+      if (location != '/setup') {
         return '/setup';
-      }
-
-      // 已设置密码但未解锁，只能访问解锁页面
-      if (isPasswordSet && !isAuthenticated && location != '/unlock') {
-        return '/unlock';
-      }
-
-      // 已解锁，不能访问设置和解锁页面
-      if (isAuthenticated && (location == '/setup' || location == '/unlock')) {
-        return '/vault';
       }
 
       return null;
