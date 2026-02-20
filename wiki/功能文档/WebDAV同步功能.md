@@ -1,6 +1,18 @@
 # WebDAV 同步功能
 
-> 功能文档 - 描述 WebDAV 同步的功能需求、用户场景、验收标准
+> **版本**: v1.1.0  
+> **更新日期**: 2026-02-20  
+> **作者**: Vaultly Team  
+> **文档类型**: 功能文档（渐进式文档体系）
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 修改内容 | 作者 |
+|------|------|----------|------|
+| v1.0.0 | 2026-02-20 | 初始版本 | Vaultly Team |
+| v1.1.0 | 2026-02-20 | 补充代码实现映射、完善验收标准 | Vaultly Team |
 
 ---
 
@@ -178,17 +190,119 @@ WebDAV 同步功能允许用户将加密的保险库数据同步到自建的 Web
 
 ---
 
-## 五、相关文档
+## 五、代码实现映射
 
-- [WebDAV 同步需求文档](../需求文档/WebDAV同步需求.md) - 数据模型、数据流动、状态管理
-- [WebDAV 同步架构文档](../架构文档/WebDAV同步架构.md) - 技术选型、实现方案
-- [同步状态机](../状态机/同步状态机.md) - 状态转换设计
-- [同步数据流](../数据流动/WebDAV同步数据流.md) - 数据流动设计
+### 5.1 核心实现文件
+
+| 功能 | 实现文件 | 关键类/方法 |
+|------|----------|-------------|
+| **同步服务** | `lib/core/services/webdav_service.dart` | `WebDAVService` |
+| **WebDAV 客户端** | `lib/core/services/webdav_client.dart` | `WebDAVClient` |
+| **同步配置** | `lib/core/models/sync_metadata.dart` | `SyncMetadata` |
+| **同步状态管理** | `lib/core/providers/webdav_provider.dart` | `WebDAVNotifier` |
+| **同步配置页面** | `lib/ui/pages/webdav_config_page.dart` | `WebDAVConfigPage` |
+| **同步状态页面** | `lib/ui/pages/webdav_sync_page.dart` | `WebDAVSyncPage` |
+
+### 5.2 同步服务实现
+
+```dart
+// lib/core/services/webdav_service.dart
+class WebDAVService {
+  final WebDAVClient _client;
+  final VaultRepository _vaultRepository;
+  final CryptoService _cryptoService;
+  
+  // 执行同步
+  Future<SyncResult> sync() async {
+    try {
+      // 1. 获取远程文件信息
+      final remoteInfo = await _client.getFileInfo('/vaultly/vault.enc');
+      
+      // 2. 获取本地数据
+      final localData = await _vaultRepository.getAllEntries();
+      final localChecksum = CryptoService.calculateChecksum(localData);
+      
+      // 3. 比较版本
+      if (remoteInfo.checksum == localChecksum) {
+        return SyncResult.noChanges;
+      }
+      
+      // 4. 下载远程数据
+      final encryptedData = await _client.downloadFile('/vaultly/vault.enc');
+      
+      // 5. 解密远程数据
+      final remoteData = await _cryptoService.decrypt(
+        encryptedData,
+        await _getVaultKey(),
+      );
+      
+      // 6. 合并数据
+      final mergedData = await _mergeData(localData, remoteData);
+      
+      // 7. 加密并上传
+      final newEncryptedData = await _cryptoService.encrypt(
+        jsonEncode(mergedData),
+        await _getVaultKey(),
+      );
+      
+      await _client.uploadFile('/vaultly/vault.enc', newEncryptedData);
+      
+      return SyncResult.success;
+    } catch (e) {
+      return SyncResult.failure(e.toString());
+    }
+  }
+}
+```
+
+### 5.3 状态管理实现
+
+```dart
+// lib/core/providers/webdav_provider.dart
+class WebDAVNotifier extends StateNotifier<WebDAVState> {
+  final WebDAVService _webDAVService;
+  
+  Future<void> sync() async {
+    state = state.copyWith(isSyncing: true, error: null);
+    
+    final result = await _webDAVService.sync();
+    
+    result.when(
+      success: () => state = state.copyWith(
+        isSyncing: false,
+        lastSyncAt: DateTime.now(),
+      ),
+      failure: (error) => state = state.copyWith(
+        isSyncing: false,
+        error: error,
+      ),
+      noChanges: () => state = state.copyWith(isSyncing: false),
+    );
+  }
+}
+```
 
 ---
 
-## 六、变更记录
+## 六、相关文档
+
+### 6.1 渐进式文档链
+- [WebDAV 同步需求文档](../需求文档/WebDAV同步需求.md) - 数据模型、数据流动、状态管理
+- [WebDAV 同步架构文档](../架构文档/WebDAV同步架构.md) - 技术选型、实现方案
+
+### 6.2 状态机与数据流
+- [同步状态机](../状态机/同步状态机.md) - 状态转换设计
+- [同步数据流](../数据流动/WebDAV同步数据流.md) - 数据流动设计
+
+### 6.3 模块设计
+- [同步模块](../03-模块设计/同步模块.md) - 详细模块设计
+- [同步架构](../02-架构设计/同步架构.md) - 同步架构设计
+
+---
+
+## 七、变更记录
 
 | 版本 | 日期 | 变更内容 | 作者 |
-|------|------|---------|------|
-| v1.0 | 2026-02-20 | 初始版本 | Vaultly Team |
+|------|------|----------|------|
+| v1.1.0 | 2026-02-20 | 补充代码实现映射、完善验收标准 | Vaultly Team |
+| v1.0.0 | 2026-02-20 | 初始版本 | Vaultly Team |

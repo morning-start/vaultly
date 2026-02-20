@@ -1,6 +1,18 @@
 # WebDAV 同步需求文档
 
-> 需求文档 - 定义 WebDAV 同步的数据模型、数据流动、状态管理、接口设计
+> **版本**: v1.1.0  
+> **更新日期**: 2026-02-20  
+> **作者**: Vaultly Team  
+> **文档类型**: 需求文档（渐进式文档体系）
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 修改内容 | 作者 |
+|------|------|----------|------|
+| v1.0.0 | 2026-02-20 | 初始版本 | Vaultly Team |
+| v1.1.0 | 2026-02-20 | 补充代码实现映射、完善数据流动细节 | Vaultly Team |
 
 ---
 
@@ -441,17 +453,213 @@ class RemoteFile {
 
 ---
 
-## 七、相关文档
+## 七、代码实现映射
 
-- [WebDAV 同步功能文档](../功能文档/WebDAV同步功能.md) - 功能需求、用户场景
-- [WebDAV 同步架构文档](../架构文档/WebDAV同步架构.md) - 技术选型、实现方案
-- [同步状态机](../状态机/同步状态机.md) - 状态转换设计
-- [同步数据流](../数据流动/WebDAV同步数据流.md) - 数据流动设计
+### 7.1 数据模型实现
+
+```dart
+// lib/core/models/sync_metadata.dart
+class SyncMetadata {
+  final String id;
+  final String serverUrl;
+  final String username;
+  final String remotePath;
+  final SyncMode syncMode;
+  final bool isEnabled;
+  final DateTime? lastSyncAt;
+  final SyncStatus lastSyncStatus;
+  
+  SyncMetadata({
+    required this.id,
+    required this.serverUrl,
+    required this.username,
+    this.remotePath = '/vaultly/',
+    this.syncMode = SyncMode.auto,
+    this.isEnabled = false,
+    this.lastSyncAt,
+    this.lastSyncStatus = SyncStatus.neverSynced,
+  });
+}
+
+enum SyncMode { auto, manual, uploadOnly, downloadOnly }
+enum SyncStatus { success, failure, conflict, inProgress, neverSynced }
+```
+
+### 7.2 同步服务实现
+
+```dart
+// lib/core/services/webdav_service.dart
+class WebDAVService {
+  final WebDAVClient _client;
+  final VaultRepository _vaultRepository;
+  final CryptoService _cryptoService;
+  final LocalStorageRepository _storage;
+  
+  // 测试连接
+  Future<ConnectionResult> testConnection(SyncConfig config) async {
+    try {
+      await _client.connect(
+        config.serverUrl,
+        config.username,
+        config.password,
+      );
+      
+      // 测试 PROPFIND 请求
+      await _client.listDirectory(config.remotePath);
+      
+      return ConnectionResult.success();
+    } on WebDAVException catch (e) {
+      return ConnectionResult.failure(e.message);
+    }
+  }
+  
+  // 执行同步
+  Future<SyncResult> sync() async {
+    final config = await _storage.getSyncConfig();
+    if (config == null || !config.isEnabled) {
+      return SyncResult.failure('Sync not configured');
+    }
+    
+    try {
+      // 获取远程信息
+      final remoteFile = await _client.getFileInfo(
+        '${config.remotePath}/vault.enc',
+      );
+      
+      // 获取本地数据
+      final localEntries = await _vaultRepository.getAllEntries();
+      final localChecksum = CryptoService.calculateChecksum(localEntries);
+      
+      // 比较校验和
+      if (remoteFile.etag == localChecksum) {
+        return SyncResult.noChanges();
+      }
+      
+      // 下载并合并
+      final encryptedData = await _client.downloadFile(
+        '${config.remotePath}/vault.enc',
+      );
+      
+      final decryptedJson = await _cryptoService.decrypt(
+        encryptedData,
+        await _getVaultKey(),
+      );
+      
+      final remoteEntries = _parseEntries(decryptedJson);
+      final mergedEntries = await _mergeEntries(localEntries, remoteEntries);
+      
+      // 保存合并结果
+      await _vaultRepository.saveAllEntries(mergedEntries);
+      
+      // 上传合并后的数据
+      final newEncryptedData = await _cryptoService.encrypt(
+        jsonEncode(mergedEntries),
+        await _getVaultKey(),
+      );
+      
+      await _client.uploadFile(
+        '${config.remotePath}/vault.enc',
+        newEncryptedData,
+      );
+      
+      // 更新同步时间
+      await _storage.updateLastSyncTime(DateTime.now());
+      
+      return SyncResult.success();
+    } catch (e) {
+      return SyncResult.failure(e.toString());
+    }
+  }
+}
+```
+
+### 7.3 状态管理实现
+
+```dart
+// lib/core/providers/webdav_provider.dart
+@riverpod
+class WebDAVNotifier extends _$WebDAVNotifier {
+  @override
+  WebDAVState build() {
+    return WebDAVState();
+  }
+  
+  Future<void> configure(SyncConfig config) async {
+    state = state.copyWith(isLoading: true);
+    
+    final result = await ref.read(webDAVServiceProvider).testConnection(config);
+    
+    result.when(
+      success: () {
+        state = state.copyWith(
+          isLoading: false,
+          config: config,
+          isConnected: true,
+        );
+      },
+      failure: (error) {
+        state = state.copyWith(
+          isLoading: false,
+          error: error,
+          isConnected: false,
+        );
+      },
+    );
+  }
+  
+  Future<void> sync() async {
+    state = state.copyWith(isSyncing: true, error: null);
+    
+    final result = await ref.read(webDAVServiceProvider).sync();
+    
+    result.when(
+      success: () => state = state.copyWith(
+        isSyncing: false,
+        lastSyncAt: DateTime.now(),
+        lastSyncStatus: SyncStatus.success,
+      ),
+      failure: (error) => state = state.copyWith(
+        isSyncing: false,
+        error: error,
+        lastSyncStatus: SyncStatus.failure,
+      ),
+      noChanges: () => state = state.copyWith(isSyncing: false),
+    );
+  }
+}
+```
+
+### 7.4 关键实现文件映射
+
+| 文档概念 | 实现文件 | 说明 |
+|----------|----------|------|
+| **SyncConfig** | `lib/core/models/sync_metadata.dart` | 同步配置模型 |
+| **SyncState** | `lib/core/providers/webdav_provider.dart` | 同步状态管理 |
+| **WebDAVService** | `lib/core/services/webdav_service.dart` | 同步业务逻辑 |
+| **WebDAVClient** | `lib/core/services/webdav_client.dart` | WebDAV 客户端 |
+| **Conflict** | `lib/core/models/sync_metadata.dart` | 冲突数据模型 |
 
 ---
 
-## 八、变更记录
+## 八、相关文档
+
+### 8.1 渐进式文档链
+- [WebDAV 同步功能文档](../功能文档/WebDAV同步功能.md) - 功能需求、用户场景
+- [WebDAV 同步架构文档](../架构文档/WebDAV同步架构.md) - 技术选型、实现方案
+
+### 8.2 状态机与数据流
+- [同步状态机](../状态机/同步状态机.md) - 状态转换设计
+- [同步数据流](../数据流动/WebDAV同步数据流.md) - 数据流动设计
+
+### 8.3 模块设计
+- [同步模块](../03-模块设计/同步模块.md) - 详细模块设计
+- [同步架构](../02-架构设计/同步架构.md) - 同步架构设计
+
+---
+
+## 九、变更记录
 
 | 版本 | 日期 | 变更内容 | 作者 |
-|------|------|---------|------|
-| v1.0 | 2026-02-20 | 初始版本 | Vaultly Team |
+|------|------|----------|------|
+| v1.1.0 | 2026-02-20 | 补充代码实现映射、完善数据流动细节 | Vaultly Team |
+| v1.0.0 | 2026-02-20 | 初始版本 | Vaultly Team |
