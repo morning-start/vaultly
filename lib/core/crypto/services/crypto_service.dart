@@ -95,12 +95,14 @@ class CryptoService {
   }
 
   /// 使用 SHA-256 派生密钥材料（替代 Argon2id）
+  ///
+  /// 使用 hashPassword 生成哈希，确保注册和登录使用相同的哈希算法
   static Future<KeyMaterial> deriveKeyMaterial(
     String password,
     Uint8List salt,
   ) async {
     final key = deriveKey(password, salt);
-    final hash = base64Encode(key);
+    final hash = hashPassword(password, salt);
 
     return KeyMaterial(
       key: key,
