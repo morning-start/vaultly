@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:local_auth/local_auth.dart';
 import 'crypto_service.dart';
 
 /// 认证服务
@@ -16,7 +15,6 @@ class AuthService {
   static const _keyMasterPassword = 'master_password_hash';
   static const _keySalt = 'master_salt';
   static const _keyEncryptionKey = 'encryption_key';
-  static const _keyBiometricEnabled = 'biometric_enabled';
   static const _keyFailedAttempts = 'failed_attempts';
   static const _keyLockedUntil = 'locked_until';
 
@@ -27,15 +25,12 @@ class AuthService {
   static const int _longLockDurationMinutes = 30;
 
   final FlutterSecureStorage _secureStorage;
-  final LocalAuthentication _localAuth;
   Uint8List? _encryptionKey;
   bool _isUnlocked = false;
 
   AuthService({
     FlutterSecureStorage? secureStorage,
-    LocalAuthentication? localAuth,
-  })  : _secureStorage = secureStorage ?? _createSecureStorage(),
-        _localAuth = localAuth ?? LocalAuthentication();
+  })  : _secureStorage = secureStorage ?? _createSecureStorage();
 
   /// 创建配置好的安全存储实例
   static FlutterSecureStorage _createSecureStorage() {
@@ -191,82 +186,11 @@ class AuthService {
     await _secureStorage.delete(key: _keyMasterPassword);
     await _secureStorage.delete(key: _keySalt);
     await _secureStorage.delete(key: _keyEncryptionKey);
-    await _secureStorage.delete(key: _keyBiometricEnabled);
     await _secureStorage.delete(key: _keyFailedAttempts);
     await _secureStorage.delete(key: _keyLockedUntil);
 
     _encryptionKey = null;
     _isUnlocked = false;
-  }
-
-  /// 检查生物识别是否可用
-  Future<bool> isBiometricAvailable() async {
-    final isAvailable = await _localAuth.canCheckBiometrics;
-    final isDeviceSupported = await _localAuth.isDeviceSupported();
-    return isAvailable && isDeviceSupported;
-  }
-
-  /// 获取可用的生物识别类型
-  Future<List<BiometricType>> getAvailableBiometrics() async {
-    return await _localAuth.getAvailableBiometrics();
-  }
-
-  /// 检查生物识别是否已启用
-  Future<bool> isBiometricEnabled() async {
-    final enabled = await _secureStorage.read(key: _keyBiometricEnabled);
-    return enabled == 'true';
-  }
-
-  /// 启用/禁用生物识别
-  Future<void> enableBiometric(bool enable) async {
-    await _secureStorage.write(
-      key: _keyBiometricEnabled,
-      value: enable.toString(),
-    );
-  }
-
-  /// 使用生物识别解锁
-  Future<bool> unlockWithBiometric() async {
-    try {
-      // 检查是否启用生物识别
-      final isEnabled = await isBiometricEnabled();
-      if (!isEnabled) {
-        return false;
-      }
-
-      // 检查生物识别是否可用
-      final isAvailable = await isBiometricAvailable();
-      if (!isAvailable) {
-        return false;
-      }
-
-      // 检查是否被锁定
-      final lockStatus = await _checkLockStatus();
-      if (lockStatus.isLocked) {
-        throw AuthException('账户已锁定，请在 ${lockStatus.remainingMinutes} 分钟后重试');
-      }
-
-      // 执行生物识别认证 - 使用 local_auth 3.x API
-      final success = await _localAuth.authenticate(
-        localizedReason: '请验证身份以解锁保险库',
-      );
-
-      if (success) {
-        // 从安全存储恢复加密密钥
-        final keyBase64 = await _secureStorage.read(key: _keyEncryptionKey);
-        if (keyBase64 != null) {
-          _encryptionKey = base64Decode(keyBase64);
-          _isUnlocked = true;
-          await _resetFailedAttempts();
-        }
-      } else {
-        await _incrementFailedAttempts();
-      }
-
-      return success;
-    } catch (e) {
-      return false;
-    }
   }
 
   /// 获取当前失败尝试次数（用于调试）
