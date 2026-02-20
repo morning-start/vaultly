@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../models/vault_entry.dart';
+import '../models/folder.dart';
+import '../models/sync_metadata.dart';
 
 /// 本地存储仓库
 ///

@@ -1,4 +1,6 @@
 import '../models/vault_entry.dart';
+import '../models/folder.dart';
+import '../models/sync_metadata.dart';
 import 'local_storage_repository.dart';
 
 /// 保险库数据仓库
