@@ -5,7 +5,14 @@ import '../../core/providers/vault_service_provider.dart';
 import '../../core/utils/password_generator.dart';
 
 class AddEntryPage extends ConsumerStatefulWidget {
-  const AddEntryPage({super.key});
+  final String? entryType;
+  final String? entryId;
+
+  const AddEntryPage({
+    super.key,
+    this.entryType,
+    this.entryId,
+  });
 
   @override
   ConsumerState<AddEntryPage> createState() => _AddEntryPageState();
@@ -13,8 +20,8 @@ class AddEntryPage extends ConsumerStatefulWidget {
 
 class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   final _formKey = GlobalKey<FormState>();
-  EntryType _selectedType = EntryType.login;
-  
+  late EntryType _selectedType;
+
   final _titleController = TextEditingController();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -22,14 +29,23 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   final _urlController = TextEditingController();
   final _notesController = TextEditingController();
   final _tagsController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   int _passwordStrength = 0;
 
   @override
   void initState() {
     super.initState();
+    _selectedType = _parseEntryType(widget.entryType);
     _passwordController.addListener(_updatePasswordStrength);
+  }
+
+  EntryType _parseEntryType(String? type) {
+    if (type == null) return EntryType.login;
+    return EntryType.values.firstWhere(
+      (e) => e.name == type,
+      orElse: () => EntryType.login,
+    );
   }
 
   @override
@@ -66,7 +82,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final vaultService = ref.read(vaultServiceProvider);
-    final now = DateTime.now();
 
     final tags = _tagsController.text
         .split(',')
@@ -74,32 +89,27 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         .where((t) => t.isNotEmpty)
         .toList();
 
-    VaultEntry entry;
+    final entry = VaultEntry(
+      title: _titleController.text,
+      type: _selectedType,
+      tags: tags,
+    );
 
-    switch (_selectedType) {
-      case EntryType.login:
-        entry = LoginEntry(
-          id: '${now.millisecondsSinceEpoch}',
-          title: _titleController.text,
-          createdAt: now,
-          updatedAt: now,
-          username: _usernameController.text.isEmpty ? null : _usernameController.text,
-          email: _emailController.text.isEmpty ? null : _emailController.text,
-          password: _passwordController.text.isEmpty ? null : _passwordController.text,
-          url: _urlController.text.isEmpty ? null : _urlController.text,
-          notes: _notesController.text.isEmpty ? null : _notesController.text,
-          tags: tags,
-        );
-        break;
-      default:
-        entry = VaultEntry(
-          id: '${now.millisecondsSinceEpoch}',
-          title: _titleController.text,
-          createdAt: now,
-          updatedAt: now,
-          type: _selectedType,
-          tags: tags,
-        );
+    // 设置加密字段
+    if (_usernameController.text.isNotEmpty) {
+      entry.usernameEncrypted = _usernameController.text;
+    }
+    if (_emailController.text.isNotEmpty) {
+      entry.emailEncrypted = _emailController.text;
+    }
+    if (_passwordController.text.isNotEmpty) {
+      entry.passwordEncrypted = _passwordController.text;
+    }
+    if (_urlController.text.isNotEmpty) {
+      entry.url = _urlController.text;
+    }
+    if (_notesController.text.isNotEmpty) {
+      entry.notesEncrypted = _notesController.text;
     }
 
     await vaultService.addEntry(entry);
@@ -116,7 +126,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('添加条目'),
+        title: Text(widget.entryId != null ? '编辑条目' : '添加条目'),
         actions: [
           TextButton(
             onPressed: _saveEntry,
@@ -191,8 +201,8 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(_obscurePassword 
-                            ? Icons.visibility 
+                        icon: Icon(_obscurePassword
+                            ? Icons.visibility
                             : Icons.visibility_off),
                         onPressed: () {
                           setState(() => _obscurePassword = !_obscurePassword);
@@ -206,12 +216,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
                     ],
                   ),
                 ),
-                validator: (value) {
-                  if (_selectedType == EntryType.login && (value == null || value.isEmpty)) {
-                    return '请输入密码';
-                  }
-                  return null;
-                },
               ),
               if (_passwordController.text.isNotEmpty) ...[
                 const SizedBox(height: 4),

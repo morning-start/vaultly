@@ -4,17 +4,20 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../crypto/services/crypto_service.dart';
 import '../models/vault_entry.dart';
 
+/// 保险库服务
+///
+/// 负责加密存储和管理保险库条目
 class VaultService {
   static const _keyVaultData = 'vault_data';
-  
+
   final FlutterSecureStorage _secureStorage;
   Uint8List? _encryptionKey;
-  
+
   List<VaultEntry> _entries = [];
 
   VaultService({
     FlutterSecureStorage? secureStorage,
-  })  : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   List<VaultEntry> get entries => List.unmodifiable(_entries);
 
@@ -36,7 +39,7 @@ class VaultService {
     try {
       final data = jsonDecode(encryptedData) as Map<String, dynamic>;
       final entriesJson = data['entries'] as List<dynamic>;
-      
+
       _entries = entriesJson.map((e) {
         final entry = VaultEntry.fromJson(e as Map<String, dynamic>);
         return _decryptEntry(entry);
@@ -69,30 +72,37 @@ class VaultService {
 
     final encrypted = entry.toJson();
 
-    if (entry is LoginEntry) {
-      if (entry.password != null && entry.password!.isNotEmpty) {
-        encrypted['password'] = CryptoService.encrypt(entry.password!, _encryptionKey!).toJson();
+    // 加密登录凭证字段
+    if (entry.type == EntryType.login) {
+      if (entry.passwordEncrypted != null && entry.passwordEncrypted!.isNotEmpty) {
+        encrypted['passwordEncrypted'] = CryptoService.encrypt(entry.passwordEncrypted!, _encryptionKey!).toJson();
       }
-      if (entry.totpSecret != null && entry.totpSecret!.isNotEmpty) {
-        encrypted['totpSecret'] = CryptoService.encrypt(entry.totpSecret!, _encryptionKey!).toJson();
+      if (entry.totpSecretEncrypted != null && entry.totpSecretEncrypted!.isNotEmpty) {
+        encrypted['totpSecretEncrypted'] = CryptoService.encrypt(entry.totpSecretEncrypted!, _encryptionKey!).toJson();
       }
-      if (entry.notes != null && entry.notes!.isNotEmpty) {
-        encrypted['notes'] = CryptoService.encrypt(entry.notes!, _encryptionKey!).toJson();
+      if (entry.notesEncrypted != null && entry.notesEncrypted!.isNotEmpty) {
+        encrypted['notesEncrypted'] = CryptoService.encrypt(entry.notesEncrypted!, _encryptionKey!).toJson();
       }
-    } else if (entry is BankCardEntry) {
-      if (entry.cardNumber != null && entry.cardNumber!.isNotEmpty) {
-        encrypted['cardNumber'] = CryptoService.encrypt(entry.cardNumber!, _encryptionKey!).toJson();
+    }
+    // 加密银行卡字段
+    else if (entry.type == EntryType.bankCard) {
+      if (entry.cardNumberEncrypted != null && entry.cardNumberEncrypted!.isNotEmpty) {
+        encrypted['cardNumberEncrypted'] = CryptoService.encrypt(entry.cardNumberEncrypted!, _encryptionKey!).toJson();
       }
-      if (entry.cvv != null && entry.cvv!.isNotEmpty) {
-        encrypted['cvv'] = CryptoService.encrypt(entry.cvv!, _encryptionKey!).toJson();
+      if (entry.cvvEncrypted != null && entry.cvvEncrypted!.isNotEmpty) {
+        encrypted['cvvEncrypted'] = CryptoService.encrypt(entry.cvvEncrypted!, _encryptionKey!).toJson();
       }
-    } else if (entry is SecureNoteEntry) {
-      if (entry.content != null && entry.content!.isNotEmpty) {
-        encrypted['content'] = CryptoService.encrypt(entry.content!, _encryptionKey!).toJson();
+    }
+    // 加密安全笔记字段
+    else if (entry.type == EntryType.secureNote) {
+      if (entry.noteContentEncrypted != null && entry.noteContentEncrypted!.isNotEmpty) {
+        encrypted['noteContentEncrypted'] = CryptoService.encrypt(entry.noteContentEncrypted!, _encryptionKey!).toJson();
       }
-    } else if (entry is IdentityEntry) {
-      if (entry.idNumber != null && entry.idNumber!.isNotEmpty) {
-        encrypted['idNumber'] = CryptoService.encrypt(entry.idNumber!, _encryptionKey!).toJson();
+    }
+    // 加密身份信息字段
+    else if (entry.type == EntryType.identity) {
+      if (entry.idNumberEncrypted != null && entry.idNumberEncrypted!.isNotEmpty) {
+        encrypted['idNumberEncrypted'] = CryptoService.encrypt(entry.idNumberEncrypted!, _encryptionKey!).toJson();
       }
     }
 
@@ -104,37 +114,44 @@ class VaultService {
 
     final data = entry.toJson();
 
-    if (entry is LoginEntry) {
-      if (data['password'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['password'] as Map<String, dynamic>);
-        data['password'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+    // 解密登录凭证字段
+    if (entry.type == EntryType.login) {
+      if (data['passwordEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['passwordEncrypted'] as Map<String, dynamic>);
+        data['passwordEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
-      if (data['totpSecret'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['totpSecret'] as Map<String, dynamic>);
-        data['totpSecret'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      if (data['totpSecretEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['totpSecretEncrypted'] as Map<String, dynamic>);
+        data['totpSecretEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
-      if (data['notes'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['notes'] as Map<String, dynamic>);
-        data['notes'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      if (data['notesEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['notesEncrypted'] as Map<String, dynamic>);
+        data['notesEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
-    } else if (entry is BankCardEntry) {
-      if (data['cardNumber'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['cardNumber'] as Map<String, dynamic>);
-        data['cardNumber'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+    }
+    // 解密银行卡字段
+    else if (entry.type == EntryType.bankCard) {
+      if (data['cardNumberEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['cardNumberEncrypted'] as Map<String, dynamic>);
+        data['cardNumberEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
-      if (data['cvv'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['cvv'] as Map<String, dynamic>);
-        data['cvv'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+      if (data['cvvEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['cvvEncrypted'] as Map<String, dynamic>);
+        data['cvvEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
-    } else if (entry is SecureNoteEntry) {
-      if (data['content'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['content'] as Map<String, dynamic>);
-        data['content'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+    }
+    // 解密安全笔记字段
+    else if (entry.type == EntryType.secureNote) {
+      if (data['noteContentEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['noteContentEncrypted'] as Map<String, dynamic>);
+        data['noteContentEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
-    } else if (entry is IdentityEntry) {
-      if (data['idNumber'] is Map) {
-        final encrypted = EncryptedData.fromJson(data['idNumber'] as Map<String, dynamic>);
-        data['idNumber'] = CryptoService.decrypt(encrypted, _encryptionKey!);
+    }
+    // 解密身份信息字段
+    else if (entry.type == EntryType.identity) {
+      if (data['idNumberEncrypted'] is Map) {
+        final encrypted = EncryptedData.fromJson(data['idNumberEncrypted'] as Map<String, dynamic>);
+        data['idNumberEncrypted'] = CryptoService.decrypt(encrypted, _encryptionKey!);
       }
     }
 
@@ -142,43 +159,31 @@ class VaultService {
   }
 
   Future<String> addEntry(VaultEntry entry) async {
-    final now = DateTime.now();
-    final newEntry = VaultEntry(
-      id: '${now.millisecondsSinceEpoch}',
-      title: entry.title,
-      createdAt: now,
-      updatedAt: now,
-      type: entry.type,
-      customFields: entry.customFields,
-      tags: entry.tags,
-      isFavorite: entry.isFavorite,
-      folderId: entry.folderId,
-    );
-    
-    _entries.add(newEntry);
+    entry.touch();
+    _entries.add(entry);
     await saveVault();
-    return newEntry.id;
+    return entry.uuid;
   }
 
   Future<void> updateEntry(VaultEntry entry) async {
-    final index = _entries.indexWhere((e) => e.id == entry.id);
+    final index = _entries.indexWhere((e) => e.uuid == entry.uuid);
     if (index == -1) {
       throw VaultException('Entry not found');
     }
-    
-    entry.updatedAt = DateTime.now();
+
+    entry.touch();
     _entries[index] = entry;
     await saveVault();
   }
 
-  Future<void> deleteEntry(String id) async {
-    _entries.removeWhere((e) => e.id == id);
+  Future<void> deleteEntry(String uuid) async {
+    _entries.removeWhere((e) => e.uuid == uuid);
     await saveVault();
   }
 
-  VaultEntry? getEntry(String id) {
+  VaultEntry? getEntry(String uuid) {
     try {
-      return _entries.firstWhere((e) => e.id == id);
+      return _entries.firstWhere((e) => e.uuid == uuid);
     } catch (_) {
       return null;
     }
@@ -194,7 +199,7 @@ class VaultService {
 
   List<VaultEntry> searchEntries(String query) {
     if (query.isEmpty) return getAllEntries();
-    
+
     final lowerQuery = query.toLowerCase();
     return _entries.where((e) {
       if (e.title.toLowerCase().contains(lowerQuery)) return true;
@@ -207,16 +212,16 @@ class VaultService {
     return _entries.where((e) => e.isFavorite).toList();
   }
 
-  Future<void> toggleFavorite(String id) async {
-    final index = _entries.indexWhere((e) => e.id == id);
+  Future<void> toggleFavorite(String uuid) async {
+    final index = _entries.indexWhere((e) => e.uuid == uuid);
     if (index != -1) {
       _entries[index].isFavorite = !_entries[index].isFavorite;
       await saveVault();
     }
   }
 
-  Future<void> addTag(String entryId, String tag) async {
-    final index = _entries.indexWhere((e) => e.id == entryId);
+  Future<void> addTag(String entryUuid, String tag) async {
+    final index = _entries.indexWhere((e) => e.uuid == entryUuid);
     if (index != -1) {
       if (!_entries[index].tags.contains(tag)) {
         _entries[index].tags.add(tag);
@@ -225,8 +230,8 @@ class VaultService {
     }
   }
 
-  Future<void> removeTag(String entryId, String tag) async {
-    final index = _entries.indexWhere((e) => e.id == entryId);
+  Future<void> removeTag(String entryUuid, String tag) async {
+    final index = _entries.indexWhere((e) => e.uuid == entryUuid);
     if (index != -1) {
       _entries[index].tags.remove(tag);
       await saveVault();
@@ -245,7 +250,7 @@ class VaultService {
 class VaultException implements Exception {
   final String message;
   VaultException(this.message);
-  
+
   @override
   String toString() => message;
 }

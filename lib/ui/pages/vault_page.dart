@@ -186,7 +186,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         onTap: () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => EntryDetailPage(entry: entry),
+                              builder: (_) => EntryDetailPage(entryId: entry.uuid),
                             ),
                           );
                           setState(() {});
@@ -250,47 +250,29 @@ class _EntryCard extends StatelessWidget {
   }
 
   IconData _getTypeIcon(EntryType type) {
-    switch (type) {
-      case EntryType.login:
-        return Icons.login;
-      case EntryType.bankCard:
-        return Icons.credit_card;
-      case EntryType.secureNote:
-        return Icons.note;
-      case EntryType.identity:
-        return Icons.person;
-      case EntryType.custom:
-        return Icons.folder;
-    }
+    return switch (type) {
+      EntryType.login => Icons.login,
+      EntryType.bankCard => Icons.credit_card,
+      EntryType.secureNote => Icons.note,
+      EntryType.identity => Icons.person,
+    };
   }
 
   Color _getTypeColor(EntryType type) {
-    switch (type) {
-      case EntryType.login:
-        return Colors.blue;
-      case EntryType.bankCard:
-        return Colors.green;
-      case EntryType.secureNote:
-        return Colors.orange;
-      case EntryType.identity:
-        return Colors.purple;
-      case EntryType.custom:
-        return Colors.grey;
-    }
+    return switch (type) {
+      EntryType.login => Colors.blue,
+      EntryType.bankCard => Colors.green,
+      EntryType.secureNote => Colors.orange,
+      EntryType.identity => Colors.purple,
+    };
   }
 
   String _getTypeName(EntryType type) {
-    switch (type) {
-      case EntryType.login:
-        return '登录凭证';
-      case EntryType.bankCard:
-        return '银行卡';
-      case EntryType.secureNote:
-        return '安全笔记';
-      case EntryType.identity:
-        return '身份信息';
-      case EntryType.custom:
-        return '自定义';
-    }
+    return switch (type) {
+      EntryType.login => '登录凭证',
+      EntryType.bankCard => '银行卡',
+      EntryType.secureNote => '安全笔记',
+      EntryType.identity => '身份信息',
+    };
   }
 }

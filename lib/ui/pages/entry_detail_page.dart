@@ -8,28 +8,26 @@ import '../../core/providers/vault_service_provider.dart';
 import '../../core/services/totp_service.dart';
 
 class EntryDetailPage extends ConsumerStatefulWidget {
-  final VaultEntry entry;
+  final String entryId;
 
-  const EntryDetailPage({super.key, required this.entry});
+  const EntryDetailPage({super.key, required this.entryId});
 
   @override
   ConsumerState<EntryDetailPage> createState() => _EntryDetailPageState();
 }
 
 class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
-  late VaultEntry _entry;
+  VaultEntry? _entry;
   String? _totpCode;
   Timer? _totpTimer;
+  bool _showPassword = false;
   bool _showCvv = false;
+  bool _showIdNumber = false;
 
   @override
   void initState() {
     super.initState();
-    _entry = widget.entry;
     _loadEntry();
-    if (_entry is LoginEntry && (_entry as LoginEntry).totpSecret != null) {
-      _startTotpTimer();
-    }
   }
 
   @override
@@ -40,9 +38,12 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Future<void> _loadEntry() async {
     final vaultService = ref.read(vaultServiceProvider);
-    final entry = vaultService.getEntry(_entry.id);
+    final entry = vaultService.getEntry(widget.entryId);
     if (entry != null && mounted) {
       setState(() => _entry = entry);
+      if (entry.type == EntryType.login && entry.totpSecretEncrypted != null) {
+        _startTotpTimer();
+      }
     }
   }
 
@@ -54,19 +55,17 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   void _updateTotp() {
-    if (_entry is LoginEntry) {
-      final loginEntry = _entry as LoginEntry;
-      if (loginEntry.totpSecret != null && loginEntry.totpSecret!.isNotEmpty) {
-        final totpService = TOTPService();
-        final code = totpService.generateTOTP(loginEntry.totpSecret!);
-        if (mounted) {
-          setState(() => _totpCode = code);
-        }
+    if (_entry?.totpSecretEncrypted != null) {
+      final totpService = TOTPService();
+      final code = totpService.generateTOTP(_entry!.totpSecretEncrypted!);
+      if (mounted) {
+        setState(() => _totpCode = code);
       }
     }
   }
 
-  Future<void> _copyToClipboard(String text, String label) async {
+  Future<void> _copyToClipboard(String? text, String label) async {
+    if (text == null || text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -79,11 +78,12 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   Future<void> _deleteEntry() async {
+    if (_entry == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('确认删除'),
-        content: Text('确定要删除 "${_entry.title}" 吗？'),
+        content: Text('确定要删除 "${_entry!.title}" 吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -99,7 +99,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
     if (confirmed == true) {
       final vaultService = ref.read(vaultServiceProvider);
-      await vaultService.deleteEntry(_entry.id);
+      await vaultService.deleteEntry(_entry!.uuid);
       if (mounted) {
         Navigator.pop(context);
       }
@@ -107,19 +107,28 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   Future<void> _toggleFavorite() async {
+    if (_entry == null) return;
     final vaultService = ref.read(vaultServiceProvider);
-    await vaultService.toggleFavorite(_entry.id);
+    await vaultService.toggleFavorite(_entry!.uuid);
     await _loadEntry();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_entry == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final entry = _entry!;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_entry.title),
+        title: Text(entry.title),
         actions: [
           IconButton(
-            icon: Icon(_entry.isFavorite ? Icons.star : Icons.star_border),
+            icon: Icon(entry.isFavorite ? Icons.star : Icons.star_border),
             onPressed: _toggleFavorite,
           ),
           PopupMenuButton(
@@ -138,17 +147,17 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_entry is LoginEntry) ..._buildLoginFields(_entry as LoginEntry),
-          if (_entry is BankCardEntry) ..._buildBankCardFields(_entry as BankCardEntry),
-          if (_entry is SecureNoteEntry) ..._buildSecureNoteFields(_entry as SecureNoteEntry),
-          if (_entry is IdentityEntry) ..._buildIdentityFields(_entry as IdentityEntry),
+          if (entry.type == EntryType.login) ..._buildLoginFields(entry),
+          if (entry.type == EntryType.bankCard) ..._buildBankCardFields(entry),
+          if (entry.type == EntryType.secureNote) ..._buildSecureNoteFields(entry),
+          if (entry.type == EntryType.identity) ..._buildIdentityFields(entry),
           const SizedBox(height: 16),
-          if (_entry.tags.isNotEmpty) ...[
+          if (entry.tags.isNotEmpty) ...[
             Text('标签', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: _entry.tags.map((tag) => Chip(label: Text(tag))).toList(),
+              children: entry.tags.map((tag) => Chip(label: Text(tag))).toList(),
             ),
           ],
         ],
@@ -156,27 +165,27 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     );
   }
 
-  List<Widget> _buildLoginFields(LoginEntry entry) {
+  List<Widget> _buildLoginFields(VaultEntry entry) {
     return [
-      if (entry.username != null && entry.username!.isNotEmpty)
-        _buildField('用户名', entry.username!, Icons.person),
-      if (entry.email != null && entry.email!.isNotEmpty)
-        _buildField('邮箱', entry.email!, Icons.email),
-      if (entry.password != null && entry.password!.isNotEmpty)
-        _buildPasswordField('密码', entry.password!, Icons.lock),
+      if (entry.usernameEncrypted != null && entry.usernameEncrypted!.isNotEmpty)
+        _buildField('用户名', entry.usernameEncrypted!, Icons.person),
+      if (entry.emailEncrypted != null && entry.emailEncrypted!.isNotEmpty)
+        _buildField('邮箱', entry.emailEncrypted!, Icons.email),
+      if (entry.passwordEncrypted != null && entry.passwordEncrypted!.isNotEmpty)
+        _buildPasswordField('密码', entry.passwordEncrypted!, Icons.lock),
       if (entry.url != null && entry.url!.isNotEmpty)
         _buildUrlField('网址', entry.url!, Icons.link),
       if (_totpCode != null)
         _buildTotpField('验证码', _totpCode!, Icons.timer),
-      if (entry.notes != null && entry.notes!.isNotEmpty)
-        _buildField('备注', entry.notes!, Icons.note),
+      if (entry.notesEncrypted != null && entry.notesEncrypted!.isNotEmpty)
+        _buildField('备注', entry.notesEncrypted!, Icons.note),
     ];
   }
 
-  List<Widget> _buildBankCardFields(BankCardEntry entry) {
+  List<Widget> _buildBankCardFields(VaultEntry entry) {
     return [
-      if (entry.cardNumber != null && entry.cardNumber!.isNotEmpty)
-        _buildPasswordField('卡号', entry.cardNumber!, Icons.credit_card),
+      if (entry.cardNumberEncrypted != null && entry.cardNumberEncrypted!.isNotEmpty)
+        _buildPasswordField('卡号', entry.cardNumberEncrypted!, Icons.credit_card),
       if (entry.cardHolderName != null && entry.cardHolderName!.isNotEmpty)
         _buildField('持卡人', entry.cardHolderName!, Icons.person),
       if (entry.expiryMonth != null && entry.expiryYear != null)
@@ -185,32 +194,32 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
           '${entry.expiryMonth.toString().padLeft(2, '0')}/${entry.expiryYear}',
           Icons.calendar_today,
         ),
-      if (entry.cvv != null && entry.cvv!.isNotEmpty)
-        _buildCvvField('CVV', entry.cvv!, Icons.security),
+      if (entry.cvvEncrypted != null && entry.cvvEncrypted!.isNotEmpty)
+        _buildCvvField('CVV', entry.cvvEncrypted!, Icons.security),
       if (entry.bankName != null && entry.bankName!.isNotEmpty)
         _buildField('银行', entry.bankName!, Icons.account_balance),
     ];
   }
 
-  List<Widget> _buildSecureNoteFields(SecureNoteEntry entry) {
+  List<Widget> _buildSecureNoteFields(VaultEntry entry) {
     return [
-      if (entry.content != null && entry.content!.isNotEmpty)
-        _buildField('内容', entry.content!, Icons.note),
+      if (entry.noteContentEncrypted != null && entry.noteContentEncrypted!.isNotEmpty)
+        _buildField('内容', entry.noteContentEncrypted!, Icons.note),
     ];
   }
 
-  List<Widget> _buildIdentityFields(IdentityEntry entry) {
+  List<Widget> _buildIdentityFields(VaultEntry entry) {
     return [
       if (entry.firstName != null || entry.lastName != null)
         _buildField('姓名', '${entry.firstName ?? ''} ${entry.lastName ?? ''}', Icons.person),
-      if (entry.idNumber != null && entry.idNumber!.isNotEmpty)
-        _buildPasswordField('证件号', entry.idNumber!, Icons.badge),
-      if (entry.phone != null && entry.phone!.isNotEmpty)
-        _buildField('电话', entry.phone!, Icons.phone),
-      if (entry.email != null && entry.email!.isNotEmpty)
-        _buildField('邮箱', entry.email!, Icons.email),
-      if (entry.address != null && entry.address!.isNotEmpty)
-        _buildField('地址', entry.address!, Icons.location_on),
+      if (entry.idNumberEncrypted != null && entry.idNumberEncrypted!.isNotEmpty)
+        _buildIdNumberField('证件号', entry.idNumberEncrypted!, Icons.badge),
+      if (entry.phoneEncrypted != null && entry.phoneEncrypted!.isNotEmpty)
+        _buildField('电话', entry.phoneEncrypted!, Icons.phone),
+      if (entry.emailEncrypted != null && entry.emailEncrypted!.isNotEmpty)
+        _buildField('邮箱', entry.emailEncrypted!, Icons.email),
+      if (entry.addressEncrypted != null && entry.addressEncrypted!.isNotEmpty)
+        _buildField('地址', entry.addressEncrypted!, Icons.location_on),
     ];
   }
 
@@ -235,19 +244,18 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       child: ListTile(
         leading: Icon(icon),
         title: Text(label),
-        subtitle: Text(label == '验证码' ? value : '••••••••'),
+        subtitle: Text(_showPassword ? value : '••••••••'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (label != '验证码')
-              IconButton(
-                icon: const Icon(Icons.copy),
-                onPressed: () => _copyToClipboard(value, label),
-              ),
             IconButton(
-              icon: const Icon(Icons.visibility),
+              icon: const Icon(Icons.copy),
+              onPressed: () => _copyToClipboard(value, label),
+            ),
+            IconButton(
+              icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
               onPressed: () {
-                setState(() {});
+                setState(() => _showPassword = !_showPassword);
               },
             ),
           ],
@@ -270,6 +278,32 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
               icon: Icon(_showCvv ? Icons.visibility_off : Icons.visibility),
               onPressed: () {
                 setState(() => _showCvv = !_showCvv);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy),
+              onPressed: () => _copyToClipboard(value, label),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIdNumberField(String label, String value, IconData icon) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        subtitle: Text(_showIdNumber ? value : '••••••••••••'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(_showIdNumber ? Icons.visibility_off : Icons.visibility),
+              onPressed: () {
+                setState(() => _showIdNumber = !_showIdNumber);
               },
             ),
             IconButton(
