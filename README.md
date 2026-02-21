@@ -55,9 +55,8 @@
 
 1. 访问 [Releases 页面](https://github.com/morning-start/vaultly/releases)
 2. 根据设备架构下载对应 APK：
-   - **arm64** - 现代 Android 设备（推荐）
-   - **arm** - 旧 Android 设备
-   - **x86_64** - Android 模拟器
+   - **v8** (ARM64) - 现代 Android 设备（推荐）
+   - **v7** (ARMv7) - 旧 Android 设备
 3. 在设备上安装 APK
 
 > **提示**: 首次安装可能需要在设置中允许"未知来源"应用安装
