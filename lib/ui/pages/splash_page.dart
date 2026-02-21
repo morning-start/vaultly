@@ -19,10 +19,10 @@ class SplashPage extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.lock_outline,
-              size: 80,
-              color: Theme.of(context).colorScheme.primary,
+            Image.asset(
+              'assets/logo.png',
+              width: 80,
+              height: 80,
             ),
             const SizedBox(height: 24),
             Text(
