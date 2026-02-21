@@ -10,6 +10,12 @@
 ### 新增
 - 计划中的功能...
 
+## [2.1.0] - 2025-02-21
+
+### 改进
+- 优化项目文档结构
+- 完善版本发布流程
+
 ## [2.0.0] - 2025-02-21
 
 ### 移除
@@ -108,7 +114,8 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v2.0.0...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/morning-start/vaultly/releases/tag/v2.1.0
 [2.0.0]: https://github.com/morning-start/vaultly/releases/tag/v2.0.0
 [1.5.0]: https://github.com/morning-start/vaultly/releases/tag/v1.5.0
 [1.0.0]: https://github.com/morning-start/vaultly/releases/tag/v1.0.0
