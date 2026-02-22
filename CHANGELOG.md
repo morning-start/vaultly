@@ -16,6 +16,50 @@
 - 更新项目文档
 - 优化版本发布流程
 
+## [2.4.0] - 2025-02-22
+
+### 新增
+- **WebDAV 可选加密配置**
+  - 支持可选的端到端加密和压缩配置
+  - 在 WebDAV 设置页面添加加密和压缩开关
+  - 添加加密和压缩配置选项到 SyncConfig 模型
+
+### 改进
+- 更新 WebDAV 文档，添加可选加密配置说明
+
+## [2.3.0] - 2025-02-22
+
+### 新增
+- **WebDAV 端到端加密**
+  - 实现 WebDAV 同步数据端到端加密（AES-256-GCM + GZIP）
+  - 更新 WebDAV 页面支持端到端加密传输
+
+### 改进
+- 更新 WebDAV 相关文档，添加端到端加密说明
+
+## [2.2.0] - 2025-02-22
+
+### 新增
+- **同步模块数据模型**
+  - 添加 SyncConfig、SyncState、SyncResult 等同步模型
+  - 重构 WebDAV 服务，使用 sync_models 数据模型
+
+### 改进
+- **VaultService 增强**
+  - 增强搜索功能和标签管理
+  - 将 VaultService 改为单例模式
+- **UI 更新**
+  - 更新 UI 页面适配新的同步模型和服务
+
+### 文档
+- 更新 Wiki 文档
+  - 架构设计文档
+  - 模块设计文档（TOTP、同步模块）
+  - API 接口文档
+  - 开发计划文档
+  - 功能文档和需求文档
+  - 认证模块设计文档
+
 ## [2.1.2] - 2025-02-22
 
 ### 改进
@@ -135,7 +179,13 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v2.1.0...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/morning-start/vaultly/releases/tag/v2.4.1
+[2.4.0]: https://github.com/morning-start/vaultly/releases/tag/v2.4.0
+[2.3.0]: https://github.com/morning-start/vaultly/releases/tag/v2.3.0
+[2.2.0]: https://github.com/morning-start/vaultly/releases/tag/v2.2.0
+[2.1.2]: https://github.com/morning-start/vaultly/releases/tag/v2.1.2
+[2.1.1]: https://github.com/morning-start/vaultly/releases/tag/v2.1.1
 [2.1.0]: https://github.com/morning-start/vaultly/releases/tag/v2.1.0
 [2.0.0]: https://github.com/morning-start/vaultly/releases/tag/v2.0.0
 [1.5.0]: https://github.com/morning-start/vaultly/releases/tag/v1.5.0
