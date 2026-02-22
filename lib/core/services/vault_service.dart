@@ -7,17 +7,38 @@ import '../models/vault_entry.dart';
 /// 保险库服务
 ///
 /// 负责加密存储和管理保险库条目
+/// 使用单例模式确保全局只有一个实例
 class VaultService {
   static const _keyVaultData = 'vault_data';
+
+  static VaultService? _instance;
 
   final FlutterSecureStorage _secureStorage;
   Uint8List? _encryptionKey;
 
   List<VaultEntry> _entries = [];
 
-  VaultService({
+  /// 获取单例实例
+  static VaultService get instance {
+    _instance ??= VaultService._internal();
+    return _instance!;
+  }
+
+  /// 私有构造函数
+  VaultService._internal({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+  /// 工厂构造函数 - 返回单例实例
+  factory VaultService({FlutterSecureStorage? secureStorage}) {
+    _instance ??= VaultService._internal(secureStorage: secureStorage);
+    return _instance!;
+  }
+
+  /// 重置单例（主要用于测试）
+  static void reset() {
+    _instance = null;
+  }
 
   List<VaultEntry> get entries => List.unmodifiable(_entries);
 

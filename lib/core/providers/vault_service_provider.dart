@@ -3,8 +3,10 @@ import '../services/vault_service.dart';
 import '../models/vault_entry.dart';
 
 /// Vault 服务提供者 - 单例模式
+///
+/// 使用 VaultService.instance 确保全局只有一个实例
 final vaultServiceProvider = Provider<VaultService>((ref) {
-  return VaultService();
+  return VaultService.instance;
 });
 
 /// Vault 数据变更通知器
