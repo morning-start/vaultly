@@ -44,7 +44,12 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       return;
     }
 
-    syncNotifier.startSync('正在上传...');
+    // 获取同步配置
+    final config = await webDAVService.getConfig();
+    final enableEncryption = config?.enableEncryption ?? true;
+    final enableCompression = config?.enableCompression ?? true;
+
+    syncNotifier.startSync(enableEncryption ? '正在加密上传...' : '正在上传...');
 
     try {
       final vaultService = ref.read(vaultServiceProvider);
@@ -60,6 +65,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       await webDAVService.upload(
         vaultData: vaultData,
         encryptionKey: encryptionKey,
+        enableEncryption: enableEncryption,
+        enableCompression: enableCompression,
       );
 
       if (!mounted) return;
@@ -128,11 +135,18 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       return;
     }
 
-    syncNotifier.startSync('正在下载...');
+    // 获取同步配置
+    final config = await webDAVService.getConfig();
+    final enableEncryption = config?.enableEncryption ?? true;
+    final enableCompression = config?.enableCompression ?? true;
+
+    syncNotifier.startSync(enableEncryption ? '正在下载解密...' : '正在下载...');
 
     try {
       final data = await webDAVService.download(
         encryptionKey: encryptionKey,
+        enableEncryption: enableEncryption,
+        enableCompression: enableCompression,
       );
 
       if (data == null) {
@@ -377,7 +391,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
                     const Text(
                       '• 上传：将本地数据备份到 WebDAV 服务器\n'
                       '• 下载：从 WebDAV 服务器恢复数据到本地\n'
-                      '• 数据在传输和存储过程中保持加密状态',
+                      '• 加密设置可在配置页面调整',
                       style: TextStyle(fontSize: 13),
                     ),
                   ],

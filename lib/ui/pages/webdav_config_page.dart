@@ -21,6 +21,9 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _enableEncryption = true;
+  bool _enableCompression = true;
+  SyncMode _syncMode = SyncMode.manual;
 
   @override
   void initState() {
@@ -39,6 +42,9 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
         _urlController.text = config.serverUrl;
         _usernameController.text = config.username;
         _passwordController.text = config.password ?? '';
+        _enableEncryption = config.enableEncryption;
+        _enableCompression = config.enableCompression;
+        _syncMode = config.syncMode;
       });
     }
 
@@ -57,6 +63,9 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
       serverUrl: _urlController.text.trim(),
       username: _usernameController.text.trim(),
       password: _passwordController.text,
+      enableEncryption: _enableEncryption,
+      enableCompression: _enableCompression,
+      syncMode: _syncMode,
     );
 
     final webDAVService = ref.read(webDAVServiceProvider);
@@ -274,6 +283,95 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                     ),
                     const SizedBox(height: 24),
 
+                    // 同步设置
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '同步设置',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 16),
+                            // 同步模式
+                            InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: '同步模式',
+                                prefixIcon: Icon(Icons.sync),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<SyncMode>(
+                                  value: _syncMode,
+                                  isExpanded: true,
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: SyncMode.manual,
+                                      child: Text('手动同步'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: SyncMode.uploadOnly,
+                                      child: Text('仅上传（备份模式）'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: SyncMode.downloadOnly,
+                                      child: Text('仅下载（恢复模式）'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: SyncMode.auto,
+                                      child: Text('自动双向同步'),
+                                    ),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _syncMode = value);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // 加密开关
+                            SwitchListTile(
+                              title: const Text('启用端到端加密'),
+                              subtitle: const Text(
+                                '数据在传输前加密，服务器仅存储密文',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              value: _enableEncryption,
+                              onChanged: (value) {
+                                setState(() => _enableEncryption = value);
+                              },
+                              secondary: Icon(
+                                _enableEncryption
+                                    ? Icons.lock
+                                    : Icons.lock_open,
+                                color: _enableEncryption
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // 压缩开关
+                            SwitchListTile(
+                              title: const Text('启用 GZIP 压缩'),
+                              subtitle: const Text(
+                                '减少传输数据量，加快同步速度',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              value: _enableCompression,
+                              onChanged: (value) {
+                                setState(() => _enableCompression = value);
+                              },
+                              secondary: const Icon(Icons.compress),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
                     // 操作按钮
                     Row(
                       children: [
@@ -321,11 +419,15 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            const Text(
-                              '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
-                              '2. 数据将以加密形式存储在服务器上\n'
-                              '3. 建议在保险库页面手动触发同步',
-                              style: TextStyle(fontSize: 13),
+                            Text(
+                              _enableEncryption
+                                  ? '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
+                                    '2. 数据将以加密形式存储在服务器上（推荐）\n'
+                                    '3. 加密使用 AES-256-GCM，密钥由主密码派生'
+                                  : '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
+                                    '2. ⚠️ 数据将以明文形式存储在服务器上（不推荐）\n'
+                                    '3. 建议仅在可信的私有服务器上关闭加密',
+                              style: const TextStyle(fontSize: 13),
                             ),
                           ],
                         ),
