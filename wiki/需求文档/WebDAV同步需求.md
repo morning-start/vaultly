@@ -1,9 +1,9 @@
 # WebDAV 同步需求文档
 
-> **版本**: v1.1.0  
-> **更新日期**: 2026-02-20  
+> **版本**: v1.2.0  
+> **更新日期**: 2026-02-22  
 > **作者**: Vaultly Team  
-> **文档类型**: 需求文档（渐进式文档体系）
+> **文档类型**: 需求文档
 
 ---
 
@@ -13,6 +13,7 @@
 |------|------|----------|------|
 | v1.0.0 | 2026-02-20 | 初始版本 | Vaultly Team |
 | v1.1.0 | 2026-02-20 | 补充代码实现映射、完善数据流动细节 | Vaultly Team |
+| v1.2.0 | 2026-02-22 | 统一 SyncStatus 枚举和状态定义 | Vaultly Team |
 
 ---
 
@@ -51,11 +52,16 @@ enum SyncMode {
 }
 
 enum SyncStatus {
-  success,
-  failure,
-  conflict,
-  inProgress,
-  neverSynced,
+  idle,           // 空闲
+  checking,       // 检查中
+  downloading,    // 下载中
+  uploading,      // 上传中
+  merging,        // 合并中
+  conflicted,     // 冲突中
+  resolving,      // 解决中
+  success,        // 同步成功
+  failure,        // 同步失败
+  neverSynced,    // 从未同步
 }
 ```
 
@@ -311,6 +317,7 @@ stateDiagram-v2
 | 连接失败 | 连接错误 | 重试、修改配置 |
 | 空闲 | 等待同步 | 手动同步 |
 | 检查中 | 检查版本差异 | - |
+| 无需同步 | 版本一致 | - |
 | 下载中 | 正在下载 | 取消 |
 | 上传中 | 正在上传 | 取消 |
 | 合并中 | 合并数据 | - |
@@ -329,7 +336,8 @@ stateDiagram-v2
 | 连接成功 | START_SYNC | 检查中 | 检查版本 |
 | 检查中 | NEED_DOWNLOAD | 下载中 | 开始下载 |
 | 检查中 | NEED_UPLOAD | 上传中 | 开始上传 |
-| 检查中 | NO_CHANGES | 空闲 | - |
+| 检查中 | NO_CHANGES | 无需同步 | - |
+| 无需同步 | COMPLETE | 空闲 | 更新状态 |
 | 检查中 | CONFLICT_DETECTED | 冲突中 | 记录冲突 |
 | 下载中 | DOWNLOAD_COMPLETE | 合并中 | 合并数据 |
 | 合并中 | MERGE_COMPLETE | 空闲 | 更新本地 |
@@ -645,11 +653,11 @@ class WebDAVNotifier extends _$WebDAVNotifier {
 
 ### 8.1 渐进式文档链
 - [WebDAV 同步功能文档](../功能文档/WebDAV同步功能.md) - 功能需求、用户场景
-- [WebDAV 同步架构文档](../架构文档/WebDAV同步架构.md) - 技术选型、实现方案
+- [同步架构](../02-架构设计/同步架构.md) - 技术选型、实现方案
 
 ### 8.2 状态机与数据流
 - [同步状态机](../状态机/同步状态机.md) - 状态转换设计
-- [同步数据流](../数据流动/WebDAV同步数据流.md) - 数据流动设计
+- [用户登录数据流](../数据流动/用户登录数据流.md) - 数据流动设计参考
 
 ### 8.3 模块设计
 - [同步模块](../03-模块设计/同步模块.md) - 详细模块设计
