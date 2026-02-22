@@ -1,6 +1,6 @@
 # WebDAV 同步需求文档
 
-> **版本**: v1.2.0  
+> **版本**: v1.4.0  
 > **更新日期**: 2026-02-22  
 > **作者**: Vaultly Team  
 > **文档类型**: 需求文档
@@ -15,6 +15,7 @@
 | v1.1.0 | 2026-02-20 | 补充代码实现映射、完善数据流动细节 | Vaultly Team |
 | v1.2.0 | 2026-02-22 | 统一 SyncStatus 枚举和状态定义 | Vaultly Team |
 | v1.3.0 | 2026-02-22 | 新增加密和压缩流程：数据必须经过主密码加密，支持 GZIP 压缩 | Vaultly Team |
+| v1.4.0 | 2026-02-22 | 新增加密/压缩开关选项：用户可选择是否加密，默认加密 | Vaultly Team |
 
 ---
 
@@ -38,6 +39,10 @@ class SyncConfig {
   final Duration autoSyncInterval;    // 自动同步间隔
   final bool syncOnChange;            // 变更时同步
   final bool syncOnStartup;           // 启动时同步
+  
+  // 安全设置（新增）
+  final bool enableEncryption;         // 是否启用加密（默认 true）
+  final bool enableCompression;       // 是否启用压缩（默认 true）
   
   // 状态
   final bool isEnabled;               // 是否启用
