@@ -137,13 +137,6 @@ class _VaultPageState extends ConsumerState<VaultPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // 聚焦到搜索框
-              FocusScope.of(context).requestFocus(FocusNode());
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.lock),
             onPressed: () {
               ref.read(authNotifierProvider.notifier).lock();
