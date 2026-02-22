@@ -1,15 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webdav_client/webdav_client.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
+import '../models/sync_models.dart';
 
 /// WebDAV 同步服务
 ///
 /// 参考文档: wiki/03-模块设计/同步模块.md
 /// 负责与 WebDAV 服务器通信，实现数据同步
-/// // 性能优化:
+///
+/// 性能优化:
 /// - 使用内存缓存减少 SecureStorage 读取
 /// - 异步初始化避免阻塞 UI
 /// - 批量操作减少 IO 次数
@@ -18,14 +22,19 @@ class WebDAVService {
   static const _keyWebDavUsername = 'webdav_username';
   static const _keyWebDavPassword = 'webdav_password';
   static const _keyLastSyncTime = 'webdav_last_sync';
+  static const _keySyncHistory = 'webdav_sync_history';
   static const _vaultFolderName = 'vaultly';
   static const _vaultFileName = 'vaultly_backup.json';
 
   final FlutterSecureStorage _secureStorage;
   Client? _client;
-  
-  // 内存缓存，避免重复读取 SecureStorage
-  WebDAVConfig? _cachedConfig;
+
+  // 状态流控制器
+  final _syncStateController = StreamController<SyncState>.broadcast();
+  SyncState _currentState = SyncState();
+
+  // 内存缓存
+  SyncConfig? _cachedConfig;
   bool? _cachedIsConfigured;
   DateTime? _configCacheTime;
   static const _cacheValidityDuration = Duration(seconds: 30);
@@ -33,6 +42,15 @@ class WebDAVService {
   WebDAVService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+  /// 状态流
+  Stream<SyncState> get syncStateStream => _syncStateController.stream;
+
+  /// 当前状态
+  SyncState get currentState => _currentState;
+
+  /// 是否正在同步
+  bool get isSyncing => _currentState.isSyncing;
 
   /// 检查缓存是否有效
   bool get _isCacheValid {
@@ -47,11 +65,14 @@ class WebDAVService {
     _configCacheTime = null;
   }
 
+  /// 更新同步状态
+  void _updateState(SyncState newState) {
+    _currentState = newState;
+    _syncStateController.add(newState);
+  }
+
   /// 检查是否已配置 WebDAV
-  /// 
-  /// 优先使用内存缓存，避免重复读取 SecureStorage
   Future<bool> isConfigured() async {
-    // 使用缓存结果
     if (_cachedIsConfigured != null && _isCacheValid) {
       return _cachedIsConfigured!;
     }
@@ -59,31 +80,25 @@ class WebDAVService {
     final url = await _secureStorage.read(key: _keyWebDavUrl);
     final username = await _secureStorage.read(key: _keyWebDavUsername);
     final password = await _secureStorage.read(key: _keyWebDavPassword);
-    
+
     final isConfigured = url != null &&
         url.isNotEmpty &&
         username != null &&
         password != null;
-    
-    // 更新缓存
+
     _cachedIsConfigured = isConfigured;
     _configCacheTime = DateTime.now();
-    
+
     return isConfigured;
   }
 
-  /// 快速检查是否已配置（同步方法，可能返回过期的缓存结果）
-  /// 
-  /// 用于 UI 快速响应，实际状态以 isConfigured() 为准
+  /// 快速检查是否已配置（同步方法）
   bool isConfiguredSync() {
     return _cachedIsConfigured ?? false;
   }
 
-  /// 获取 WebDAV 配置
-  /// 
-  /// 优先使用内存缓存
-  Future<WebDAVConfig?> getConfig() async {
-    // 使用缓存
+  /// 获取同步配置
+  Future<SyncConfig?> getConfig() async {
     if (_cachedConfig != null && _isCacheValid) {
       return _cachedConfig;
     }
@@ -96,70 +111,62 @@ class WebDAVService {
       return null;
     }
 
-    final config = WebDAVConfig(
-      url: url,
+    final config = SyncConfig(
+      id: 'webdav_default',
+      serverUrl: url,
       username: username,
       password: password,
     );
-    
-    // 更新缓存
+
     _cachedConfig = config;
     _configCacheTime = DateTime.now();
-    
+
     return config;
   }
 
-  /// 保存 WebDAV 配置
-  Future<void> saveConfig(WebDAVConfig config) async {
-    await _secureStorage.write(key: _keyWebDavUrl, value: config.url);
-    await _secureStorage.write(
-        key: _keyWebDavUsername, value: config.username);
-    await _secureStorage.write(
-        key: _keyWebDavPassword, value: config.password);
+  /// 保存同步配置
+  Future<void> saveConfig(SyncConfig config) async {
+    await _secureStorage.write(key: _keyWebDavUrl, value: config.serverUrl);
+      await _secureStorage.write(key: _keyWebDavUsername, value: config.username);
+      await _secureStorage.write(key: _keyWebDavPassword, value: config.password ?? '');
 
-    // 更新缓存
     _cachedConfig = config;
     _cachedIsConfigured = true;
     _configCacheTime = DateTime.now();
 
-    // 重新初始化客户端
     _initClient(config);
   }
 
-  /// 清除 WebDAV 配置
+  /// 清除配置
   Future<void> clearConfig() async {
     await _secureStorage.delete(key: _keyWebDavUrl);
     await _secureStorage.delete(key: _keyWebDavUsername);
     await _secureStorage.delete(key: _keyWebDavPassword);
     await _secureStorage.delete(key: _keyLastSyncTime);
     _client = null;
-    
-    // 清除缓存
     clearCache();
   }
 
   /// 初始化 WebDAV 客户端
-  void _initClient(WebDAVConfig config) {
+  void _initClient(SyncConfig config) {
     _client = newClient(
-      config.url,
+      config.serverUrl,
       user: config.username,
-      password: config.password,
+      password: config.password ?? '',
     );
   }
 
-  /// 确保 vaultly 文件夹存在，不存在则自动创建
+  /// 确保 vaultly 文件夹存在
   Future<void> _ensureVaultFolder() async {
     if (_client == null) {
       throw WebDAVException('WebDAV 客户端未初始化');
     }
 
     try {
-      // 检查 vaultly 文件夹是否存在
       final files = await _client!.readDir('/');
       final folderExists = files.any((f) => f.name == _vaultFolderName && f.isDir == true);
 
       if (!folderExists) {
-        // 创建 vaultly 文件夹
         await _client!.mkdir('/$_vaultFolderName');
         debugPrint('WebDAV: 已创建 vaultly 文件夹');
       }
@@ -170,24 +177,138 @@ class WebDAVService {
   }
 
   /// 测试连接
-  Future<bool> testConnection(WebDAVConfig config) async {
+  Future<ConnectionResult> testConnection(SyncConfig config) async {
     try {
       final client = newClient(
-        config.url,
+        config.serverUrl,
         user: config.username,
-        password: config.password,
+        password: config.password ?? '',
       );
 
-      // 尝试 ping 服务器来测试连接
       await client.ping();
-      return true;
+      return ConnectionResult.success();
     } catch (e) {
       debugPrint('WebDAV connection test failed: $e');
-      return false;
+      return ConnectionResult.failure('连接失败: $e');
     }
   }
 
-  /// 上传保险库数据到 WebDAV
+  /// 统一同步方法
+  Future<SyncResult> sync({
+    required Map<String, dynamic> localVaultData,
+    Function(double progress)? onProgress,
+  }) async {
+    final config = await getConfig();
+    if (config == null) {
+      return SyncResult.failure('同步未配置');
+    }
+
+    _updateState(SyncState(
+      status: SyncStatus.syncing,
+      message: '正在同步...',
+      startTime: DateTime.now(),
+    ));
+
+    try {
+      SyncResult result;
+
+      switch (config.syncMode) {
+        case SyncMode.uploadOnly:
+          result = await syncUpload(
+            vaultData: localVaultData,
+            onProgress: onProgress,
+          );
+          break;
+        case SyncMode.downloadOnly:
+          result = await syncDownload(onProgress: onProgress);
+          break;
+        case SyncMode.auto:
+        case SyncMode.manual:
+          result = await _twoWaySync(
+            localVaultData: localVaultData,
+            onProgress: onProgress,
+          );
+          break;
+      }
+
+      // 保存同步历史
+      await _saveSyncHistory(result);
+
+      // 更新状态
+      _updateState(SyncState(
+        status: result.success ? SyncStatus.success : SyncStatus.failed,
+        message: result.success ? '同步成功' : result.errorMessage,
+        endTime: DateTime.now(),
+        added: result.added,
+        updated: result.updated,
+        deleted: result.deleted,
+        conflicts: result.conflicts,
+      ));
+
+      return result;
+    } catch (e) {
+      final errorResult = SyncResult.failure('同步失败: $e');
+      _updateState(SyncState(
+        status: SyncStatus.failed,
+        message: '同步失败: $e',
+        endTime: DateTime.now(),
+      ));
+      return errorResult;
+    }
+  }
+
+  /// 双向同步
+  Future<SyncResult> _twoWaySync({
+    required Map<String, dynamic> localVaultData,
+    Function(double progress)? onProgress,
+  }) async {
+    // TODO: 实现完整的双向同步逻辑
+    // 暂时先上传
+    return await syncUpload(
+      vaultData: localVaultData,
+      onProgress: onProgress,
+    );
+  }
+
+  /// 上传同步
+  Future<SyncResult> syncUpload({
+    required Map<String, dynamic> vaultData,
+    Function(double progress)? onProgress,
+  }) async {
+    try {
+      final success = await upload(
+        vaultData: vaultData,
+        onProgress: onProgress,
+      );
+
+      if (success) {
+        return SyncResult.success(updated: 1);
+      } else {
+        return SyncResult.failure('上传失败');
+      }
+    } catch (e) {
+      return SyncResult.failure('上传失败: $e');
+    }
+  }
+
+  /// 下载同步
+  Future<SyncResult> syncDownload({
+    Function(double progress)? onProgress,
+  }) async {
+    try {
+      final data = await download(onProgress: onProgress);
+
+      if (data != null) {
+        return SyncResult.success(updated: 1);
+      } else {
+        return SyncResult.failure('下载失败：无数据');
+      }
+    } catch (e) {
+      return SyncResult.failure('下载失败: $e');
+    }
+  }
+
+  /// 上传保险库数据
   Future<bool> upload({
     required Map<String, dynamic> vaultData,
     Function(double progress)? onProgress,
@@ -202,19 +323,15 @@ class WebDAVService {
         _initClient(config);
       }
 
-      // 确保 vaultly 文件夹存在
       await _ensureVaultFolder();
 
-      // 将数据转换为 JSON
       final jsonData = jsonEncode(vaultData);
       final bytes = utf8.encode(jsonData);
 
-      // 创建临时文件
       final tempDir = await getTemporaryDirectory();
       final tempFile = io.File('${tempDir.path}/$_vaultFileName');
       await tempFile.writeAsBytes(bytes);
 
-      // 上传到 WebDAV 的 vaultly 文件夹
       await _client!.writeFromFile(
         tempFile.path,
         '/$_vaultFolderName/$_vaultFileName',
@@ -223,13 +340,11 @@ class WebDAVService {
             : null,
       );
 
-      // 更新最后同步时间
       await _secureStorage.write(
         key: _keyLastSyncTime,
         value: DateTime.now().toIso8601String(),
       );
 
-      // 删除临时文件
       await tempFile.delete();
 
       return true;
@@ -239,7 +354,7 @@ class WebDAVService {
     }
   }
 
-  /// 从 WebDAV 下载保险库数据
+  /// 下载保险库数据
   Future<Map<String, dynamic>?> download({
     Function(double progress)? onProgress,
   }) async {
@@ -253,17 +368,14 @@ class WebDAVService {
         _initClient(config);
       }
 
-      // 确保 vaultly 文件夹存在
       await _ensureVaultFolder();
 
-      // 检查文件是否存在
       final files = await _client!.readDir('/$_vaultFolderName');
       final hasBackup = files.any((f) => f.name == _vaultFileName);
       if (!hasBackup) {
         throw WebDAVException('备份文件不存在');
       }
 
-      // 下载到临时文件
       final tempDir = await getTemporaryDirectory();
       final tempFile = io.File('${tempDir.path}/$_vaultFileName');
 
@@ -275,14 +387,11 @@ class WebDAVService {
             : null,
       );
 
-      // 读取并解析数据
       final jsonData = await tempFile.readAsString();
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
 
-      // 删除临时文件
       await tempFile.delete();
 
-      // 更新最后同步时间
       await _secureStorage.write(
         key: _keyLastSyncTime,
         value: DateTime.now().toIso8601String(),
@@ -303,8 +412,6 @@ class WebDAVService {
   }
 
   /// 检查远程备份是否存在
-  /// 
-  /// 注意: 这是一个网络操作，可能耗时较长
   Future<bool> checkRemoteBackup() async {
     try {
       final config = await getConfig();
@@ -314,44 +421,87 @@ class WebDAVService {
         _initClient(config);
       }
 
-      // 检查 vaultly 文件夹是否存在
       final rootFiles = await _client!.readDir('/');
       final folderExists = rootFiles.any((f) => f.name == _vaultFolderName && f.isDir == true);
       if (!folderExists) {
         return false;
       }
 
-      // 检查 vaultly 文件夹内是否有备份文件
       final files = await _client!.readDir('/$_vaultFolderName');
       return files.any((f) => f.name == _vaultFileName);
     } catch (e) {
       return false;
     }
   }
-}
 
-/// WebDAV 配置
-class WebDAVConfig {
-  final String url;
-  final String username;
-  final String password;
+  /// 解决冲突
+  Future<void> resolveConflict(String entryId, ConflictResolution resolution) async {
+    // TODO: 实现冲突解决逻辑
+    debugPrint('解决冲突: $entryId -> $resolution');
+  }
 
-  WebDAVConfig({
-    required this.url,
-    required this.username,
-    required this.password,
-  });
+  /// 批量解决冲突
+  Future<void> resolveAllConflicts(Map<String, ConflictResolution> resolutions) async {
+    for (final entry in resolutions.entries) {
+      await resolveConflict(entry.key, entry.value);
+    }
+  }
 
-  WebDAVConfig copyWith({
-    String? url,
-    String? username,
-    String? password,
-  }) {
-    return WebDAVConfig(
-      url: url ?? this.url,
-      username: username ?? this.username,
-      password: password ?? this.password,
-    );
+  /// 获取同步历史
+  Future<List<SyncHistory>> getSyncHistory({int limit = 50}) async {
+    try {
+      final historyJson = await _secureStorage.read(key: _keySyncHistory);
+      if (historyJson == null) return [];
+
+      final List<dynamic> historyList = jsonDecode(historyJson);
+      final histories = historyList
+          .map((e) => SyncHistory.fromJson(e as Map<String, dynamic>))
+          .toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      return histories.take(limit).toList();
+    } catch (e) {
+      debugPrint('获取同步历史失败: $e');
+      return [];
+    }
+  }
+
+  /// 清除同步历史
+  Future<void> clearSyncHistory() async {
+    await _secureStorage.delete(key: _keySyncHistory);
+  }
+
+  /// 保存同步历史
+  Future<void> _saveSyncHistory(SyncResult result) async {
+    try {
+      final history = await getSyncHistory(limit: 100);
+      final newEntry = SyncHistory(
+        id: const Uuid().v4(),
+        timestamp: DateTime.now(),
+        success: result.success,
+        added: result.added,
+        updated: result.updated,
+        deleted: result.deleted,
+        conflicts: result.conflicts.length,
+        errorMessage: result.errorMessage,
+      );
+
+      history.insert(0, newEntry);
+
+      // 只保留最近100条
+      final limitedHistory = history.take(100).toList();
+      await _secureStorage.write(
+        key: _keySyncHistory,
+        value: jsonEncode(limitedHistory.map((e) => e.toJson()).toList()),
+      );
+    } catch (e) {
+      debugPrint('保存同步历史失败: $e');
+    }
+  }
+
+  /// 释放资源
+  void dispose() {
+    _syncStateController.close();
   }
 }
 
