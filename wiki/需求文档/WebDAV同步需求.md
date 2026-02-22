@@ -14,6 +14,7 @@
 | v1.0.0 | 2026-02-20 | 初始版本 | Vaultly Team |
 | v1.1.0 | 2026-02-20 | 补充代码实现映射、完善数据流动细节 | Vaultly Team |
 | v1.2.0 | 2026-02-22 | 统一 SyncStatus 枚举和状态定义 | Vaultly Team |
+| v1.3.0 | 2026-02-22 | 新增加密和压缩流程：数据必须经过主密码加密，支持 GZIP 压缩 | Vaultly Team |
 
 ---
 
@@ -171,7 +172,9 @@ sequenceDiagram
     end
 ```
 
-### 2.2 执行同步数据流
+### 2.2 执行同步数据流（加密 + 压缩）
+
+#### 2.2.1 上传数据流（加密 + 压缩）
 
 ```mermaid
 sequenceDiagram
@@ -179,56 +182,126 @@ sequenceDiagram
     participant SyncService as 同步服务
     participant CryptoService as 加密服务
     participant WebDAVClient as WebDAV 客户端
-    participant Isar as 本地数据库
+    participant Local as 本地存储
     participant Remote as WebDAV 服务器
 
-    User->>SyncService: sync()
-    SyncService->>SyncService: 设置状态为 syncing
+    User->>SyncService: syncUpload(vaultData, encryptionKey)
+    SyncService->>SyncService: 设置状态为 uploading
     
-    SyncService->>WebDAVClient: getRemoteVaultInfo()
-    WebDAVClient->>Remote: PROPFIND /vaultly/vault.enc
-    Remote-->>WebDAVClient: 远程文件信息
-    WebDAVClient-->>SyncService: RemoteVault
+    Note over SyncService: Step 1: 序列化数据
+    SyncService->>Local: getAllEntries()
+    Local-->>SyncService: localData (JSON)
     
-    SyncService->>Isar: getLocalVaultInfo()
-    Isar-->>SyncService: LocalVault
+    Note over SyncService: Step 2: AES-256-GCM 加密
+    SyncService->>CryptoService: encrypt(jsonData, encryptionKey)
+    CryptoService->>CryptoService: generateIV()
+    CryptoService->>CryptoService: AES-256-GCM 加密
+    CryptoService-->>SyncService: encryptedData (cipherText + iv + authTag)
     
-    SyncService->>SyncService: compareVersions()
-    
-    alt 无需同步
-        SyncService-->>User: 同步完成（无需更新）
-    else 需要下载
-        SyncService->>WebDAVClient: downloadVault()
-        WebDAVClient->>Remote: GET /vaultly/vault.enc
-        Remote-->>WebDAVClient: 加密数据
-        WebDAVClient-->>SyncService: encryptedData
-        
-        SyncService->>CryptoService: decrypt(encryptedData, vaultKey)
-        CryptoService-->>SyncService: vaultData
-        
-        SyncService->>SyncService: mergeWithLocal()
-        SyncService->>Isar: updateLocalVault()
-    else 需要上传
-        SyncService->>Isar: getLocalVault()
-        Isar-->>SyncService: localData
-        
-        SyncService->>CryptoService: encrypt(localData, vaultKey)
-        CryptoService-->>SyncService: encryptedData
-        
-        SyncService->>WebDAVClient: uploadVault(encryptedData)
-        WebDAVClient->>Remote: PUT /vaultly/vault.enc
-        Remote-->>WebDAVClient: 成功响应
-    else 冲突
-        SyncService->>SyncService: detectConflicts()
-        SyncService-->>User: 显示冲突列表
-        
-        User->>SyncService: resolveConflicts(resolutions)
-        SyncService->>SyncService: applyResolutions()
-        SyncService->>SyncService: 重新同步
+    Note over SyncService: Step 3: GZIP 压缩（可选）
+    alt 启用压缩
+        SyncService->>SyncService: gzipCompress(encryptedBytes)
+        SyncService-->>SyncService: compressedData
     end
     
-    SyncService->>SyncService: 更新同步状态
-    SyncService-->>User: 同步完成
+    Note over SyncService: Step 4: 上传到服务器
+    SyncService->>WebDAVClient: upload(compressedData)
+    WebDAVClient->>Remote: PUT /vaultly/vaultly_backup.json.gz
+    Remote-->>WebDAVClient: 201 Created
+    WebDAVClient-->>SyncService: success
+    
+    SyncService->>SyncService: 更新同步时间
+    SyncService-->>User: SyncResult.success
+```
+
+#### 2.2.2 下载数据流（解压 + 解密）
+
+```mermaid
+sequenceDiagram
+    participant User as 用户/App
+    participant SyncService as 同步服务
+    participant CryptoService as 加密服务
+    participant WebDAVClient as WebDAV 客户端
+    participant Local as 本地存储
+    participant Remote as WebDAV 服务器
+
+    User->>SyncService: syncDownload(encryptionKey)
+    SyncService->>SyncService: 设置状态为 downloading
+    
+    Note over SyncService: Step 1: 从服务器下载
+    SyncService->>WebDAVClient: download()
+    WebDAVClient->>Remote: GET /vaultly/vaultly_backup.json.gz
+    Remote-->>WebDAVClient: compressedData
+    WebDAVClient-->>SyncService: compressedData
+    
+    Note over SyncService: Step 2: GZIP 解压（可选）
+    alt 启用压缩
+        SyncService->>SyncService: gzipDecompress(compressedData)
+        SyncService-->>SyncService: encryptedBytes
+    end
+    
+    Note over SyncService: Step 3: AES-256-GCM 解密
+    SyncService->>CryptoService: decrypt(encryptedData, encryptionKey)
+    CryptoService-->>SyncService: decryptedJson
+    
+    Note over SyncService: Step 4: 反序列化
+    SyncService->>SyncService: jsonDecode(decryptedJson)
+    SyncService->>Local: updateEntries(vaultData)
+    
+    SyncService->>SyncService: 更新同步时间
+    SyncService-->>User: SyncResult.success
+```
+
+#### 2.2.3 完整双向同步数据流
+
+```mermaid
+sequenceDiagram
+    participant User as 用户/App
+    participant SyncService as 同步服务
+    participant CryptoService as 加密服务
+    participant WebDAVClient as WebDAV 客户端
+    participant Local as 本地存储
+    participant Remote as WebDAV 服务器
+
+    User->>SyncService: sync(encryptionKey)
+    SyncService->>SyncService: 设置状态为 syncing
+    
+    par 并行获取数据
+        SyncService->>Local: getLocalVault()
+        Local-->>SyncService: localData
+    and
+        SyncService->>WebDAVClient: download()
+        WebDAVClient->>Remote: GET /vaultly/vaultly_backup.json.gz
+        Remote-->>WebDAVClient: compressedData
+        WebDAVClient-->>SyncService: compressedData
+    end
+    
+    alt 启用压缩
+        SyncService->>SyncService: gzipDecompress(compressedData)
+    end
+    
+    SyncService->>CryptoService: decrypt(encryptedData, encryptionKey)
+    CryptoService-->>SyncService: remoteData
+    
+    SyncService->>SyncService: merge(localData, remoteData)
+    
+    alt 检测到冲突
+        SyncService-->>User: 显示冲突列表
+        User->>SyncService: resolveConflicts()
+    end
+    
+    SyncService->>CryptoService: encrypt(mergedData, encryptionKey)
+    CryptoService-->>SyncService: encryptedData
+    
+    alt 启用压缩
+        SyncService->>SyncService: gzipCompress(encryptedData)
+    end
+    
+    SyncService->>WebDAVClient: upload(compressedData)
+    WebDAVClient->>Remote: PUT /vaultly/vaultly_backup.json.gz
+    
+    SyncService->>Local: updateLocalVault(mergedData)
+    SyncService-->>User: SyncResult.success
 ```
 
 ### 2.3 冲突解决数据流
