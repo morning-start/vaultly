@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/vault_service_provider.dart';
 import '../../core/providers/webdav_provider.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/models/vault_entry.dart';
 
 /// WebDAV 同步页面
@@ -106,6 +107,13 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
       // 恢复数据到保险库
       final vaultService = ref.read(vaultServiceProvider);
+      final authService = ref.read(authServiceProvider);
+
+      // 确保加密密钥已设置
+      final encryptionKey = authService.encryptionKey;
+      if (encryptionKey != null) {
+        vaultService.setEncryptionKey(encryptionKey);
+      }
 
       // 清除现有数据
       final existingEntries = vaultService.getAllEntries();
@@ -127,6 +135,9 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           }
         }
       }
+
+      // 重新加载 Vault 以确保数据已正确写入存储
+      await vaultService.loadVault();
 
       if (!mounted) return;
 
