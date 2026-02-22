@@ -81,7 +81,7 @@ final vaultFavoritesProvider = FutureProvider<List<VaultEntry>>((ref) async {
 /// Vault 标签列表提供者
 /// 
 /// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
-final vaultTagsProvider = Provider<List<String>>((ref) {
+final vaultTagsProvider = FutureProvider<List<String>>((ref) async {
   // 监听变更通知器
   ref.watch(vaultChangeNotifierProvider);
   
@@ -92,12 +92,12 @@ final vaultTagsProvider = Provider<List<String>>((ref) {
 /// Vault 统计信息提供者
 /// 
 /// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
-final vaultStatsProvider = Provider<Map<String, int>>((ref) {
+final vaultStatsProvider = FutureProvider<Map<String, int>>((ref) async {
   // 监听变更通知器
   ref.watch(vaultChangeNotifierProvider);
   
   final vaultService = ref.watch(vaultServiceProvider);
-  final entries = vaultService.getAllEntries();
+  final entries = await vaultService.getAllEntries();
   
   return {
     'total': entries.length,

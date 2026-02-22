@@ -8,6 +8,8 @@ import '../models/vault_entry.dart';
 ///
 /// 负责加密存储和管理保险库条目
 /// 使用单例模式确保全局只有一个实例
+///
+/// 参考文档: wiki/03-模块设计/保险库模块.md
 class VaultService {
   static const _keyVaultData = 'vault_data';
 
@@ -253,52 +255,172 @@ class VaultService {
     await saveVault();
   }
 
-  Future<void> deleteEntry(String uuid) async {
-    _entries.removeWhere((e) => e.uuid == uuid);
+  Future<void> deleteEntry(String id) async {
+    _entries.removeWhere((e) => e.uuid == id);
     await saveVault();
   }
 
-  VaultEntry? getEntry(String uuid) {
+  Future<VaultEntry?> getEntry(String id) async {
     try {
-      return _entries.firstWhere((e) => e.uuid == uuid);
+      return _entries.firstWhere((e) => e.uuid == id);
     } catch (_) {
       return null;
     }
   }
 
-  List<VaultEntry> getAllEntries() {
+  Future<List<VaultEntry>> getAllEntries() async {
     return List.unmodifiable(_entries);
   }
 
-  List<VaultEntry> getEntriesByType(EntryType type) {
+  Future<List<VaultEntry>> getEntriesByType(EntryType type) async {
     return _entries.where((e) => e.type == type).toList();
   }
 
-  List<VaultEntry> searchEntries(String query) {
+  /// 搜索条目
+  ///
+  /// 支持多字段搜索：标题、用户名、邮箱、URL、标签
+  /// 对于加密字段，需要解密后搜索
+  Future<List<VaultEntry>> searchEntries(String query) async {
     if (query.isEmpty) return getAllEntries();
 
     final lowerQuery = query.toLowerCase();
-    return _entries.where((e) {
-      if (e.title.toLowerCase().contains(lowerQuery)) return true;
-      if (e.tags.any((t) => t.toLowerCase().contains(lowerQuery))) return true;
-      return false;
-    }).toList();
+    final results = <VaultEntry>[];
+
+    for (final entry in _entries) {
+      // 1. 搜索标题（非加密字段）
+      if (entry.title.toLowerCase().contains(lowerQuery)) {
+        results.add(entry);
+        continue;
+      }
+
+      // 2. 搜索标签（非加密字段）
+      if (entry.tags.any((t) => t.toLowerCase().contains(lowerQuery))) {
+        results.add(entry);
+        continue;
+      }
+
+      // 3. 搜索登录凭证字段（加密字段需解密）
+      if (entry is LoginEntry) {
+        if (await _searchLoginEntry(entry, lowerQuery)) {
+          results.add(entry);
+          continue;
+        }
+      }
+
+      // 4. 搜索银行卡字段（加密字段需解密）
+      if (entry is BankCardEntry) {
+        if (await _searchBankCardEntry(entry, lowerQuery)) {
+          results.add(entry);
+          continue;
+        }
+      }
+
+      // 5. 搜索安全笔记字段（加密字段需解密）
+      if (entry is SecureNoteEntry) {
+        if (await _searchSecureNoteEntry(entry, lowerQuery)) {
+          results.add(entry);
+          continue;
+        }
+      }
+
+      // 6. 搜索身份信息字段（加密字段需解密）
+      if (entry is IdentityEntry) {
+        if (await _searchIdentityEntry(entry, lowerQuery)) {
+          results.add(entry);
+          continue;
+        }
+      }
+    }
+
+    return results;
   }
 
-  List<VaultEntry> getFavorites() {
+  /// 搜索登录凭证条目
+  Future<bool> _searchLoginEntry(LoginEntry entry, String lowerQuery) async {
+    // 搜索用户名（加密存储）
+    if (entry.username != null && entry.username!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    // 搜索邮箱（加密存储）
+    if (entry.email != null && entry.email!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    // 搜索 URL（非加密）
+    if (entry.url != null && entry.url!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    // 搜索备注（加密存储）
+    if (entry.notes != null && entry.notes!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// 搜索银行卡条目
+  Future<bool> _searchBankCardEntry(BankCardEntry entry, String lowerQuery) async {
+    // 搜索持卡人姓名（非加密）
+    if (entry.cardHolderName != null && entry.cardHolderName!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    // 搜索银行名称（非加密）
+    if (entry.bankName != null && entry.bankName!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// 搜索安全笔记条目
+  Future<bool> _searchSecureNoteEntry(SecureNoteEntry entry, String lowerQuery) async {
+    // 搜索内容（加密存储）
+    if (entry.content != null && entry.content!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// 搜索身份信息条目
+  Future<bool> _searchIdentityEntry(IdentityEntry entry, String lowerQuery) async {
+    // 搜索姓名（非加密）
+    if (entry.firstName != null && entry.firstName!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+    if (entry.lastName != null && entry.lastName!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    // 搜索地址（加密存储）
+    if (entry.address != null && entry.address!.toLowerCase().contains(lowerQuery)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<List<VaultEntry>> getFavorites() async {
     return _entries.where((e) => e.isFavorite).toList();
   }
 
-  Future<void> toggleFavorite(String uuid) async {
-    final index = _entries.indexWhere((e) => e.uuid == uuid);
+  Future<void> toggleFavorite(String entryId) async {
+    final index = _entries.indexWhere((e) => e.uuid == entryId);
     if (index != -1) {
       _entries[index].isFavorite = !_entries[index].isFavorite;
       await saveVault();
     }
   }
 
-  Future<void> addTag(String entryUuid, String tag) async {
-    final index = _entries.indexWhere((e) => e.uuid == entryUuid);
+  Future<List<VaultEntry>> getByTag(String tag) async {
+    return _entries.where((e) => e.tags.contains(tag)).toList();
+  }
+
+  Future<void> addTag(String entryId, String tag) async {
+    final index = _entries.indexWhere((e) => e.uuid == entryId);
     if (index != -1) {
       if (!_entries[index].tags.contains(tag)) {
         _entries[index].tags.add(tag);
@@ -307,15 +429,15 @@ class VaultService {
     }
   }
 
-  Future<void> removeTag(String entryUuid, String tag) async {
-    final index = _entries.indexWhere((e) => e.uuid == entryUuid);
+  Future<void> removeTag(String entryId, String tag) async {
+    final index = _entries.indexWhere((e) => e.uuid == entryId);
     if (index != -1) {
       _entries[index].tags.remove(tag);
       await saveVault();
     }
   }
 
-  List<String> getAllTags() {
+  Future<List<String>> getAllTags() async {
     final tags = <String>{};
     for (final entry in _entries) {
       tags.addAll(entry.tags);
