@@ -15,10 +15,10 @@ import '../models/sync_models.dart';
 /// 负责与 WebDAV 服务器通信，实现数据同步
 ///
 /// 安全设计:
-/// - 数据在传输前使用 AES-256-GCM 加密
+/// - 数据在传输前可选择 AES-256-GCM 加密（默认启用）
 /// - 加密密钥由用户主密码通过 Argon2id 派生
-/// - 支持 GZIP 压缩减少传输体积
-/// - 服务器仅存储密文，无法获取用户数据
+/// - 支持 GZIP 压缩减少传输体积（默认启用）
+/// - 服务器仅存储密文（加密模式），无法获取用户数据
 ///
 /// 性能优化:
 /// - 使用内存缓存减少 SecureStorage 读取
@@ -31,7 +31,8 @@ class WebDAVService {
   static const _keyLastSyncTime = 'webdav_last_sync';
   static const _keySyncHistory = 'webdav_sync_history';
   static const _vaultFolderName = 'vaultly';
-  static const _vaultFileName = 'vaultly_backup.enc';
+  static const _vaultFileNameEncrypted = 'vaultly_backup.enc';
+  static const _vaultFileNamePlain = 'vaultly_backup.json';
 
   final FlutterSecureStorage _secureStorage;
   Client? _client;
@@ -204,18 +205,23 @@ class WebDAVService {
   ///
   /// 流程：
   /// 1. 根据同步模式选择上传/下载/双向同步
-  /// 2. 数据加密后传输
-  /// 3. 可选 GZIP 压缩
+  /// 2. 根据配置决定是否加密
+  /// 3. 根据配置决定是否压缩
   Future<SyncResult> sync({
     required Map<String, dynamic> localVaultData,
     required Uint8List encryptionKey,
-    bool compress = true,
+    bool? enableEncryption,
+    bool? enableCompression,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
     if (config == null) {
       return SyncResult.failure('同步未配置');
     }
+
+    // 使用配置中的设置，或传入的参数
+    final encrypt = enableEncryption ?? config.enableEncryption;
+    final compress = enableCompression ?? config.enableCompression;
 
     _updateState(SyncState(
       status: SyncStatus.syncing,
@@ -231,14 +237,16 @@ class WebDAVService {
           result = await syncUpload(
             vaultData: localVaultData,
             encryptionKey: encryptionKey,
-            compress: compress,
+            enableEncryption: encrypt,
+            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
         case SyncMode.downloadOnly:
           result = await syncDownload(
             encryptionKey: encryptionKey,
-            compress: compress,
+            enableEncryption: encrypt,
+            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
@@ -247,7 +255,8 @@ class WebDAVService {
           result = await _twoWaySync(
             localVaultData: localVaultData,
             encryptionKey: encryptionKey,
-            compress: compress,
+            enableEncryption: encrypt,
+            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
@@ -283,7 +292,8 @@ class WebDAVService {
   Future<SyncResult> _twoWaySync({
     required Map<String, dynamic> localVaultData,
     required Uint8List encryptionKey,
-    bool compress = true,
+    bool enableEncryption = true,
+    bool enableCompression = true,
     Function(double progress)? onProgress,
   }) async {
     // TODO: 实现完整的双向同步逻辑
@@ -291,7 +301,8 @@ class WebDAVService {
     return await syncUpload(
       vaultData: localVaultData,
       encryptionKey: encryptionKey,
-      compress: compress,
+      enableEncryption: enableEncryption,
+      enableCompression: enableCompression,
       onProgress: onProgress,
     );
   }
@@ -300,14 +311,16 @@ class WebDAVService {
   Future<SyncResult> syncUpload({
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
-    bool compress = true,
+    bool enableEncryption = true,
+    bool enableCompression = true,
     Function(double progress)? onProgress,
   }) async {
     try {
       final success = await upload(
         vaultData: vaultData,
         encryptionKey: encryptionKey,
-        compress: compress,
+        enableEncryption: enableEncryption,
+        enableCompression: enableCompression,
         onProgress: onProgress,
       );
 
@@ -324,13 +337,15 @@ class WebDAVService {
   /// 下载同步
   Future<SyncResult> syncDownload({
     required Uint8List encryptionKey,
-    bool compress = true,
+    bool enableEncryption = true,
+    bool enableCompression = true,
     Function(double progress)? onProgress,
   }) async {
     try {
       final data = await download(
         encryptionKey: encryptionKey,
-        compress: compress,
+        enableEncryption: enableEncryption,
+        enableCompression: enableCompression,
         onProgress: onProgress,
       );
 
@@ -344,9 +359,9 @@ class WebDAVService {
     }
   }
 
-  /// 上传保险库数据（加密 + 压缩）
+  /// 上传保险库数据（支持加密/不加密模式）
   ///
-  /// 加密流程：
+  /// 加密模式流程（默认）：
   /// ```
   /// 用户主密码
   ///      ↓
@@ -359,15 +374,26 @@ class WebDAVService {
   /// WebDAV 服务器（仅存储密文）
   /// ```
   ///
+  /// 非加密模式流程：
+  /// ```
+  /// JSON 数据
+  ///      ↓
+  /// GZIP 压缩（可选）
+  ///      ↓
+  /// WebDAV 服务器（存储原始 JSON）
+  /// ```
+  ///
   /// 参数:
   /// - [vaultData]: 要上传的保险库数据
   /// - [encryptionKey]: 加密密钥（由主密码派生）
-  /// - [compress]: 是否启用 GZIP 压缩（默认 true）
+  /// - [enableEncryption]: 是否启用加密（默认 true）
+  /// - [enableCompression]: 是否启用 GZIP 压缩（默认 true）
   /// - [onProgress]: 上传进度回调
   Future<bool> upload({
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
-    bool compress = true,
+    bool enableEncryption = true,
+    bool enableCompression = true,
     Function(double progress)? onProgress,
   }) async {
     try {
@@ -384,28 +410,33 @@ class WebDAVService {
 
       // Step 1: 序列化为 JSON
       final jsonData = jsonEncode(vaultData);
-      final jsonBytes = utf8.encode(jsonData);
-      debugPrint('WebDAV: 原始数据大小: ${jsonBytes.length} bytes');
-      
-      // Step 2: AES-256-GCM 加密（使用主密码派生的密钥）
-      final encryptedData = CryptoService.encrypt(jsonData, encryptionKey);
-      final encryptedJson = jsonEncode(encryptedData.toJson());
-      var dataBytes = Uint8List.fromList(utf8.encode(encryptedJson));
-      debugPrint('WebDAV: 加密后大小: ${dataBytes.length} bytes');
-      
-      // Step 3: (可选) GZIP 压缩
-      if (compress) {
+      var dataBytes = Uint8List.fromList(utf8.encode(jsonData));
+      debugPrint('WebDAV: 原始数据大小: ${dataBytes.length} bytes');
+
+      // Step 2: 根据配置决定是否加密
+      if (enableEncryption) {
+        final encryptedData = CryptoService.encrypt(jsonData, encryptionKey);
+        final encryptedJson = jsonEncode(encryptedData.toJson());
+        dataBytes = Uint8List.fromList(utf8.encode(encryptedJson));
+        debugPrint('WebDAV: 加密后大小: ${dataBytes.length} bytes');
+      }
+
+      // Step 3: 根据配置决定是否压缩
+      if (enableCompression) {
         dataBytes = _gzipCompress(dataBytes);
         debugPrint('WebDAV: 压缩后大小: ${dataBytes.length} bytes');
       }
 
+      // 根据是否加密选择文件名
+      final fileName = enableEncryption ? _vaultFileNameEncrypted : _vaultFileNamePlain;
+
       final tempDir = await getTemporaryDirectory();
-      final tempFile = io.File('${tempDir.path}/$_vaultFileName');
+      final tempFile = io.File('${tempDir.path}/$fileName');
       await tempFile.writeAsBytes(dataBytes);
 
       await _client!.writeFromFile(
         tempFile.path,
-        '/$_vaultFolderName/$_vaultFileName',
+        '/$_vaultFolderName/$fileName',
         onProgress: onProgress != null
             ? (count, total) => onProgress(total > 0 ? count / total : 0)
             : null,
@@ -417,8 +448,8 @@ class WebDAVService {
       );
 
       await tempFile.delete();
-      
-      debugPrint('WebDAV: 上传成功');
+
+      debugPrint('WebDAV: 上传成功 (${enableEncryption ? '加密' : '未加密'})');
 
       return true;
     } catch (e) {
@@ -427,9 +458,9 @@ class WebDAVService {
     }
   }
 
-  /// 下载保险库数据（解密 + 解压）
+  /// 下载保险库数据（支持解密/不解密模式）
   ///
-  /// 解密流程：
+  /// 解密模式流程（默认）：
   /// ```
   /// WebDAV 服务器
   ///      ↓
@@ -442,13 +473,26 @@ class WebDAVService {
   /// 保险库数据
   /// ```
   ///
+  /// 非解密模式流程：
+  /// ```
+  /// WebDAV 服务器
+  ///      ↓
+  /// GZIP 解压（可选）
+  ///      ↓
+  /// JSON 解析
+  ///      ↓
+  /// 保险库数据
+  /// ```
+  ///
   /// 参数:
   /// - [encryptionKey]: 解密密钥（由主密码派生）
-  /// - [compress]: 是否启用 GZIP 解压（默认 true）
+  /// - [enableEncryption]: 是否启用解密（默认 true）
+  /// - [enableCompression]: 是否启用 GZIP 解压（默认 true）
   /// - [onProgress]: 下载进度回调
   Future<Map<String, dynamic>?> download({
     required Uint8List encryptionKey,
-    bool compress = true,
+    bool enableEncryption = true,
+    bool enableCompression = true,
     Function(double progress)? onProgress,
   }) async {
     try {
@@ -463,17 +507,20 @@ class WebDAVService {
 
       await _ensureVaultFolder();
 
+      // 根据是否加密选择文件名
+      final fileName = enableEncryption ? _vaultFileNameEncrypted : _vaultFileNamePlain;
+
       final files = await _client!.readDir('/$_vaultFolderName');
-      final hasBackup = files.any((f) => f.name == _vaultFileName);
+      final hasBackup = files.any((f) => f.name == fileName);
       if (!hasBackup) {
         throw WebDAVException('备份文件不存在');
       }
 
       final tempDir = await getTemporaryDirectory();
-      final tempFile = io.File('${tempDir.path}/$_vaultFileName');
+      final tempFile = io.File('${tempDir.path}/$fileName');
 
       await _client!.read2File(
-        '/$_vaultFolderName/$_vaultFileName',
+        '/$_vaultFolderName/$fileName',
         tempFile.path,
         onProgress: onProgress != null
             ? (count, total) => onProgress(total > 0 ? count / total : 0)
@@ -483,23 +530,28 @@ class WebDAVService {
       // Step 1: 读取数据
       var dataBytes = await tempFile.readAsBytes();
       debugPrint('WebDAV: 下载数据大小: ${dataBytes.length} bytes');
-      
-      // Step 2: (可选) GZIP 解压
-      if (compress) {
+
+      // Step 2: 根据配置决定是否解压
+      if (enableCompression) {
         dataBytes = _gzipDecompress(dataBytes);
         debugPrint('WebDAV: 解压后大小: ${dataBytes.length} bytes');
       }
-      
-      // Step 3: AES-256-GCM 解密
-      final encryptedJson = utf8.decode(dataBytes);
-      final encryptedData = EncryptedData.fromJson(
-        jsonDecode(encryptedJson) as Map<String, dynamic>
-      );
-      final decryptedJson = CryptoService.decrypt(encryptedData, encryptionKey);
-      debugPrint('WebDAV: 解密成功');
-      
+
+      // Step 3: 根据配置决定是否解密
+      String jsonData;
+      if (enableEncryption) {
+        final encryptedJson = utf8.decode(dataBytes);
+        final encryptedData = EncryptedData.fromJson(
+          jsonDecode(encryptedJson) as Map<String, dynamic>
+        );
+        jsonData = CryptoService.decrypt(encryptedData, encryptionKey);
+        debugPrint('WebDAV: 解密成功');
+      } else {
+        jsonData = utf8.decode(dataBytes);
+      }
+
       // Step 4: 反序列化为 JSON
-      final data = jsonDecode(decryptedJson) as Map<String, dynamic>;
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
 
       await tempFile.delete();
 
@@ -523,6 +575,8 @@ class WebDAVService {
   }
 
   /// 检查远程备份是否存在
+  ///
+  /// 自动检测加密和非加密备份文件
   Future<bool> checkRemoteBackup() async {
     try {
       final config = await getConfig();
@@ -539,7 +593,11 @@ class WebDAVService {
       }
 
       final files = await _client!.readDir('/$_vaultFolderName');
-      return files.any((f) => f.name == _vaultFileName);
+      // 检查加密或非加密备份文件
+      return files.any((f) =>
+        f.name == _vaultFileNameEncrypted ||
+        f.name == _vaultFileNamePlain
+      );
     } catch (e) {
       return false;
     }
