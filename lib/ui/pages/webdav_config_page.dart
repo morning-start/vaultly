@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/sync_models.dart';
-import '../../core/services/webdav_service.dart';
 import '../../core/providers/webdav_provider.dart';
 
 /// WebDAV 配置页面
@@ -34,7 +33,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
     final webDAVService = ref.read(webDAVServiceProvider);
     final config = await webDAVService.getConfig();
-    final isConfigured = await webDAVService.isConfigured();
 
     if (config != null && mounted) {
       setState(() {
@@ -44,7 +42,9 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
       });
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _saveConfig() async {
@@ -85,6 +85,8 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
     // 刷新全局 Provider 状态，通知其他页面配置已更新
     await ref.read(webDAVConfigProvider.notifier).refresh();
 
+    if (!mounted) return;
+
     setState(() => _isLoading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -119,6 +121,8 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
       if (mounted) {
         // 刷新全局 Provider 状态
         await ref.read(webDAVConfigProvider.notifier).refresh();
+
+        if (!mounted) return;
 
         setState(() {
           _urlController.clear();

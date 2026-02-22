@@ -30,6 +30,19 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     final webDAVService = ref.read(webDAVServiceProvider);
     final syncNotifier = ref.read(syncOperationProvider.notifier);
     final configNotifier = ref.read(webDAVConfigProvider.notifier);
+    final authService = ref.read(authServiceProvider);
+
+    // 获取加密密钥
+    final encryptionKey = authService.encryptionKey;
+    if (encryptionKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('错误：未找到加密密钥'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     syncNotifier.startSync('正在上传...');
 
@@ -44,7 +57,10 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
         'entries': entries.map((e) => e.toJson()).toList(),
       };
 
-      await webDAVService.upload(vaultData: vaultData);
+      await webDAVService.upload(
+        vaultData: vaultData,
+        encryptionKey: encryptionKey,
+      );
 
       if (!mounted) return;
 
@@ -96,10 +112,28 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     final syncNotifier = ref.read(syncOperationProvider.notifier);
     final configNotifier = ref.read(webDAVConfigProvider.notifier);
 
+    final authService = ref.read(authServiceProvider);
+
+    // 获取加密密钥
+    final encryptionKey = authService.encryptionKey;
+    if (encryptionKey == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('错误：未找到加密密钥'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
     syncNotifier.startSync('正在下载...');
 
     try {
-      final data = await webDAVService.download();
+      final data = await webDAVService.download(
+        encryptionKey: encryptionKey,
+      );
 
       if (data == null) {
         throw Exception('下载的数据为空');
@@ -107,13 +141,9 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
       // 恢复数据到保险库
       final vaultService = ref.read(vaultServiceProvider);
-      final authService = ref.read(authServiceProvider);
 
       // 确保加密密钥已设置
-      final encryptionKey = authService.encryptionKey;
-      if (encryptionKey != null) {
-        vaultService.setEncryptionKey(encryptionKey);
-      }
+      vaultService.setEncryptionKey(encryptionKey);
 
       // 清除现有数据
       final existingEntries = await vaultService.getAllEntries();
