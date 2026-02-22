@@ -47,7 +47,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Future<void> _loadEntry() async {
     final vaultService = ref.read(vaultServiceProvider);
-    final entry = vaultService.getEntry(widget.entryId);
+    final entry = await vaultService.getEntry(widget.entryId);
     if (entry != null && mounted) {
       setState(() => _entry = entry);
       if (entry is LoginEntry && entry.totpSecret != null) {

@@ -85,7 +85,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
   Future<void> _loadEntry() async {
     final vaultService = ref.read(vaultServiceProvider);
-    final entry = vaultService.getEntry(widget.entryId!);
+    final entry = await vaultService.getEntry(widget.entryId!);
 
     if (entry != null && mounted) {
       setState(() {

@@ -37,7 +37,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       final vaultService = ref.read(vaultServiceProvider);
 
       // 获取当前保险库数据
-      final entries = vaultService.getAllEntries();
+      final entries = await vaultService.getAllEntries();
       final vaultData = {
         'version': 1,
         'exportTime': DateTime.now().toIso8601String(),
@@ -116,7 +116,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       }
 
       // 清除现有数据
-      final existingEntries = vaultService.getAllEntries();
+      final existingEntries = await vaultService.getAllEntries();
       for (final entry in existingEntries) {
         await vaultService.deleteEntry(entry.uuid);
       }
@@ -127,9 +127,11 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       if (entriesJson != null) {
         for (final entryJson in entriesJson) {
           try {
-            final entry = VaultEntry.fromJson(entryJson as Map<String, dynamic>);
-            await vaultService.addEntry(entry);
-            importedCount++;
+            final entry = _parseEntryFromJson(entryJson as Map<String, dynamic>);
+            if (entry != null) {
+              await vaultService.addEntry(entry);
+              importedCount++;
+            }
           } catch (e) {
             // 继续导入其他条目
           }
@@ -167,6 +169,32 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     if (dateTime == null) return '从未';
     return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} '
         '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 根据类型解析条目 JSON
+  ///
+  /// 使用正确的子类 fromJson 方法，确保所有字段都被正确解析
+  VaultEntry? _parseEntryFromJson(Map<String, dynamic> json) {
+    final typeStr = json['type'] as String?;
+    if (typeStr == null) return null;
+
+    final type = EntryType.values.firstWhere(
+      (e) => e.name == typeStr,
+      orElse: () => EntryType.custom,
+    );
+
+    switch (type) {
+      case EntryType.login:
+        return LoginEntry.fromJson(json);
+      case EntryType.bankCard:
+        return BankCardEntry.fromJson(json);
+      case EntryType.secureNote:
+        return SecureNoteEntry.fromJson(json);
+      case EntryType.identity:
+        return IdentityEntry.fromJson(json);
+      case EntryType.custom:
+        return VaultEntry.fromJson(json);
+    }
   }
 
   @override

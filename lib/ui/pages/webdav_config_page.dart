@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/models/sync_models.dart';
 import '../../core/services/webdav_service.dart';
+import '../../core/providers/webdav_provider.dart';
 
 /// WebDAV 配置页面
 ///
@@ -18,10 +20,7 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  final WebDAVService _webDAVService = WebDAVService();
-
   bool _isLoading = false;
-  bool _isConfigured = false;
   bool _obscurePassword = true;
 
   @override
@@ -33,15 +32,15 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
   Future<void> _loadConfig() async {
     setState(() => _isLoading = true);
 
-    final config = await _webDAVService.getConfig();
-    final isConfigured = await _webDAVService.isConfigured();
+    final webDAVService = ref.read(webDAVServiceProvider);
+    final config = await webDAVService.getConfig();
+    final isConfigured = await webDAVService.isConfigured();
 
     if (config != null && mounted) {
       setState(() {
-        _urlController.text = config.url;
+        _urlController.text = config.serverUrl;
         _usernameController.text = config.username;
-        _passwordController.text = config.password;
-        _isConfigured = isConfigured;
+        _passwordController.text = config.password ?? '';
       });
     }
 
@@ -53,22 +52,25 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
     setState(() => _isLoading = true);
 
-    final config = WebDAVConfig(
-      url: _urlController.text.trim(),
+    final config = SyncConfig(
+      id: 'webdav_default',
+      serverUrl: _urlController.text.trim(),
       username: _usernameController.text.trim(),
       password: _passwordController.text,
     );
 
+    final webDAVService = ref.read(webDAVServiceProvider);
+
     // 先测试连接
-    final connected = await _webDAVService.testConnection(config);
+    final result = await webDAVService.testConnection(config);
 
     if (!mounted) return;
 
-    if (!connected) {
+    if (!result.success) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('连接失败，请检查配置信息'),
+        SnackBar(
+          content: Text('连接失败: ${result.errorMessage ?? "请检查配置信息"}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -76,14 +78,14 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
     }
 
     // 保存配置
-    await _webDAVService.saveConfig(config);
+    await webDAVService.saveConfig(config);
 
     if (!mounted) return;
 
-    setState(() {
-      _isConfigured = true;
-      _isLoading = false;
-    });
+    // 刷新全局 Provider 状态，通知其他页面配置已更新
+    await ref.read(webDAVConfigProvider.notifier).refresh();
+
+    setState(() => _isLoading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('配置已保存')),
@@ -111,13 +113,17 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
     );
 
     if (confirmed == true) {
-      await _webDAVService.clearConfig();
+      final webDAVService = ref.read(webDAVServiceProvider);
+      await webDAVService.clearConfig();
+
       if (mounted) {
+        // 刷新全局 Provider 状态
+        await ref.read(webDAVConfigProvider.notifier).refresh();
+
         setState(() {
           _urlController.clear();
           _usernameController.clear();
           _passwordController.clear();
-          _isConfigured = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('配置已清除')),
@@ -131,13 +137,15 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
     setState(() => _isLoading = true);
 
-    final config = WebDAVConfig(
-      url: _urlController.text.trim(),
+    final config = SyncConfig(
+      id: 'webdav_default',
+      serverUrl: _urlController.text.trim(),
       username: _usernameController.text.trim(),
       password: _passwordController.text,
     );
 
-    final connected = await _webDAVService.testConnection(config);
+    final webDAVService = ref.read(webDAVServiceProvider);
+    final result = await webDAVService.testConnection(config);
 
     if (!mounted) return;
 
@@ -145,8 +153,8 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(connected ? '连接成功' : '连接失败'),
-        backgroundColor: connected ? Colors.green : Colors.red,
+        content: Text(result.success ? '连接成功' : '连接失败: ${result.errorMessage ?? ""}'),
+        backgroundColor: result.success ? Colors.green : Colors.red,
       ),
     );
   }
@@ -161,11 +169,14 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 监听全局配置状态
+    final configState = ref.watch(webDAVConfigProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('WebDAV 同步'),
         actions: [
-          if (_isConfigured)
+          if (configState.isConfigured)
             TextButton(
               onPressed: _clearConfig,
               child: const Text('清除配置'),
@@ -182,7 +193,7 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // 状态卡片
-                    _buildStatusCard(),
+                    _buildStatusCard(configState.isConfigured),
                     const SizedBox(height: 24),
 
                     // 配置表单
@@ -323,7 +334,7 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
     );
   }
 
-  Widget _buildStatusCard() {
+  Widget _buildStatusCard(bool isConfigured) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -333,14 +344,14 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: _isConfigured
+                color: isConfigured
                     ? Colors.green.withAlpha(26)
                     : Colors.orange.withAlpha(26),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                _isConfigured ? Icons.cloud_done : Icons.cloud_off,
-                color: _isConfigured ? Colors.green : Colors.orange,
+                isConfigured ? Icons.cloud_done : Icons.cloud_off,
+                color: isConfigured ? Colors.green : Colors.orange,
                 size: 28,
               ),
             ),
@@ -350,14 +361,14 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _isConfigured ? '已配置' : '未配置',
+                    isConfigured ? '已配置' : '未配置',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _isConfigured
+                    isConfigured
                         ? 'WebDAV 同步已启用'
                         : '请配置 WebDAV 服务器信息',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
