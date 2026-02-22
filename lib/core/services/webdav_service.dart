@@ -6,12 +6,19 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webdav_client/webdav_client.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import '../crypto/services/crypto_service.dart';
 import '../models/sync_models.dart';
 
 /// WebDAV 同步服务
 ///
 /// 参考文档: wiki/03-模块设计/同步模块.md
 /// 负责与 WebDAV 服务器通信，实现数据同步
+///
+/// 安全设计:
+/// - 数据在传输前使用 AES-256-GCM 加密
+/// - 加密密钥由用户主密码通过 Argon2id 派生
+/// - 支持 GZIP 压缩减少传输体积
+/// - 服务器仅存储密文，无法获取用户数据
 ///
 /// 性能优化:
 /// - 使用内存缓存减少 SecureStorage 读取
@@ -24,7 +31,7 @@ class WebDAVService {
   static const _keyLastSyncTime = 'webdav_last_sync';
   static const _keySyncHistory = 'webdav_sync_history';
   static const _vaultFolderName = 'vaultly';
-  static const _vaultFileName = 'vaultly_backup.json';
+  static const _vaultFileName = 'vaultly_backup.enc';
 
   final FlutterSecureStorage _secureStorage;
   Client? _client;
@@ -127,8 +134,8 @@ class WebDAVService {
   /// 保存同步配置
   Future<void> saveConfig(SyncConfig config) async {
     await _secureStorage.write(key: _keyWebDavUrl, value: config.serverUrl);
-      await _secureStorage.write(key: _keyWebDavUsername, value: config.username);
-      await _secureStorage.write(key: _keyWebDavPassword, value: config.password ?? '');
+    await _secureStorage.write(key: _keyWebDavUsername, value: config.username);
+    await _secureStorage.write(key: _keyWebDavPassword, value: config.password ?? '');
 
     _cachedConfig = config;
     _cachedIsConfigured = true;
@@ -194,8 +201,15 @@ class WebDAVService {
   }
 
   /// 统一同步方法
+  ///
+  /// 流程：
+  /// 1. 根据同步模式选择上传/下载/双向同步
+  /// 2. 数据加密后传输
+  /// 3. 可选 GZIP 压缩
   Future<SyncResult> sync({
     required Map<String, dynamic> localVaultData,
+    required Uint8List encryptionKey,
+    bool compress = true,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -216,16 +230,24 @@ class WebDAVService {
         case SyncMode.uploadOnly:
           result = await syncUpload(
             vaultData: localVaultData,
+            encryptionKey: encryptionKey,
+            compress: compress,
             onProgress: onProgress,
           );
           break;
         case SyncMode.downloadOnly:
-          result = await syncDownload(onProgress: onProgress);
+          result = await syncDownload(
+            encryptionKey: encryptionKey,
+            compress: compress,
+            onProgress: onProgress,
+          );
           break;
         case SyncMode.auto:
         case SyncMode.manual:
           result = await _twoWaySync(
             localVaultData: localVaultData,
+            encryptionKey: encryptionKey,
+            compress: compress,
             onProgress: onProgress,
           );
           break;
@@ -260,12 +282,16 @@ class WebDAVService {
   /// 双向同步
   Future<SyncResult> _twoWaySync({
     required Map<String, dynamic> localVaultData,
+    required Uint8List encryptionKey,
+    bool compress = true,
     Function(double progress)? onProgress,
   }) async {
     // TODO: 实现完整的双向同步逻辑
     // 暂时先上传
     return await syncUpload(
       vaultData: localVaultData,
+      encryptionKey: encryptionKey,
+      compress: compress,
       onProgress: onProgress,
     );
   }
@@ -273,11 +299,15 @@ class WebDAVService {
   /// 上传同步
   Future<SyncResult> syncUpload({
     required Map<String, dynamic> vaultData,
+    required Uint8List encryptionKey,
+    bool compress = true,
     Function(double progress)? onProgress,
   }) async {
     try {
       final success = await upload(
         vaultData: vaultData,
+        encryptionKey: encryptionKey,
+        compress: compress,
         onProgress: onProgress,
       );
 
@@ -293,10 +323,16 @@ class WebDAVService {
 
   /// 下载同步
   Future<SyncResult> syncDownload({
+    required Uint8List encryptionKey,
+    bool compress = true,
     Function(double progress)? onProgress,
   }) async {
     try {
-      final data = await download(onProgress: onProgress);
+      final data = await download(
+        encryptionKey: encryptionKey,
+        compress: compress,
+        onProgress: onProgress,
+      );
 
       if (data != null) {
         return SyncResult.success(updated: 1);
@@ -308,9 +344,30 @@ class WebDAVService {
     }
   }
 
-  /// 上传保险库数据
+  /// 上传保险库数据（加密 + 压缩）
+  ///
+  /// 加密流程：
+  /// ```
+  /// 用户主密码
+  ///      ↓
+  /// Argon2id 密钥派生 (256-bit)
+  ///      ↓
+  /// AES-256-GCM 加密
+  ///      ↓
+  /// GZIP 压缩（可选）
+  ///      ↓
+  /// WebDAV 服务器（仅存储密文）
+  /// ```
+  ///
+  /// 参数:
+  /// - [vaultData]: 要上传的保险库数据
+  /// - [encryptionKey]: 加密密钥（由主密码派生）
+  /// - [compress]: 是否启用 GZIP 压缩（默认 true）
+  /// - [onProgress]: 上传进度回调
   Future<bool> upload({
     required Map<String, dynamic> vaultData,
+    required Uint8List encryptionKey,
+    bool compress = true,
     Function(double progress)? onProgress,
   }) async {
     try {
@@ -325,12 +382,26 @@ class WebDAVService {
 
       await _ensureVaultFolder();
 
+      // Step 1: 序列化为 JSON
       final jsonData = jsonEncode(vaultData);
-      final bytes = utf8.encode(jsonData);
+      final jsonBytes = utf8.encode(jsonData);
+      debugPrint('WebDAV: 原始数据大小: ${jsonBytes.length} bytes');
+      
+      // Step 2: AES-256-GCM 加密（使用主密码派生的密钥）
+      final encryptedData = CryptoService.encrypt(jsonData, encryptionKey);
+      final encryptedJson = jsonEncode(encryptedData.toJson());
+      var dataBytes = Uint8List.fromList(utf8.encode(encryptedJson));
+      debugPrint('WebDAV: 加密后大小: ${dataBytes.length} bytes');
+      
+      // Step 3: (可选) GZIP 压缩
+      if (compress) {
+        dataBytes = _gzipCompress(dataBytes);
+        debugPrint('WebDAV: 压缩后大小: ${dataBytes.length} bytes');
+      }
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = io.File('${tempDir.path}/$_vaultFileName');
-      await tempFile.writeAsBytes(bytes);
+      await tempFile.writeAsBytes(dataBytes);
 
       await _client!.writeFromFile(
         tempFile.path,
@@ -346,6 +417,8 @@ class WebDAVService {
       );
 
       await tempFile.delete();
+      
+      debugPrint('WebDAV: 上传成功');
 
       return true;
     } catch (e) {
@@ -354,8 +427,28 @@ class WebDAVService {
     }
   }
 
-  /// 下载保险库数据
+  /// 下载保险库数据（解密 + 解压）
+  ///
+  /// 解密流程：
+  /// ```
+  /// WebDAV 服务器
+  ///      ↓
+  /// GZIP 解压（可选）
+  ///      ↓
+  /// AES-256-GCM 解密
+  ///      ↓
+  /// Argon2id 密钥验证
+  ///      ↓
+  /// 保险库数据
+  /// ```
+  ///
+  /// 参数:
+  /// - [encryptionKey]: 解密密钥（由主密码派生）
+  /// - [compress]: 是否启用 GZIP 解压（默认 true）
+  /// - [onProgress]: 下载进度回调
   Future<Map<String, dynamic>?> download({
+    required Uint8List encryptionKey,
+    bool compress = true,
     Function(double progress)? onProgress,
   }) async {
     try {
@@ -387,8 +480,26 @@ class WebDAVService {
             : null,
       );
 
-      final jsonData = await tempFile.readAsString();
-      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      // Step 1: 读取数据
+      var dataBytes = await tempFile.readAsBytes();
+      debugPrint('WebDAV: 下载数据大小: ${dataBytes.length} bytes');
+      
+      // Step 2: (可选) GZIP 解压
+      if (compress) {
+        dataBytes = _gzipDecompress(dataBytes);
+        debugPrint('WebDAV: 解压后大小: ${dataBytes.length} bytes');
+      }
+      
+      // Step 3: AES-256-GCM 解密
+      final encryptedJson = utf8.decode(dataBytes);
+      final encryptedData = EncryptedData.fromJson(
+        jsonDecode(encryptedJson) as Map<String, dynamic>
+      );
+      final decryptedJson = CryptoService.decrypt(encryptedData, encryptionKey);
+      debugPrint('WebDAV: 解密成功');
+      
+      // Step 4: 反序列化为 JSON
+      final data = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
       await tempFile.delete();
 
@@ -497,6 +608,22 @@ class WebDAVService {
     } catch (e) {
       debugPrint('保存同步历史失败: $e');
     }
+  }
+
+  /// GZIP 压缩
+  ///
+  /// 使用 Dart 内置的 GZIP 压缩算法
+  Uint8List _gzipCompress(Uint8List data) {
+    final compressed = io.gzip.encode(data);
+    return Uint8List.fromList(compressed);
+  }
+
+  /// GZIP 解压
+  ///
+  /// 使用 Dart 内置的 GZIP 解压算法
+  Uint8List _gzipDecompress(Uint8List data) {
+    final decompressed = io.gzip.decode(data);
+    return Uint8List.fromList(decompressed);
   }
 
   /// 释放资源
