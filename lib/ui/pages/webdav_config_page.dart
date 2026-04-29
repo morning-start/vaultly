@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/sync_models.dart';
 import '../../core/providers/webdav_provider.dart';
+import '../widgets/secure_text_field.dart';
+import '../widgets/confirm_dialog.dart';
 
-/// WebDAV 配置页面
-///
-/// 配置 WebDAV 服务器连接信息，支持测试连接和手动同步
 class WebDAVConfigPage extends ConsumerStatefulWidget {
   const WebDAVConfigPage({super.key});
 
@@ -20,7 +19,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
   bool _enableEncryption = true;
   bool _enableCompression = true;
   SyncMode _syncMode = SyncMode.manual;
@@ -70,7 +68,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
     final webDAVService = ref.read(webDAVServiceProvider);
 
-    // 先测试连接
     final result = await webDAVService.testConnection(config);
 
     if (!mounted) return;
@@ -86,12 +83,10 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
       return;
     }
 
-    // 保存配置
     await webDAVService.saveConfig(config);
 
     if (!mounted) return;
 
-    // 刷新全局 Provider 状态，通知其他页面配置已更新
     await ref.read(webDAVConfigProvider.notifier).refresh();
 
     if (!mounted) return;
@@ -106,20 +101,11 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
   Future<void> _clearConfig() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认清除'),
-        content: const Text('确定要清除 WebDAV 配置吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('清除'),
-          ),
-        ],
+      builder: (context) => ConfirmDialog(
+        title: '确认清除',
+        content: '确定要清除 WebDAV 配置吗？',
+        confirmLabel: '清除',
+        isDangerous: true,
       ),
     );
 
@@ -128,7 +114,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
       await webDAVService.clearConfig();
 
       if (mounted) {
-        // 刷新全局 Provider 状态
         await ref.read(webDAVConfigProvider.notifier).refresh();
 
         if (!mounted) return;
@@ -182,7 +167,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 监听全局配置状态
     final configState = ref.watch(webDAVConfigProvider);
 
     return Scaffold(
@@ -205,11 +189,9 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 状态卡片
                     _buildStatusCard(configState.isConfigured),
                     const SizedBox(height: 24),
 
-                    // 配置表单
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -254,22 +236,10 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                               },
                             ),
                             const SizedBox(height: 16),
-                            TextFormField(
+                            SecureTextField(
                               controller: _passwordController,
-                              obscureText: _obscurePassword,
-                              decoration: InputDecoration(
-                                labelText: '密码 *',
-                                prefixIcon: const Icon(Icons.lock),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_obscurePassword
-                                      ? Icons.visibility
-                                      : Icons.visibility_off),
-                                  onPressed: () {
-                                    setState(() =>
-                                        _obscurePassword = !_obscurePassword);
-                                  },
-                                ),
-                              ),
+                              labelText: '密码 *',
+                              prefixIcon: Icons.lock,
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
                                   return '请输入密码';
@@ -283,7 +253,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 同步设置
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -295,7 +264,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 16),
-                            // 同步模式
                             InputDecorator(
                               decoration: const InputDecoration(
                                 labelText: '同步模式',
@@ -306,22 +274,10 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                                   value: _syncMode,
                                   isExpanded: true,
                                   items: const [
-                                    DropdownMenuItem(
-                                      value: SyncMode.manual,
-                                      child: Text('手动同步'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: SyncMode.uploadOnly,
-                                      child: Text('仅上传（备份模式）'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: SyncMode.downloadOnly,
-                                      child: Text('仅下载（恢复模式）'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: SyncMode.auto,
-                                      child: Text('自动双向同步'),
-                                    ),
+                                    DropdownMenuItem(value: SyncMode.manual, child: Text('手动同步')),
+                                    DropdownMenuItem(value: SyncMode.uploadOnly, child: Text('仅上传（备份模式）')),
+                                    DropdownMenuItem(value: SyncMode.downloadOnly, child: Text('仅下载（恢复模式）')),
+                                    DropdownMenuItem(value: SyncMode.auto, child: Text('自动双向同步')),
                                   ],
                                   onChanged: (value) {
                                     if (value != null) {
@@ -332,7 +288,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            // 加密开关
                             SwitchListTile(
                               title: const Text('启用端到端加密'),
                               subtitle: const Text(
@@ -353,7 +308,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            // 压缩开关
                             SwitchListTile(
                               title: const Text('启用 GZIP 压缩'),
                               subtitle: const Text(
@@ -372,7 +326,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 操作按钮
                     Row(
                       children: [
                         Expanded(
@@ -395,11 +348,8 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
                     const SizedBox(height: 32),
 
-                    // 说明
                     Card(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(

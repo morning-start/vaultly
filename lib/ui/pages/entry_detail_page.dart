@@ -7,11 +7,10 @@ import '../../core/models/vault_entry.dart';
 import '../../core/providers/vault_service_provider.dart';
 import '../../core/services/clipboard_service.dart';
 import '../../core/services/totp_service.dart';
+import '../widgets/entry_type_helper.dart';
+import '../widgets/confirm_dialog.dart';
 import 'add_entry_page.dart';
 
-/// 条目详情页面
-///
-/// 显示条目详细信息，支持复制、编辑、删除操作
 class EntryDetailPage extends ConsumerStatefulWidget {
   final String entryId;
 
@@ -30,7 +29,6 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   int? _totpRemainingSeconds;
   Timer? _totpTimer;
 
-  // 显示状态
   final Map<String, bool> _showSensitive = {};
 
   @override
@@ -98,20 +96,11 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除 "${_entry!.title}" 吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
+      builder: (context) => ConfirmDialog(
+        title: '确认删除',
+        content: '确定要删除 "${_entry!.title}" 吗？',
+        confirmLabel: '删除',
+        isDangerous: true,
       ),
     );
 
@@ -140,7 +129,6 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       ),
     );
 
-    // 刷新条目数据
     await _loadEntry();
   }
 
@@ -202,20 +190,16 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 条目类型标签
           _buildTypeHeader(entry),
           const SizedBox(height: 16),
 
-          // 类型特定字段
           ..._buildTypeSpecificFields(entry),
 
-          // 标签
           if (entry.tags.isNotEmpty) ...[
             const SizedBox(height: 16),
             _buildTagsSection(entry),
           ],
 
-          // 元信息
           const SizedBox(height: 24),
           _buildMetadataSection(entry),
         ],
@@ -227,13 +211,13 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: _getTypeColor(entry.type),
+          backgroundColor: EntryTypeHelper.getColor(entry.type),
           child: Icon(
-            _getTypeIcon(entry.type),
+            EntryTypeHelper.getIcon(entry.type),
             color: Colors.white,
           ),
         ),
-        title: Text(_getTypeName(entry.type)),
+        title: Text(EntryTypeHelper.getName(entry.type)),
         subtitle: Text('创建于 ${_formatDate(entry.createdAt)}'),
       ),
     );
@@ -257,26 +241,11 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   List<Widget> _buildLoginFields(LoginEntry entry) {
     return [
       if (entry.username != null && entry.username!.isNotEmpty)
-        _buildCopyableField(
-          '用户名',
-          entry.username!,
-          Icons.person,
-          isSensitive: false,
-        ),
+        _buildCopyableField('用户名', entry.username!, Icons.person, isSensitive: false),
       if (entry.email != null && entry.email!.isNotEmpty)
-        _buildCopyableField(
-          '邮箱',
-          entry.email!,
-          Icons.email,
-          isSensitive: false,
-        ),
+        _buildCopyableField('邮箱', entry.email!, Icons.email, isSensitive: false),
       if (entry.password != null && entry.password!.isNotEmpty)
-        _buildCopyableField(
-          '密码',
-          entry.password!,
-          Icons.lock,
-          isSensitive: true,
-        ),
+        _buildCopyableField('密码', entry.password!, Icons.lock, isSensitive: true),
       if (entry.url != null && entry.url!.isNotEmpty)
         _buildUrlField('网站', entry.url!, Icons.link),
       if (_totpCode != null)
@@ -289,12 +258,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   List<Widget> _buildBankCardFields(BankCardEntry entry) {
     return [
       if (entry.cardNumber != null && entry.cardNumber!.isNotEmpty)
-        _buildCopyableField(
-          '卡号',
-          entry.cardNumber!,
-          Icons.credit_card,
-          isSensitive: true,
-        ),
+        _buildCopyableField('卡号', entry.cardNumber!, Icons.credit_card, isSensitive: true),
       if (entry.cardHolderName != null && entry.cardHolderName!.isNotEmpty)
         _buildDisplayField('持卡人', entry.cardHolderName!, Icons.person),
       if (entry.expiryMonth != null && entry.expiryYear != null)
@@ -304,16 +268,11 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
           Icons.calendar_today,
         ),
       if (entry.cvv != null && entry.cvv!.isNotEmpty)
-        _buildCopyableField(
-          'CVV',
-          entry.cvv!,
-          Icons.security,
-          isSensitive: true,
-        ),
+        _buildCopyableField('CVV', entry.cvv!, Icons.security, isSensitive: true),
       if (entry.bankName != null && entry.bankName!.isNotEmpty)
         _buildDisplayField('银行', entry.bankName!, Icons.account_balance),
       if (entry.cardType != null)
-        _buildDisplayField('卡类型', _getCardTypeName(entry.cardType!), Icons.payment),
+        _buildDisplayField('卡类型', EntryTypeHelper.getCardTypeName(entry.cardType!), Icons.payment),
     ];
   }
 
@@ -330,10 +289,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
                   children: [
                     Icon(Icons.description, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 8),
-                    Text(
-                      'Markdown 内容',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
+                    Text('Markdown 内容', style: Theme.of(context).textTheme.titleSmall),
                   ],
                 ),
                 const Divider(),
@@ -360,42 +316,17 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       if (entry.birthDate != null)
         _buildDisplayField('出生日期', _formatDate(entry.birthDate!), Icons.cake),
       if (entry.idNumber != null && entry.idNumber!.isNotEmpty)
-        _buildCopyableField(
-          '证件号码',
-          entry.idNumber!,
-          Icons.badge,
-          isSensitive: true,
-        ),
+        _buildCopyableField('证件号码', entry.idNumber!, Icons.badge, isSensitive: true),
       if (entry.phone != null && entry.phone!.isNotEmpty)
-        _buildCopyableField(
-          '电话',
-          entry.phone!,
-          Icons.phone,
-          isSensitive: false,
-        ),
+        _buildCopyableField('电话', entry.phone!, Icons.phone, isSensitive: false),
       if (entry.email != null && entry.email!.isNotEmpty)
-        _buildCopyableField(
-          '邮箱',
-          entry.email!,
-          Icons.email,
-          isSensitive: false,
-        ),
+        _buildCopyableField('邮箱', entry.email!, Icons.email, isSensitive: false),
       if (entry.address != null && entry.address!.isNotEmpty)
-        _buildCopyableField(
-          '地址',
-          entry.address!,
-          Icons.location_on,
-          isSensitive: false,
-        ),
+        _buildCopyableField('地址', entry.address!, Icons.location_on, isSensitive: false),
     ];
   }
 
-  Widget _buildCopyableField(
-    String label,
-    String value,
-    IconData icon, {
-    required bool isSensitive,
-  }) {
+  Widget _buildCopyableField(String label, String value, IconData icon, {required bool isSensitive}) {
     final fieldKey = '${label}_$value';
     final showValue = !isSensitive || _isSensitiveVisible(fieldKey);
 
@@ -581,58 +512,11 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Text(
-            '$label: ',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Text('$label: ', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text(value),
         ],
       ),
     );
-  }
-
-  IconData _getTypeIcon(EntryType type) {
-    return switch (type) {
-      EntryType.login => Icons.login,
-      EntryType.bankCard => Icons.credit_card,
-      EntryType.secureNote => Icons.note,
-      EntryType.identity => Icons.person,
-      EntryType.custom => Icons.folder,
-    };
-  }
-
-  Color _getTypeColor(EntryType type) {
-    return switch (type) {
-      EntryType.login => Colors.blue,
-      EntryType.bankCard => Colors.green,
-      EntryType.secureNote => Colors.orange,
-      EntryType.identity => Colors.purple,
-      EntryType.custom => Colors.grey,
-    };
-  }
-
-  String _getTypeName(EntryType type) {
-    return switch (type) {
-      EntryType.login => '登录凭证',
-      EntryType.bankCard => '银行卡',
-      EntryType.secureNote => '安全笔记',
-      EntryType.identity => '身份信息',
-      EntryType.custom => '自定义',
-    };
-  }
-
-  String _getCardTypeName(CardType type) {
-    return switch (type) {
-      CardType.visa => 'Visa',
-      CardType.mastercard => 'Mastercard',
-      CardType.amex => 'American Express',
-      CardType.discover => 'Discover',
-      CardType.jcb => 'JCB',
-      CardType.unionPay => 'UnionPay',
-      CardType.other => '其他',
-    };
   }
 
   String _formatDate(DateTime date) {
