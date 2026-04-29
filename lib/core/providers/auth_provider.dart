@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../crypto/services/auth_service.dart';
 import '../crypto/services/crypto_service.dart';
+import '../services/biometric_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService();
@@ -8,6 +9,10 @@ final authServiceProvider = Provider<AuthService>((ref) {
 
 final cryptoServiceProvider = Provider<CryptoService>((ref) {
   return CryptoService();
+});
+
+final biometricServiceProvider = Provider<BiometricService>((ref) {
+  return BiometricService();
 });
 
 final isVaultUnlockedProvider = StateProvider<bool>((ref) => false);
@@ -18,11 +23,19 @@ class AuthState {
   final bool isLoading;
   final String? error;
 
+  // 生物识别状态
+  final bool biometricAvailable;
+  final String? biometricTypeName;
+  final bool isAuthenticatingWithBiometric;
+
   AuthState({
     this.isUnlocked = false,
     this.isPasswordSet = false,
     this.isLoading = false,
     this.error,
+    this.biometricAvailable = false,
+    this.biometricTypeName,
+    this.isAuthenticatingWithBiometric = false,
   });
 
   AuthState copyWith({
@@ -30,12 +43,19 @@ class AuthState {
     bool? isPasswordSet,
     bool? isLoading,
     String? error,
+    bool? biometricAvailable,
+    String? biometricTypeName,
+    bool? isAuthenticatingWithBiometric,
+    bool clearError = false,
   }) {
     return AuthState(
       isUnlocked: isUnlocked ?? this.isUnlocked,
       isPasswordSet: isPasswordSet ?? this.isPasswordSet,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: clearError ? null : (error ?? this.error),
+      biometricAvailable: biometricAvailable ?? this.biometricAvailable,
+      biometricTypeName: biometricTypeName ?? this.biometricTypeName,
+      isAuthenticatingWithBiometric: isAuthenticatingWithBiometric ?? this.isAuthenticatingWithBiometric,
     );
   }
 }
@@ -50,20 +70,50 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _init() async {
     state = state.copyWith(isLoading: true);
     final isPasswordSet = await _authService.isPasswordSet();
-    state = state.copyWith(
-      isPasswordSet: isPasswordSet,
-      isLoading: false,
-    );
+
+    // 检查生物识别可用性
+    try {
+      final bioAvailability = await _authService.checkBiometricAvailability();
+      if (bioAvailability.available && bioAvailability is BiometricAvailable) {
+        state = state.copyWith(
+          isPasswordSet: isPasswordSet,
+          biometricAvailable: true,
+          biometricTypeName: bioAvailability.biometricTypeName,
+          isLoading: false,
+        );
+      } else {
+        state = state.copyWith(
+          isPasswordSet: isPasswordSet,
+          biometricAvailable: false,
+          isLoading: false,
+        );
+      }
+    } catch (e) {
+      // 生物识别检查失败不影响主流程
+      state = state.copyWith(
+        isPasswordSet: isPasswordSet,
+        biometricAvailable: false,
+        isLoading: false,
+      );
+    }
   }
 
   Future<bool> setupPassword(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
       await _authService.setupMasterPassword(password);
+
+      // 设置密码后重新检查生物识别可用性
+      final bioAvailability = await _authService.checkBiometricAvailability();
+
       state = state.copyWith(
         isPasswordSet: true,
         isUnlocked: true,
         isLoading: false,
+        biometricAvailable: bioAvailability.available,
+        biometricTypeName: bioAvailability is BiometricAvailable
+            ? bioAvailability.biometricTypeName
+            : null,
       );
       return true;
     } catch (e) {
@@ -84,6 +134,38 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return success;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  /// 使用生物识别解锁
+  Future<bool> unlockWithBiometric() async {
+    try {
+      state = state.copyWith(
+        isAuthenticatingWithBiometric: true,
+        error: null,
+      );
+
+      final success = await _authService.biometricUnlock();
+
+      state = state.copyWith(
+        isUnlocked: success,
+        isAuthenticatingWithBiometric: false,
+        error: success ? null : '生物识别验证失败',
+      );
+
+      return success;
+    } on AuthException catch (e) {
+      state = state.copyWith(
+        isAuthenticatingWithBiometric: false,
+        error: e.message,
+      );
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+        isAuthenticatingWithBiometric: false,
+        error: e.toString(),
+      );
       return false;
     }
   }

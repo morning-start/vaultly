@@ -40,6 +40,9 @@ dependencies:
   # 安全存储
   flutter_secure_storage: ^10.0.0
 
+  # 生物识别认证（指纹/面容）
+  local_auth: ^2.3.0
+
   # QR 码
   mobile_scanner: ^7.2.0
 

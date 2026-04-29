@@ -39,9 +39,29 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
   }
 
+  /// 使用生物识别解锁
+  Future<void> _biometricUnlock() async {
+    final authState = ref.read(authNotifierProvider);
+
+    // 如果正在认证中，不重复触发
+    if (authState.isAuthenticatingWithBiometric) return;
+
+    final success = await ref.read(authNotifierProvider.notifier).unlockWithBiometric();
+
+    if (!mounted) return;
+
+    if (success) {
+      context.go('/vault');
+    }
+    // 错误信息会通过 AuthState.error 自动显示
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
+    final biometricAvailable = authState.biometricAvailable;
+    final isAuthenticating = authState.isAuthenticatingWithBiometric;
+    final biometricTypeName = authState.biometricTypeName ?? '生物识别';
 
     return Scaffold(
       appBar: AppBar(title: const Text('解锁保险库')),
@@ -54,11 +74,23 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 48),
-                Icon(
-                  Icons.lock_open,
-                  size: 80,
-                  color: Theme.of(context).colorScheme.primary,
+
+                // 主图标（根据状态切换）
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: isAuthenticating
+                      ? Icon(
+                          Icons.fingerprint,
+                          size: 80,
+                          color: Theme.of(context).colorScheme.primary.withAlpha(153),
+                        )
+                      : Icon(
+                          Icons.lock_open,
+                          size: 80,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                 ),
+
                 const SizedBox(height: 24),
                 Text(
                   '欢迎回来',
@@ -67,19 +99,25 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '请输入主密码来解锁您的保险库',
+                  isAuthenticating
+                      ? '正在验证$biometricTypeName...'
+                      : '请输入主密码来解锁您的保险库',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   textAlign: TextAlign.center,
                 ),
+
                 const SizedBox(height: 32),
+
+                // 密码输入框（生物识别认证时不禁用，允许同时使用）
                 SecureTextField(
                   controller: _passwordController,
                   labelText: '主密码',
                   hintText: '请输入主密码',
                   prefixIcon: Icons.lock,
-                  autofocus: true,
+                  autofocus: !isAuthenticating,
+                  enabled: !isAuthenticating,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return '请输入密码';
@@ -88,8 +126,19 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   },
                   onSubmitted: (_) => _unlock(),
                 ),
+
+                const SizedBox(height: 16),
+
+                // 生物识别按钮区域
+                if (biometricAvailable && !isAuthenticating)
+                  _buildBiometricButton(biometricTypeName)
+                else if (isAuthenticating)
+                  _buildAuthenticatingIndicator(biometricTypeName),
+
                 const SizedBox(height: 24),
-                if (authState.error != null) ...[
+
+                // 错误提示
+                if (authState.error != null && !isAuthenticating) ...[
                   Card(
                     color: Theme.of(context).colorScheme.errorContainer,
                     child: Padding(
@@ -115,9 +164,10 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   ),
                   const SizedBox(height: 16),
                 ],
+
                 ElevatedButton(
-                  onPressed: authState.isLoading ? null : _unlock,
-                  child: authState.isLoading
+                  onPressed: (authState.isLoading || isAuthenticating) ? null : _unlock,
+                  child: authState.isLoading || isAuthenticating
                       ? const SizedBox(
                           height: 20,
                           width: 20,
@@ -125,10 +175,88 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                         )
                       : const Text('解锁'),
                 ),
+
+                // 提示文字
+                if (biometricAvailable) ...[
+                  const SizedBox(height: 16),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: _biometricUnlock,
+                      icon: const Icon(Icons.fingerprint, size: 18),
+                      label: Text('使用$biometricTypeName'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 构建生物识别按钮
+  Widget _buildBiometricButton(String typeName) {
+    return Center(
+      child: Column(
+        children: [
+          const Divider(),
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: _biometricUnlock,
+            borderRadius: BorderRadius.circular(50),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline.withAlpha(100),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.fingerprint,
+                size: 40,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '使用$typeName 解锁',
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建正在认证指示器
+  Widget _buildAuthenticatingIndicator(String typeName) {
+    return Center(
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '正在验证$typeName...',
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

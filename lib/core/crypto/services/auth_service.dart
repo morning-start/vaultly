@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../services/biometric_service.dart';
 import 'crypto_service.dart';
 
 /// 认证服务
@@ -159,6 +160,95 @@ class AuthService {
     _isUnlocked = false;
   }
 
+  /// 使用生物识别解锁
+  ///
+  /// 流程：
+  /// 1. 检查密码是否已设置（必须先设置主密码）
+  /// 2. 执行生物识别认证
+  /// 3. 认证成功后，从安全存储恢复 encryptionKey
+  Future<bool> biometricUnlock() async {
+    // 检查是否已设置密码
+    final isPasswordSet = await this.isPasswordSet();
+    if (!isPasswordSet) {
+      throw AuthException('请先设置主密码');
+    }
+
+    // 检查是否被锁定
+    final lockStatus = await _checkLockStatus();
+    if (lockStatus.isLocked) {
+      throw AuthException('账户已锁定，请在 ${lockStatus.remainingMinutes} 分钟后重试');
+    }
+
+    try {
+      // 执行生物识别认证
+      final biometricService = BiometricService();
+      final isAuthenticated = await biometricService.authenticate(
+        reason: '验证身份以解锁 Vaultly 保险库',
+      );
+
+      if (!isAuthenticated) {
+        return false;
+      }
+
+      // 生物识别成功，从安全存储读取 encryptionKey
+      final keyBase64 = await _secureStorage.read(key: _keyEncryptionKey);
+      if (keyBase64 == null || keyBase64.isEmpty) {
+        throw AuthException('加密密钥不存在，需要重新设置密码');
+      }
+
+      // 恢复 encryptionKey
+      _encryptionKey = base64Decode(keyBase64);
+      _isUnlocked = true;
+
+      // 重置失败计数
+      await _resetFailedAttempts();
+
+      return true;
+    } on BiometricException catch (e) {
+      throw AuthException(e.message);
+    }
+  }
+
+  /// 检查是否可以使用生物识别解锁
+  ///
+  /// 返回是否可用以及原因
+  Future<BiometricAvailability> checkBiometricAvailability() async {
+    try {
+      // 检查密码是否已设置
+      final isPasswordSet = await this.isPasswordSet();
+      if (!isPasswordSet) {
+        return const BiometricAvailable(
+          available: false,
+          reason: '未设置主密码',
+        );
+      }
+
+      // 检查设备支持情况
+      final biometricService = BiometricService();
+      final isAvailable = await biometricService.isBiometricEnabled();
+
+      if (!isAvailable) {
+        return const BiometricAvailable(
+          available: false,
+          reason: '设备不支持或未启用生物识别',
+        );
+      }
+
+      // 获取生物识别类型名称
+      final typeName = await biometricService.getBiometricTypeName();
+
+      return BiometricAvailable(
+        available: true,
+        biometricTypeName: typeName,
+      );
+    } on Exception catch (e) {
+      return BiometricAvailable(
+        available: false,
+        reason: e.toString(),
+      );
+    }
+  }
+
   /// 修改主密码
   Future<void> changePassword(String oldPassword, String newPassword) async {
     final success = await verifyMasterPassword(oldPassword);
@@ -218,4 +308,34 @@ class AuthException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// 生物识别可用性状态
+abstract class BiometricAvailability {
+  final bool available;
+  final String? reason;
+
+  const BiometricAvailability({
+    required this.available,
+    this.reason,
+  });
+}
+
+/// 生物识别可用
+class BiometricAvailable extends BiometricAvailability {
+  final String? biometricTypeName;
+
+  const BiometricAvailable({
+    required super.available,
+    this.biometricTypeName,
+    super.reason,
+  });
+}
+
+/// 生物识别不可用
+class BiometricUnavailable extends BiometricAvailability {
+  const BiometricUnavailable({
+    required super.available,
+    required super.reason,
+  });
 }
