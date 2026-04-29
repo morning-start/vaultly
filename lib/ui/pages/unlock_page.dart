@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
+import '../widgets/secure_text_field.dart';
 
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
@@ -13,7 +14,6 @@ class UnlockPage extends ConsumerStatefulWidget {
 class _UnlockPageState extends ConsumerState<UnlockPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -25,9 +25,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final password = _passwordController.text;
-    final success = await ref
-        .read(authNotifierProvider.notifier)
-        .unlock(password);
+    final success = await ref.read(authNotifierProvider.notifier).unlock(password);
 
     if (!mounted) return;
 
@@ -76,32 +74,19 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                TextFormField(
+                SecureTextField(
                   controller: _passwordController,
-                  obscureText: _obscurePassword,
+                  labelText: '主密码',
+                  hintText: '请输入主密码',
+                  prefixIcon: Icons.lock,
                   autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: '主密码',
-                    hintText: '请输入主密码',
-                    prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                      ),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                    ),
-                  ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return '请输入密码';
                     }
                     return null;
                   },
-                  onFieldSubmitted: (_) => _unlock(),
+                  onSubmitted: (_) => _unlock(),
                 ),
                 const SizedBox(height: 24),
                 if (authState.error != null) ...[
@@ -120,9 +105,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                             child: Text(
                               authState.error!,
                               style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onErrorContainer,
+                                color: Theme.of(context).colorScheme.onErrorContainer,
                               ),
                             ),
                           ),
