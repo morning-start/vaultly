@@ -4,12 +4,12 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/vault_entry.dart';
 import '../../core/providers/vault_service_provider.dart';
 import '../../core/utils/password_generator.dart';
+import '../widgets/secure_text_field.dart';
+import '../widgets/password_strength_indicator.dart';
+import '../widgets/entry_type_helper.dart';
 import '../widgets/password_generator_dialog.dart';
 import 'qr_scanner_page.dart';
 
-/// 添加/编辑条目页面
-///
-/// 支持多种条目类型：登录凭证、银行卡、安全笔记、身份信息
 class AddEntryPage extends ConsumerStatefulWidget {
   final String? entryId;
   final EntryType? initialEntryType;
@@ -30,11 +30,9 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   bool _isEditing = false;
   VaultEntry? _originalEntry;
 
-  // 基础字段
   final _titleController = TextEditingController();
   final _tagsController = TextEditingController();
 
-  // 登录凭证字段
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -42,7 +40,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   final _notesController = TextEditingController();
   final _totpSecretController = TextEditingController();
 
-  // 银行卡字段
   final _cardNumberController = TextEditingController();
   final _cardHolderController = TextEditingController();
   final _cvvController = TextEditingController();
@@ -51,11 +48,9 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   int? _expiryYear;
   CardType _cardType = CardType.other;
 
-  // 安全笔记字段
   final _noteContentController = TextEditingController();
   bool _isMarkdown = false;
 
-  // 身份信息字段
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _middleNameController = TextEditingController();
@@ -64,10 +59,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   final _addressController = TextEditingController();
   DateTime? _birthDate;
 
-  // UI 状态
-  bool _obscurePassword = true;
-  bool _obscureCvv = true;
-  bool _obscureIdNumber = true;
   int _passwordStrength = 0;
 
   @override
@@ -76,7 +67,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     _selectedType = widget.initialEntryType ?? EntryType.login;
     _passwordController.addListener(_updatePasswordStrength);
 
-    // 如果是编辑模式，加载现有条目
     if (widget.entryId != null) {
       _isEditing = true;
       _loadEntry();
@@ -94,7 +84,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         _titleController.text = entry.title;
         _tagsController.text = entry.tags.join(', ');
 
-        // 加载类型特定字段
         switch (entry.type) {
           case EntryType.login:
             if (entry is LoginEntry) {
@@ -136,7 +125,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
             }
             break;
           case EntryType.custom:
-            // 自定义类型不加载特定字段
             break;
         }
       });
@@ -183,7 +171,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
     if (password != null) {
       _passwordController.text = password;
-      setState(() => _obscurePassword = false);
     }
   }
 
@@ -198,7 +185,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         _totpSecretController.text = result.secret;
       });
 
-      // 如果标题为空，使用扫描到的标签
       if (_titleController.text.isEmpty && result.label.isNotEmpty) {
         setState(() {
           _titleController.text = result.label;
@@ -206,9 +192,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已扫描: ${result.issuer.isNotEmpty ? result.issuer : result.label}'),
-        ),
+        SnackBar(content: Text('已扫描: ${result.issuer.isNotEmpty ? result.issuer : result.label}')),
       );
     }
   }
@@ -231,7 +215,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
     VaultEntry entry;
 
-    // 根据类型创建对应的条目子类
     switch (_selectedType) {
       case EntryType.login:
         entry = LoginEntry(
@@ -301,7 +284,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         );
         break;
       case EntryType.custom:
-        // 自定义类型使用基础 VaultEntry
         entry = VaultEntry(
           id: id,
           title: _titleController.text,
@@ -378,7 +360,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // 条目类型选择（仅在添加时显示）
             if (!_isEditing)
               InputDecorator(
                 decoration: const InputDecoration(
@@ -405,7 +386,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
               ),
             if (!_isEditing) const SizedBox(height: 16),
 
-            // 标题
             TextFormField(
               controller: _titleController,
               decoration: const InputDecoration(
@@ -422,12 +402,10 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
             ),
             const SizedBox(height: 16),
 
-            // 类型特定字段
             ..._buildTypeSpecificFields(),
 
             const SizedBox(height: 16),
 
-            // 标签
             TextFormField(
               controller: _tagsController,
               decoration: const InputDecoration(
@@ -438,7 +416,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
             ),
             const SizedBox(height: 32),
 
-            // 保存按钮
             ElevatedButton.icon(
               onPressed: _saveEntry,
               icon: const Icon(Icons.save),
@@ -485,43 +462,27 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         keyboardType: TextInputType.emailAddress,
       ),
       const SizedBox(height: 16),
-      TextFormField(
+      SecureTextField(
         controller: _passwordController,
-        obscureText: _obscurePassword,
-        decoration: InputDecoration(
-          labelText: '密码',
-          prefixIcon: const Icon(Icons.lock),
-          suffixIcon: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-              ),
-              IconButton(
-                icon: const Icon(Icons.auto_awesome),
-                onPressed: _showPasswordGenerator,
-                tooltip: '生成密码',
-              ),
-            ],
-          ),
-        ),
+        labelText: '密码',
+        prefixIcon: Icons.lock,
       ),
-      if (_passwordController.text.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: _passwordStrength / 100,
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          valueColor: AlwaysStoppedAnimation(_getStrengthColor()),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '密码强度: ${_getStrengthText()}',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: _getStrengthColor(),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: _showPasswordGenerator,
+            tooltip: '生成密码',
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Text(
+            '生成密码',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      PasswordStrengthIndicator(strength: _passwordStrength),
       const SizedBox(height: 16),
       TextFormField(
         controller: _urlController,
@@ -560,14 +521,10 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
   List<Widget> _buildBankCardFields() {
     return [
-      TextFormField(
+      SecureTextField(
         controller: _cardNumberController,
-        obscureText: true,
-        decoration: const InputDecoration(
-          labelText: '卡号 *',
-          prefixIcon: Icon(Icons.credit_card),
-        ),
-        keyboardType: TextInputType.number,
+        labelText: '卡号 *',
+        prefixIcon: Icons.credit_card,
         validator: (value) {
           if (value == null || value.isEmpty) {
             return '请输入卡号';
@@ -588,7 +545,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           items: CardType.values.map((type) {
             return DropdownMenuItem(
               value: type,
-              child: Text(_getCardTypeName(type)),
+              child: Text(EntryTypeHelper.getCardTypeName(type)),
             );
           }).toList(),
           onChanged: (value) {
@@ -620,19 +577,10 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
       ),
       const SizedBox(height: 16),
-      TextFormField(
+      SecureTextField(
         controller: _cvvController,
-        obscureText: _obscureCvv,
-        decoration: InputDecoration(
-          labelText: 'CVV',
-          prefixIcon: const Icon(Icons.security),
-          suffixIcon: IconButton(
-            icon: Icon(_obscureCvv ? Icons.visibility : Icons.visibility_off),
-            onPressed: () => setState(() => _obscureCvv = !_obscureCvv),
-          ),
-        ),
-        keyboardType: TextInputType.number,
-        maxLength: 4,
+        labelText: 'CVV',
+        prefixIcon: Icons.security,
       ),
       const SizedBox(height: 16),
       TextFormField(
@@ -722,17 +670,10 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
       ),
       const SizedBox(height: 16),
-      TextFormField(
+      SecureTextField(
         controller: _idNumberController,
-        obscureText: _obscureIdNumber,
-        decoration: InputDecoration(
-          labelText: '证件号码',
-          prefixIcon: const Icon(Icons.badge),
-          suffixIcon: IconButton(
-            icon: Icon(_obscureIdNumber ? Icons.visibility : Icons.visibility_off),
-            onPressed: () => setState(() => _obscureIdNumber = !_obscureIdNumber),
-          ),
-        ),
+        labelText: '证件号码',
+        prefixIcon: Icons.badge,
       ),
       const SizedBox(height: 16),
       TextFormField(
@@ -764,35 +705,8 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       ),
     ];
   }
-
-  Color _getStrengthColor() {
-    if (_passwordStrength < 40) return Colors.red;
-    if (_passwordStrength < 70) return Colors.orange;
-    if (_passwordStrength < 90) return Colors.yellow.shade700;
-    return Colors.green;
-  }
-
-  String _getStrengthText() {
-    if (_passwordStrength < 40) return '弱';
-    if (_passwordStrength < 70) return '一般';
-    if (_passwordStrength < 90) return '强';
-    return '非常强';
-  }
-
-  String _getCardTypeName(CardType type) {
-    return switch (type) {
-      CardType.visa => 'Visa',
-      CardType.mastercard => 'Mastercard',
-      CardType.amex => 'American Express',
-      CardType.discover => 'Discover',
-      CardType.jcb => 'JCB',
-      CardType.unionPay => 'UnionPay',
-      CardType.other => '其他',
-    };
-  }
 }
 
-/// 有效期选择器
 class _ExpiryDatePicker extends StatefulWidget {
   final int initialMonth;
   final int initialYear;
