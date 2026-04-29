@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/utils/password_generator.dart';
+import '../../core/utils/password_policy.dart';
+import '../widgets/secure_text_field.dart';
+import '../widgets/password_strength_indicator.dart';
+import '../widgets/password_suggestions_widget.dart';
 
 class SetupPasswordPage extends ConsumerStatefulWidget {
   const SetupPasswordPage({super.key});
@@ -15,10 +19,7 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _obscureConfirm = true;
   int _passwordStrength = 0;
-  String _strengthLabel = '';
 
   @override
   void initState() {
@@ -37,8 +38,29 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
     final password = _passwordController.text;
     setState(() {
       _passwordStrength = PasswordGenerator.calculateStrength(password);
-      _strengthLabel = PasswordGenerator.getStrengthLabel(_passwordStrength);
     });
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return '请输入密码';
+    }
+    
+    final result = PasswordPolicy.validate(value);
+    if (!result.isValid) {
+      return result.firstError;
+    }
+    return null;
+  }
+
+  String? _validateConfirmPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return '请再次输入密码';
+    }
+    if (value != _passwordController.text) {
+      return '两次输入的密码不一致';
+    }
+    return null;
   }
 
   Future<void> _setupPassword() async {
@@ -89,91 +111,26 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                TextFormField(
+                SecureTextField(
                   controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: '主密码',
-                    hintText: '请输入主密码',
-                    prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword 
-                          ? Icons.visibility 
-                          : Icons.visibility_off),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return '请输入密码';
-                    }
-                    if (value.length < 8) {
-                      return '密码长度至少为 8 个字符';
-                    }
-                    return null;
-                  },
+                  labelText: '主密码',
+                  hintText: '请输入主密码',
+                  prefixIcon: Icons.lock,
+                  validator: _validatePassword,
+                  onChanged: (_) => _updatePasswordStrength(),
                 ),
                 const SizedBox(height: 8),
-                if (_passwordController.text.isNotEmpty) ...[
-                  LinearProgressIndicator(
-                    value: _passwordStrength / 100,
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    color: _getStrengthColor(),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '密码强度: $_strengthLabel',
-                    style: TextStyle(
-                      color: _getStrengthColor(),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+                PasswordStrengthIndicator(strength: _passwordStrength),
                 const SizedBox(height: 16),
-                TextFormField(
+                SecureTextField(
                   controller: _confirmController,
-                  obscureText: _obscureConfirm,
-                  decoration: InputDecoration(
-                    labelText: '确认密码',
-                    hintText: '请再次输入密码',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirm 
-                          ? Icons.visibility 
-                          : Icons.visibility_off),
-                      onPressed: () {
-                        setState(() => _obscureConfirm = !_obscureConfirm);
-                      },
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value != _passwordController.text) {
-                      return '两次输入的密码不一致';
-                    }
-                    return null;
-                  },
+                  labelText: '确认密码',
+                  hintText: '请再次输入密码',
+                  prefixIcon: Icons.lock_outline,
+                  validator: _validateConfirmPassword,
                 ),
                 const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '密码建议',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        _buildSuggestionItem('至少 12 个字符'),
-                        _buildSuggestionItem('包含大小写字母'),
-                        _buildSuggestionItem('包含数字和特殊字符'),
-                      ],
-                    ),
-                  ),
-                ),
+                PasswordSuggestionsWidget.policy(),
                 const SizedBox(height: 32),
                 ElevatedButton(
                   onPressed: authState.isLoading ? null : _setupPassword,
@@ -191,30 +148,5 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
         ),
       ),
     );
-  }
-
-  Widget _buildSuggestionItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Icon(
-            Icons.check_circle_outline,
-            size: 16,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 8),
-          Text(text, style: const TextStyle(fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
-  Color _getStrengthColor() {
-    if (_passwordStrength < 20) return Colors.red;
-    if (_passwordStrength < 40) return Colors.orange;
-    if (_passwordStrength < 60) return Colors.yellow.shade700;
-    if (_passwordStrength < 80) return Colors.lightGreen;
-    return Colors.green;
   }
 }
