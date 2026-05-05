@@ -62,6 +62,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     final biometricAvailable = authState.biometricAvailable;
     final isAuthenticating = authState.isAuthenticatingWithBiometric;
     final biometricTypeName = authState.biometricTypeName ?? '生物识别';
+    final biometricIcon = authState.biometricIcon ?? Icons.fingerprint;
 
     return Scaffold(
       appBar: AppBar(title: const Text('解锁保险库')),
@@ -80,7 +81,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   duration: const Duration(milliseconds: 300),
                   child: isAuthenticating
                       ? Icon(
-                          Icons.fingerprint,
+                          biometricIcon,
                           size: 80,
                           color: Theme.of(context).colorScheme.primary.withAlpha(153),
                         )
@@ -131,7 +132,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
                 // 生物识别按钮区域
                 if (biometricAvailable && !isAuthenticating)
-                  _buildBiometricButton(biometricTypeName)
+                  _buildBiometricButton(biometricTypeName, biometricIcon)
                 else if (isAuthenticating)
                   _buildAuthenticatingIndicator(biometricTypeName),
 
@@ -182,7 +183,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   Center(
                     child: TextButton.icon(
                       onPressed: _biometricUnlock,
-                      icon: const Icon(Icons.fingerprint, size: 18),
+                      icon: Icon(biometricIcon, size: 18),
                       label: Text('使用$biometricTypeName'),
                     ),
                   ),
@@ -196,7 +197,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   }
 
   /// 构建生物识别按钮
-  Widget _buildBiometricButton(String typeName) {
+  Widget _buildBiometricButton(String typeName, IconData icon) {
     return Center(
       child: Column(
         children: [
@@ -216,7 +217,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                 ),
               ),
               child: Icon(
-                Icons.fingerprint,
+                icon,
                 size: 40,
                 color: Theme.of(context).colorScheme.primary,
               ),

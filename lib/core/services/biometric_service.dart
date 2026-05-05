@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
 /// 生物识别服务
@@ -20,7 +19,7 @@ class BiometricService {
       final canCheck = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
       return canCheck && isDeviceSupported;
-    } on PlatformException {
+    } on LocalAuthException {
       return false;
     }
   }
@@ -34,7 +33,7 @@ class BiometricService {
       // 检查是否已注册生物识别
       final biometrics = await _localAuth.getAvailableBiometrics();
       return biometrics.isNotEmpty;
-    } on PlatformException {
+    } on LocalAuthException {
       return false;
     }
   }
@@ -43,7 +42,7 @@ class BiometricService {
   Future<List<BiometricType>> getAvailableBiometrics() async {
     try {
       return await _localAuth.getAvailableBiometrics();
-    } on PlatformException {
+    } on LocalAuthException {
       return [];
     }
   }
@@ -64,6 +63,9 @@ class BiometricService {
     }
 
     if (Platform.isAndroid) {
+      if (types.contains(BiometricType.fingerprint)) {
+        return '指纹';
+      }
       if (types.contains(BiometricType.strong) || types.contains(BiometricType.weak)) {
         return '指纹';
       }
@@ -76,11 +78,24 @@ class BiometricService {
   Future<IconData> getBiometricIcon() async {
     final types = await getAvailableBiometrics();
 
-    if (Platform.isIOS && types.contains(BiometricType.face)) {
-      return Icons.face_retouching_natural_outlined; // Face ID
+    if (Platform.isIOS) {
+      if (types.contains(BiometricType.face)) {
+        return Icons.face_retouching_natural_outlined; // Face ID
+      }
+      if (types.contains(BiometricType.fingerprint)) {
+        return Icons.fingerprint; // Touch ID
+      }
     }
 
-    return Icons.fingerprint; // Touch ID 或 Android 指纹
+    if (Platform.isAndroid) {
+      if (types.contains(BiometricType.fingerprint) || 
+          types.contains(BiometricType.strong) || 
+          types.contains(BiometricType.weak)) {
+        return Icons.fingerprint; // Android 指纹
+      }
+    }
+
+    return Icons.fingerprint; // 默认指纹图标
   }
 
   /// 执行生物识别认证
@@ -93,29 +108,36 @@ class BiometricService {
     try {
       final isAuthenticated = await _localAuth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-          useErrorDialogs: true,
-        ),
+        biometricOnly: true,
+        persistAcrossBackgrounding: true,
       );
 
       return isAuthenticated;
-    } on PlatformException catch (e) {
+    } on LocalAuthException catch (e) {
       // 处理各种异常情况
       switch (e.code) {
-        case 'NotAvailable':
+        case LocalAuthExceptionCode.noBiometricHardware:
           throw BiometricException('设备不支持生物识别');
-        case 'NotEnrolled':
+        case LocalAuthExceptionCode.noBiometricsEnrolled:
           throw BiometricException('未设置生物识别，请在系统设置中添加');
-        case 'LockedOut':
-          throw BiometricException('生物识别已锁定，请使用密码解锁');
-        case 'PermanentlyLockedOut':
-          throw BiometricException('生物识别已被永久锁定，请使用密码解锁');
-        case 'PasscodeNotSet':
+        case LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable:
+          throw BiometricException('生物识别暂时不可用，请稍后重试');
+        case LocalAuthExceptionCode.temporaryLockout:
+          throw BiometricException('生物识别已锁定，请稍后重试');
+        case LocalAuthExceptionCode.biometricLockout:
+          throw BiometricException('生物识别已被锁定，请使用密码解锁');
+        case LocalAuthExceptionCode.noCredentialsSet:
           throw BiometricException('未设置设备锁屏密码');
+        case LocalAuthExceptionCode.userCanceled:
+          throw BiometricException('用户已取消操作');
+        case LocalAuthExceptionCode.deviceError:
+          throw BiometricException('设备错误，请重试');
+        case LocalAuthExceptionCode.timeout:
+          throw BiometricException('操作超时，请重试');
+        case LocalAuthExceptionCode.userRequestedFallback:
+          throw BiometricException('请使用密码解锁');
         default:
-          throw BiometricException('生物识别认证失败: ${e.message}');
+          throw BiometricException('生物识别认证失败，请重试');
       }
     }
   }
@@ -124,7 +146,7 @@ class BiometricService {
   Future<void> cancelAuthentication() async {
     try {
       await _localAuth.stopAuthentication();
-    } on PlatformException {
+    } on LocalAuthException {
       // 忽略取消操作的错误
     }
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../crypto/services/auth_service.dart';
 import '../crypto/services/crypto_service.dart';
@@ -26,6 +27,7 @@ class AuthState {
   // 生物识别状态
   final bool biometricAvailable;
   final String? biometricTypeName;
+  final IconData? biometricIcon;
   final bool isAuthenticatingWithBiometric;
 
   AuthState({
@@ -35,6 +37,7 @@ class AuthState {
     this.error,
     this.biometricAvailable = false,
     this.biometricTypeName,
+    this.biometricIcon,
     this.isAuthenticatingWithBiometric = false,
   });
 
@@ -45,6 +48,7 @@ class AuthState {
     String? error,
     bool? biometricAvailable,
     String? biometricTypeName,
+    IconData? biometricIcon,
     bool? isAuthenticatingWithBiometric,
     bool clearError = false,
   }) {
@@ -55,6 +59,7 @@ class AuthState {
       error: clearError ? null : (error ?? this.error),
       biometricAvailable: biometricAvailable ?? this.biometricAvailable,
       biometricTypeName: biometricTypeName ?? this.biometricTypeName,
+      biometricIcon: biometricIcon ?? this.biometricIcon,
       isAuthenticatingWithBiometric: isAuthenticatingWithBiometric ?? this.isAuthenticatingWithBiometric,
     );
   }
@@ -75,10 +80,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final bioAvailability = await _authService.checkBiometricAvailability();
       if (bioAvailability.available && bioAvailability is BiometricAvailable) {
+        final biometricService = BiometricService();
+        final biometricIcon = await biometricService.getBiometricIcon();
+        
         state = state.copyWith(
           isPasswordSet: isPasswordSet,
           biometricAvailable: true,
           biometricTypeName: bioAvailability.biometricTypeName,
+          biometricIcon: biometricIcon,
           isLoading: false,
         );
       } else {
@@ -105,16 +114,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       // 设置密码后重新检查生物识别可用性
       final bioAvailability = await _authService.checkBiometricAvailability();
-
-      state = state.copyWith(
-        isPasswordSet: true,
-        isUnlocked: true,
-        isLoading: false,
-        biometricAvailable: bioAvailability.available,
-        biometricTypeName: bioAvailability is BiometricAvailable
-            ? bioAvailability.biometricTypeName
-            : null,
-      );
+      
+      if (bioAvailability.available && bioAvailability is BiometricAvailable) {
+        final biometricService = BiometricService();
+        final icon = await biometricService.getBiometricIcon();
+        state = state.copyWith(
+          isPasswordSet: true,
+          isUnlocked: true,
+          isLoading: false,
+          biometricAvailable: bioAvailability.available,
+          biometricTypeName: bioAvailability.biometricTypeName,
+          biometricIcon: icon,
+        );
+      } else {
+        state = state.copyWith(
+          isPasswordSet: true,
+          isUnlocked: true,
+          isLoading: false,
+          biometricAvailable: false,
+          biometricTypeName: null,
+          biometricIcon: null,
+        );
+      }
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
