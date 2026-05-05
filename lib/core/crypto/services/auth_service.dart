@@ -160,6 +160,73 @@ class AuthService {
     _isUnlocked = false;
   }
 
+  /// 启用生物识别解锁
+  ///
+  /// 流程：
+  /// 1. 验证主密码是否正确
+  /// 2. 使用系统指纹API进行认证
+  /// 3. 认证成功后，将加密密钥保存到安全存储
+  /// 返回是否启用成功
+  Future<bool> enableBiometric(String password) async {
+    // 检查是否已设置密码
+    final isPasswordSet = await this.isPasswordSet();
+    if (!isPasswordSet) {
+      throw AuthException('请先设置主密码');
+    }
+
+    // 验证主密码
+    final isPasswordCorrect = await verifyMasterPassword(password);
+    if (!isPasswordCorrect) {
+      throw AuthException('主密码错误');
+    }
+
+    // 主密码验证成功，锁定会话（需要先解锁才能启用生物识别）
+    lock();
+
+    // 执行生物识别认证（使用系统已注册的指纹）
+    final biometricService = BiometricService();
+    try {
+      final isAuthenticated = await biometricService.authenticate(
+        reason: '启用生物识别解锁',
+      );
+
+      if (!isAuthenticated) {
+        return false;
+      }
+
+      // 生物识别认证成功，将 encryptionKey 保存到安全存储
+      // 注意：这里需要先重新验证密码获取 encryptionKey
+      final saltBase64 = await _secureStorage.read(key: _keySalt);
+      if (saltBase64 == null) {
+        throw AuthException('密钥数据不存在');
+      }
+
+      final salt = base64Decode(saltBase64);
+      final keyMaterial = CryptoService.deriveKeyMaterial(password, salt);
+      
+      // 将 encryptionKey 保存到安全存储
+      await _secureStorage.write(
+        key: _keyEncryptionKey,
+        value: base64Encode(keyMaterial.key),
+      );
+
+      // 设置解锁状态
+      _encryptionKey = keyMaterial.key;
+      _isUnlocked = true;
+
+      return true;
+    } on BiometricException catch (e) {
+      throw AuthException(e.message);
+    }
+  }
+
+  /// 禁用生物识别解锁
+  ///
+  /// 从安全存储中删除加密密钥
+  Future<void> disableBiometric() async {
+    await _secureStorage.delete(key: _keyEncryptionKey);
+  }
+
   /// 使用生物识别解锁
   ///
   /// 流程：

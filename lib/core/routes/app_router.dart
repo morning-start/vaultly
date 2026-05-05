@@ -9,6 +9,7 @@ import '../../ui/pages/add_entry_page.dart';
 import '../../ui/pages/entry_detail_page.dart';
 import '../../ui/pages/webdav_config_page.dart';
 import '../../ui/pages/webdav_sync_page.dart';
+import '../../ui/pages/biometric_settings_page.dart';
 import '../providers/auth_provider.dart';
 import '../models/vault_entry.dart';
 
@@ -128,6 +129,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/webdav/config',
         builder: (context, state) => const WebDAVConfigPage(),
+      ),
+
+      // 生物识别设置页
+      GoRoute(
+        path: '/settings/biometric',
+        builder: (context, state) => const BiometricSettingsPage(),
       ),
     ],
 

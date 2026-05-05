@@ -119,6 +119,11 @@ class _VaultPageState extends ConsumerState<VaultPage> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.fingerprint),
+            onPressed: () => context.push('/settings/biometric'),
+            tooltip: '生物识别设置',
+          ),
+          IconButton(
             icon: const Icon(Icons.lock),
             onPressed: () {
               ref.read(authNotifierProvider.notifier).lock();

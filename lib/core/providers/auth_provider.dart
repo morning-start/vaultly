@@ -191,6 +191,57 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 启用生物识别解锁
+  ///
+  /// 流程：
+  /// 1. 验证主密码
+  /// 2. 使用系统指纹进行认证
+  /// 3. 认证成功后保存密钥到安全存储
+  Future<bool> enableBiometric(String password) async {
+    try {
+      state = state.copyWith(isLoading: true, error: null);
+      final success = await _authService.enableBiometric(password);
+
+      if (success) {
+        final biometricService = BiometricService();
+        final bioAvailability = await _authService.checkBiometricAvailability();
+        final icon = await biometricService.getBiometricIcon();
+        
+        state = state.copyWith(
+          isLoading: false,
+          biometricAvailable: true,
+          biometricTypeName: bioAvailability is BiometricAvailable ? bioAvailability.biometricTypeName : '生物识别',
+          biometricIcon: icon,
+          error: null,
+        );
+      } else {
+        state = state.copyWith(isLoading: false, error: '生物识别启用失败');
+      }
+
+      return success;
+    } on AuthException catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  /// 禁用生物识别解锁
+  Future<void> disableBiometric() async {
+    try {
+      await _authService.disableBiometric();
+      state = state.copyWith(
+        biometricAvailable: false,
+        biometricTypeName: null,
+        biometricIcon: null,
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
   void lock() {
     _authService.lock();
     state = state.copyWith(isUnlocked: false);
