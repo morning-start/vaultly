@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Flutter 官方下载仓库，用于获取 engine artifacts
+        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
     }
 }
 

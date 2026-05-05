@@ -41,25 +41,28 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            // CI 环境: storeFile 是相对 app 模块的路径 (如 "keystore.jks")
-            // 本地开发: storeFile 是相对项目根目录的路径 (如 "../../my-release-key.jks")
-            storeFile = keystoreProperties["storeFile"]?.let {
-                val path = it as String
-                if (path.startsWith("../") || path.startsWith("/")) {
-                    rootProject.file(path)  // 本地开发: 使用相对根目录的路径
+            val keyAliasVal = keystoreProperties["keyAlias"] as? String
+            val keyPasswordVal = keystoreProperties["keyPassword"] as? String
+            val storeFileVal = keystoreProperties["storeFile"] as? String
+            val storePasswordVal = keystoreProperties["storePassword"] as? String
+            
+            if (keyAliasVal != null && keyPasswordVal != null && storeFileVal != null && storePasswordVal != null) {
+                keyAlias = keyAliasVal
+                keyPassword = keyPasswordVal
+                storeFile = if (storeFileVal.startsWith("../") || storeFileVal.startsWith("/")) {
+                    rootProject.file(storeFileVal)
                 } else {
-                    file(path)  // CI 环境: 使用相对 app 目录的路径
+                    file(storeFileVal)
                 }
+                storePassword = storePasswordVal
             }
-            storePassword = keystoreProperties["storePassword"] as String
         }
     }
 
     buildTypes {
         release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
+            val hasReleaseSigning = signingConfigs.getByName("release").storeFile != null
+            signingConfig = if (keystorePropertiesFile.exists() && hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
