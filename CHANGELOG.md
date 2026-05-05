@@ -7,8 +7,33 @@
 
 ## [未发布]
 
+
+## [2.5.1] - 2026-05-05
+
+### 改进
+- **Android 构建**
+  - 添加 Flutter 仓库并改进签名配置
+  - 优化 Android 构建流程
+
+## [2.5.0] - 2026-04-30
+
 ### 新增
-- 计划中的功能...
+- **生物识别解锁功能**
+  - 恢复指纹和面部识别解锁功能
+  - 支持系统级生物识别 API
+
+### 改进
+- **UI 组件重构**
+  - 重构 unlock_page 和 vault_page 使用新组件
+  - 重构 add_entry_page 消除重复代码并使用新组件
+  - 重构 entry_detail_page 和 webdav_config_page
+
+### 新增（续）
+- **EntryTypeHelper 工具类和 EntryCardWidget 组件**
+- **密码强度指示器和建议组件**
+
+### 文档
+- 更新 CHANGELOG.md 包含 2.2.0 至 2.4.0 版本变更
 
 ## [2.4.1] - 2025-02-22
 
@@ -179,7 +204,9 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v2.4.1...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v2.5.1...HEAD
+[2.5.1]: https://github.com/morning-start/vaultly/releases/tag/v2.5.1
+[2.5.0]: https://github.com/morning-start/vaultly/releases/tag/v2.5.0
 [2.4.1]: https://github.com/morning-start/vaultly/releases/tag/v2.4.1
 [2.4.0]: https://github.com/morning-start/vaultly/releases/tag/v2.4.0
 [2.3.0]: https://github.com/morning-start/vaultly/releases/tag/v2.3.0
