@@ -99,6 +99,36 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
+      - name: 缓存 Gradle Wrapper
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: 缓存 Gradle 依赖
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/jdks
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('android/**/*.gradle*', 'android/**/build.gradle.kts', 'android/settings.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-caches-
+
+      - name: 缓存 Android SDK
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.android/cache
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools
+            ${{ env.ANDROID_SDK_ROOT }}/platforms
+            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
+            ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools
+          key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-
+
       - name: 设置 Flutter
         uses: subosito/flutter-action@v2
         with:
