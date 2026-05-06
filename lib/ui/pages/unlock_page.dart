@@ -111,7 +111,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
                 const SizedBox(height: 32),
 
-                // 密码输入框（生物识别认证时不禁用，允许同时使用）
+                // 密码输入框
                 SecureTextField(
                   controller: _passwordController,
                   labelText: '主密码',
@@ -129,14 +129,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                 ),
 
                 const SizedBox(height: 16),
-
-                // 生物识别按钮区域
-                if (biometricAvailable && !isAuthenticating)
-                  _buildBiometricButton(biometricTypeName, biometricIcon)
-                else if (isAuthenticating)
-                  _buildAuthenticatingIndicator(biometricTypeName),
-
-                const SizedBox(height: 24),
 
                 // 错误提示
                 if (authState.error != null && !isAuthenticating) ...[
@@ -177,16 +169,13 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                       : const Text('解锁'),
                 ),
 
-                // 提示文字
+                // 生物识别按钮区域（只显示一个）
                 if (biometricAvailable) ...[
                   const SizedBox(height: 16),
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: _biometricUnlock,
-                      icon: Icon(biometricIcon, size: 18),
-                      label: Text('使用$biometricTypeName'),
-                    ),
-                  ),
+                  if (isAuthenticating)
+                    _buildAuthenticatingIndicator(biometricTypeName)
+                  else
+                    _buildBiometricButton(biometricTypeName, biometricIcon),
                 ],
               ],
             ),

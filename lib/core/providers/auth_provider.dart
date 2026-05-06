@@ -67,8 +67,9 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
+  final BiometricService _biometricService;
 
-  AuthNotifier(this._authService) : super(AuthState()) {
+  AuthNotifier(this._authService, this._biometricService) : super(AuthState()) {
     _init();
   }
 
@@ -79,13 +80,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // 检查生物识别可用性
     try {
       final bioAvailability = await _authService.checkBiometricAvailability();
-      if (bioAvailability.available && bioAvailability is BiometricAvailable) {
-        final biometricService = BiometricService();
-        final biometricIcon = await biometricService.getBiometricIcon();
+      if (bioAvailability is BiometricAvailable) {
+        final biometricIcon = await _biometricService.getBiometricIcon();
         
         state = state.copyWith(
           isPasswordSet: isPasswordSet,
-          biometricAvailable: true,
+          biometricAvailable: bioAvailability.available,
           biometricTypeName: bioAvailability.biometricTypeName,
           biometricIcon: biometricIcon,
           isLoading: false,
@@ -115,9 +115,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // 设置密码后重新检查生物识别可用性
       final bioAvailability = await _authService.checkBiometricAvailability();
       
-      if (bioAvailability.available && bioAvailability is BiometricAvailable) {
-        final biometricService = BiometricService();
-        final icon = await biometricService.getBiometricIcon();
+      if (bioAvailability is BiometricAvailable) {
+        final icon = await _biometricService.getBiometricIcon();
         state = state.copyWith(
           isPasswordSet: true,
           isUnlocked: true,
@@ -203,9 +202,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final success = await _authService.enableBiometric(password);
 
       if (success) {
-        final biometricService = BiometricService();
         final bioAvailability = await _authService.checkBiometricAvailability();
-        final icon = await biometricService.getBiometricIcon();
+        final icon = await _biometricService.getBiometricIcon();
         
         state = state.copyWith(
           isLoading: false,
@@ -250,5 +248,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final authService = ref.watch(authServiceProvider);
-  return AuthNotifier(authService);
+  final biometricService = ref.watch(biometricServiceProvider);
+  return AuthNotifier(authService, biometricService);
 });
