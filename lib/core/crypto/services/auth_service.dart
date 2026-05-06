@@ -15,7 +15,7 @@ class AuthService {
   // 存储键名
   static const _keyMasterPassword = 'master_password_hash';
   static const _keySalt = 'master_salt';
-  static const _keyEncryptionKey = 'encryption_key';
+  static const _keyBiometricEncryptionKey = 'biometric_encryption_key';
   static const _keyFailedAttempts = 'failed_attempts';
   static const _keyLockedUntil = 'locked_until';
 
@@ -58,10 +58,9 @@ class AuthService {
     // 生成新的密钥材料
     final keyMaterial = CryptoService.generateKeyMaterial(password);
 
-    // 保存到安全存储
+    // 保存到安全存储（不保存 encryptionKey，只在启用生物识别时保存）
     await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
     await _secureStorage.write(key: _keySalt, value: keyMaterial.saltBase64);
-    await _secureStorage.write(key: _keyEncryptionKey, value: keyMaterial.keyBase64);
 
     // 重置失败计数
     await _resetFailedAttempts();
@@ -174,14 +173,11 @@ class AuthService {
       throw AuthException('请先设置主密码');
     }
 
-    // 验证主密码
+    // 验证主密码（验证成功后 encryptionKey 已经在内存中）
     final isPasswordCorrect = await verifyMasterPassword(password);
     if (!isPasswordCorrect) {
       throw AuthException('主密码错误');
     }
-
-    // 主密码验证成功，锁定会话（需要先解锁才能启用生物识别）
-    lock();
 
     // 执行生物识别认证（使用系统已注册的指纹）
     final biometricService = BiometricService();
@@ -194,25 +190,15 @@ class AuthService {
         return false;
       }
 
-      // 生物识别认证成功，将 encryptionKey 保存到安全存储
-      // 注意：这里需要先重新验证密码获取 encryptionKey
-      final saltBase64 = await _secureStorage.read(key: _keySalt);
-      if (saltBase64 == null) {
+      // 生物识别认证成功，将内存中的 encryptionKey 保存到安全存储
+      if (_encryptionKey == null) {
         throw AuthException('密钥数据不存在');
       }
 
-      final salt = base64Decode(saltBase64);
-      final keyMaterial = CryptoService.deriveKeyMaterial(password, salt);
-      
-      // 将 encryptionKey 保存到安全存储
       await _secureStorage.write(
-        key: _keyEncryptionKey,
-        value: base64Encode(keyMaterial.key),
+        key: _keyBiometricEncryptionKey,
+        value: base64Encode(_encryptionKey!),
       );
-
-      // 设置解锁状态
-      _encryptionKey = keyMaterial.key;
-      _isUnlocked = true;
 
       return true;
     } on BiometricException catch (e) {
@@ -224,7 +210,13 @@ class AuthService {
   ///
   /// 从安全存储中删除加密密钥
   Future<void> disableBiometric() async {
-    await _secureStorage.delete(key: _keyEncryptionKey);
+    await _secureStorage.delete(key: _keyBiometricEncryptionKey);
+  }
+
+  /// 检查用户是否已启用生物识别解锁
+  Future<bool> isBiometricEnabledByUser() async {
+    final key = await _secureStorage.read(key: _keyBiometricEncryptionKey);
+    return key != null && key.isNotEmpty;
   }
 
   /// 使用生物识别解锁
@@ -238,6 +230,12 @@ class AuthService {
     final isPasswordSet = await this.isPasswordSet();
     if (!isPasswordSet) {
       throw AuthException('请先设置主密码');
+    }
+
+    // 检查是否已启用生物识别
+    final isEnabled = await isBiometricEnabledByUser();
+    if (!isEnabled) {
+      throw AuthException('生物识别未启用');
     }
 
     // 检查是否被锁定
@@ -258,7 +256,7 @@ class AuthService {
       }
 
       // 生物识别成功，从安全存储读取 encryptionKey
-      final keyBase64 = await _secureStorage.read(key: _keyEncryptionKey);
+      final keyBase64 = await _secureStorage.read(key: _keyBiometricEncryptionKey);
       if (keyBase64 == null || keyBase64.isEmpty) {
         throw AuthException('加密密钥不存在，需要重新设置密码');
       }
@@ -284,7 +282,7 @@ class AuthService {
       // 检查密码是否已设置
       final isPasswordSet = await this.isPasswordSet();
       if (!isPasswordSet) {
-        return const BiometricAvailable(
+        return const BiometricUnavailable(
           available: false,
           reason: '未设置主密码',
         );
@@ -292,24 +290,35 @@ class AuthService {
 
       // 检查设备支持情况
       final biometricService = BiometricService();
-      final isAvailable = await biometricService.isBiometricEnabled();
+      final isDeviceAvailable = await biometricService.isBiometricEnrolled();
 
-      if (!isAvailable) {
-        return const BiometricAvailable(
+      if (!isDeviceAvailable) {
+        return const BiometricUnavailable(
           available: false,
-          reason: '设备不支持或未启用生物识别',
+          reason: '设备不支持或未注册生物识别',
         );
       }
+
+      // 检查用户是否已启用生物识别
+      final isUserEnabled = await isBiometricEnabledByUser();
 
       // 获取生物识别类型名称
       final typeName = await biometricService.getBiometricTypeName();
 
-      return BiometricAvailable(
-        available: true,
-        biometricTypeName: typeName,
-      );
+      if (isUserEnabled) {
+        return BiometricAvailable(
+          available: true,
+          biometricTypeName: typeName,
+        );
+      } else {
+        return BiometricAvailable(
+          available: false,
+          biometricTypeName: typeName,
+          reason: '生物识别未启用，请在设置中开启',
+        );
+      }
     } on Exception catch (e) {
-      return BiometricAvailable(
+      return BiometricUnavailable(
         available: false,
         reason: e.toString(),
       );
@@ -323,12 +332,22 @@ class AuthService {
       throw AuthException('当前密码错误');
     }
 
+    // 检查是否已启用生物识别
+    final wasBiometricEnabled = await isBiometricEnabledByUser();
+
     // 生成新密钥
     final keyMaterial = CryptoService.generateKeyMaterial(newPassword);
 
     await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
     await _secureStorage.write(key: _keySalt, value: keyMaterial.saltBase64);
-    await _secureStorage.write(key: _keyEncryptionKey, value: keyMaterial.keyBase64);
+
+    // 如果之前启用了生物识别，同时更新生物识别的密钥
+    if (wasBiometricEnabled) {
+      await _secureStorage.write(
+        key: _keyBiometricEncryptionKey,
+        value: keyMaterial.keyBase64,
+      );
+    }
 
     _encryptionKey = keyMaterial.key;
   }
@@ -342,7 +361,7 @@ class AuthService {
 
     await _secureStorage.delete(key: _keyMasterPassword);
     await _secureStorage.delete(key: _keySalt);
-    await _secureStorage.delete(key: _keyEncryptionKey);
+    await _secureStorage.delete(key: _keyBiometricEncryptionKey);
     await _secureStorage.delete(key: _keyFailedAttempts);
     await _secureStorage.delete(key: _keyLockedUntil);
 

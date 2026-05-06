@@ -13,8 +13,8 @@ class BiometricService {
     LocalAuthentication? localAuth,
   }) : _localAuth = localAuth ?? LocalAuthentication();
 
-  /// 检查设备是否支持生物识别
-  Future<bool> isBiometricAvailable() async {
+  /// 检查设备硬件是否支持生物识别
+  Future<bool> isDeviceSupported() async {
     try {
       final canCheck = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
@@ -24,11 +24,13 @@ class BiometricService {
     }
   }
 
-  /// 检查生物识别是否已启用（用户已设置）
-  Future<bool> isBiometricEnabled() async {
+  /// 检查设备是否支持且已注册生物识别
+  /// 
+  /// 返回 true 表示设备支持生物识别且用户已在系统设置中注册了至少一种生物识别方式
+  Future<bool> isBiometricEnrolled() async {
     try {
-      final available = await isBiometricAvailable();
-      if (!available) return false;
+      final deviceSupported = await isDeviceSupported();
+      if (!deviceSupported) return false;
 
       // 检查是否已注册生物识别
       final biometrics = await _localAuth.getAvailableBiometrics();
@@ -36,6 +38,18 @@ class BiometricService {
     } on LocalAuthException {
       return false;
     }
+  }
+
+  /// 保留原方法名以保持向后兼容，功能同 isBiometricEnrolled
+  @Deprecated('Use isBiometricEnrolled instead')
+  Future<bool> isBiometricEnabled() async {
+    return isBiometricEnrolled();
+  }
+
+  /// 保留原方法名以保持向后兼容，功能同 isDeviceSupported
+  @Deprecated('Use isDeviceSupported instead')
+  Future<bool> isBiometricAvailable() async {
+    return isDeviceSupported();
   }
 
   /// 获取可用的生物识别类型
