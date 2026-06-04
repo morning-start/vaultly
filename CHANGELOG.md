@@ -7,6 +7,11 @@
 
 ## [未发布]
 
+### 修复
+- **Android 构建修复**
+  - 移除阿里云镜像源（502 Bad Gateway），回退到官方 Google/Maven Central 仓库
+  - 依赖 GitHub Actions 缓存保障后续构建速度
+
 ## [3.0.0] - 2026-05-05
 
 ### 新增
@@ -24,7 +29,6 @@
   - 升级 `actions/cache` 到 v4，提升缓存效率
   - 添加 Gradle Wrapper、Gradle 依赖和 Android SDK 缓存配置
   - 优化 Gradle 构建参数（并行构建、构建缓存、按需配置）
-  - 添加阿里云镜像源加速国内依赖下载
   - 优化 JVM 内存配置，采用 Parallel GC
   - 启用非传递 R 类和非常量 R 类加速构建
 

@@ -1,10 +1,5 @@
 allprojects {
     repositories {
-        // 阿里云镜像源（加速国内构建）
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/central") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        
         google()
         mavenCentral()
         // Flutter 官方下载仓库，用于获取 engine artifacts
