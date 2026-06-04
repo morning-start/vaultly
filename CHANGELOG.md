@@ -9,8 +9,13 @@
 
 ### 改进
 - **CI/CD 构建优化**
+  - 添加 Concurrency 配置，自动取消同一分支的冗余构建
+  - 使用官方 `gradle/actions/setup-gradle@v4` 替代手动缓存，缓存策略更智能
+  - 使用矩阵构建合并 APK 和 AAB 构建任务，代码量减少 40%
+  - 添加 `flutter pub get --offline` 离线回退机制，缓存命中时跳过网络请求
+  - 升级 `actions/cache` 到 v4，提升缓存效率
   - 添加 Gradle Wrapper、Gradle 依赖和 Android SDK 缓存配置
-  - 优化 Gradle 构建参数（并行构建、构建缓存、配置缓存）
+  - 优化 Gradle 构建参数（并行构建、构建缓存、按需配置）
   - 添加阿里云镜像源加速国内依赖下载
   - 优化 JVM 内存配置，采用 Parallel GC
   - 启用非传递 R 类和非常量 R 类加速构建

@@ -22,6 +22,11 @@ on:
           - release
           - debug
 
+# 取消同一分支上正在进行的冗余构建，节省 CI 资源
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   FLUTTER_VERSION: '3.38.9'
   JAVA_VERSION: '17'
@@ -51,12 +56,35 @@ jobs:
       - name: 运行测试
         run: flutter test
 
-  # 构建 Android APK (分架构)
-  build-android-apk:
-    name: 构建 Android APK
+  # 使用矩阵构建，APK 和 AAB 共享相同的前置步骤
+  build-android:
+    name: 构建 Android ${{ matrix.target-name }}
     needs: analyze-and-test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    strategy:
+      matrix:
+        include:
+          - target: apk
+            target-name: APK（分架构）
+            build-command: >
+              flutter build apk
+              --release
+              --split-per-abi
+              --build-name=${{ github.ref_name }}
+              --build-number=${{ github.run_number }}
+            artifact-path: build/app/outputs/flutter-apk/vaultly-*.apk
+            artifact-name: android-apk
+          - target: aab
+            target-name: AAB（App Bundle）
+            build-command: >
+              flutter build appbundle
+              --release
+              --build-name=${{ github.ref_name }}
+              --build-number=${{ github.run_number }}
+            artifact-path: build/app/outputs/bundle/release/vaultly-*.aab
+            artifact-name: android-aab
 
     steps:
       - name: 检出代码
@@ -68,25 +96,13 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: 缓存 Gradle Wrapper
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
-
-      - name: 缓存 Gradle 依赖
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/jdks
-          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('android/**/*.gradle*', 'android/**/build.gradle.kts', 'android/settings.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-caches-
+      # 官方 Gradle 缓存方案 — 自动管理 Gradle distribution 和依赖缓存
+      # 相比手动 actions/cache，具有更智能的缓存键和失效策略
+      - name: 设置 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v4
 
       - name: 缓存 Android SDK
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.android/cache
@@ -105,142 +121,53 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 获取依赖
+      # Flutter 依赖缓存命中时跳过网络请求
+      - name: 获取依赖（优先离线）
+        id: pub-offline
+        run: flutter pub get --offline
+        continue-on-error: true
+
+      - name: 获取依赖（在线回退）
+        if: steps.pub-offline.conclusion != 'success'
         run: flutter pub get
 
       - name: 配置签名密钥
         run: |
-          # 从 Secrets 解码密钥库文件
           echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > android/app/keystore.jks
-          
-          # 创建 key.properties 文件
           cat > android/key.properties << EOF
           storePassword=${{ secrets.STORE_PASSWORD }}
           keyPassword=${{ secrets.KEY_PASSWORD }}
           keyAlias=${{ secrets.KEY_ALIAS }}
           storeFile=keystore.jks
           EOF
-          
           echo "签名配置完成"
 
-      - name: 构建多架构 APK
-        run: |
-          flutter build apk \
-            --release \
-            --split-per-abi \
-            --build-name=${{ github.ref_name }} \
-            --build-number=${{ github.run_number }}
+      - name: 构建 ${{ matrix.target-name }}
+        run: ${{ matrix.build-command }}
 
-      - name: 重命名 APK 文件
+      - name: 重命名产物
         run: |
-          cd build/app/outputs/flutter-apk
-          mv app-arm64-v8a-release.apk vaultly-${{ github.ref_name }}-android-v8.apk
-          mv app-armeabi-v7a-release.apk vaultly-${{ github.ref_name }}-android-v7.apk
+          if [[ "${{ matrix.target }}" == "apk" ]]; then
+            cd build/app/outputs/flutter-apk
+            mv app-arm64-v8a-release.apk vaultly-${{ github.ref_name }}-android-v8.apk
+            mv app-armeabi-v7a-release.apk vaultly-${{ github.ref_name }}-android-v7.apk
+          else
+            cd build/app/outputs/bundle/release
+            mv app-release.aab vaultly-${{ github.ref_name }}-android.aab
+          fi
           ls -la
 
-      - name: 上传 APK 产物
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: build/app/outputs/flutter-apk/vaultly-*.apk
-          retention-days: 30
-
-  # 构建 Android App Bundle (AAB)
-  build-android-aab:
-    name: 构建 Android AAB
-    needs: analyze-and-test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: 缓存 Gradle Wrapper
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
-
-      - name: 缓存 Gradle 依赖
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/jdks
-          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('android/**/*.gradle*', 'android/**/build.gradle.kts', 'android/settings.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-caches-
-
-      - name: 缓存 Android SDK
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.android/cache
-            ${{ env.ANDROID_SDK_ROOT }}/build-tools
-            ${{ env.ANDROID_SDK_ROOT }}/platforms
-            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
-            ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools
-          key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/app/build.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-android-sdk-
-
-      - name: 设置 Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
-
-      - name: 获取依赖
-        run: flutter pub get
-
-      - name: 配置签名密钥
-        run: |
-          # 从 Secrets 解码密钥库文件
-          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > android/app/keystore.jks
-          
-          # 创建 key.properties 文件
-          cat > android/key.properties << EOF
-          storePassword=${{ secrets.STORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=keystore.jks
-          EOF
-          
-          echo "签名配置完成"
-
-      - name: 构建 AAB
-        run: |
-          flutter build appbundle \
-            --release \
-            --build-name=${{ github.ref_name }} \
-            --build-number=${{ github.run_number }}
-
-      - name: 重命名 AAB 文件
-        run: |
-          cd build/app/outputs/bundle/release
-          mv app-release.aab vaultly-${{ github.ref_name }}-android.aab
-          ls -la
-
-      - name: 上传 AAB 产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-aab
-          path: build/app/outputs/bundle/release/vaultly-*.aab
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
           retention-days: 30
 
   # 发布到 GitHub Releases
   release:
     name: 发布到 GitHub Releases
-    needs: [build-android-apk, build-android-aab]
+    needs: [build-android]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -297,20 +224,20 @@ jobs:
   # 构建状态通知
   notify:
     name: 构建通知
-    needs: [build-android-apk, build-android-aab]
+    needs: [build-android]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: 构建成功通知
-        if: needs.build-android-apk.result == 'success' && needs.build-android-aab.result == 'success'
+        if: needs.build-android.result == 'success'
         run: |
           echo "✅ Android 构建成功！"
           echo "版本: ${{ github.ref_name }}"
           echo "提交: ${{ github.sha }}"
 
       - name: 构建失败通知
-        if: needs.build-android-apk.result == 'failure' || needs.build-android-aab.result == 'failure'
+        if: needs.build-android.result == 'failure'
         run: |
           echo "❌ Android 构建失败！"
           echo "版本: ${{ github.ref_name }}"

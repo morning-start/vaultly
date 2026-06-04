@@ -6,6 +6,11 @@ on:
       - main
       - dev
 
+# 取消同一次 PR 推送时正在进行的冗余检查，节省 CI 资源
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   FLUTTER_VERSION: '3.38.9'
   JAVA_VERSION: '17'
@@ -99,25 +104,11 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: 缓存 Gradle Wrapper
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
-
-      - name: 缓存 Gradle 依赖
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/jdks
-          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('android/**/*.gradle*', 'android/**/build.gradle.kts', 'android/settings.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-caches-
+      - name: 设置 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v4
 
       - name: 缓存 Android SDK
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.android/cache
@@ -136,7 +127,13 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 获取依赖
+      - name: 获取依赖（优先离线）
+        id: pub-offline
+        run: flutter pub get --offline
+        continue-on-error: true
+
+      - name: 获取依赖（在线回退）
+        if: steps.pub-offline.conclusion != 'success'
         run: flutter pub get
 
       - name: 构建 Android Debug APK
