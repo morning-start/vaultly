@@ -7,6 +7,14 @@
 
 ## [未发布]
 
+## [3.0.0] - 2026-05-05
+
+### 新增
+- **生物识别解锁功能**
+  - 恢复指纹和面部识别解锁功能
+  - 支持系统级生物识别 API
+  - 添加生物识别设置页面
+
 ### 改进
 - **CI/CD 构建优化**
   - 添加 Concurrency 配置，自动取消同一分支的冗余构建
@@ -19,6 +27,10 @@
   - 添加阿里云镜像源加速国内依赖下载
   - 优化 JVM 内存配置，采用 Parallel GC
   - 启用非传递 R 类和非常量 R 类加速构建
+
+- **项目文档**
+  - 添加完整的项目文档集
+  - 优化文档结构
 
 
 ## [2.5.1] - 2026-05-05
@@ -217,7 +229,8 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v2.5.1...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/morning-start/vaultly/releases/tag/v3.0.0
 [2.5.1]: https://github.com/morning-start/vaultly/releases/tag/v2.5.1
 [2.5.0]: https://github.com/morning-start/vaultly/releases/tag/v2.5.0
 [2.4.1]: https://github.com/morning-start/vaultly/releases/tag/v2.4.1
