@@ -7,6 +7,11 @@
 
 ## [未发布]
 
+### 改进
+- **Android 构建触发方式**
+  - 构建工作流改为仅 Tag 推送时触发，不再监听分支推送和 PR
+  - 保留 `workflow_dispatch` 手动触发能力
+
 ### 修复
 - **Android 构建修复**
   - 移除阿里云镜像源（502 Bad Gateway），回退到官方 Google/Maven Central 仓库
