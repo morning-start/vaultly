@@ -40,7 +40,14 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 获取依赖
+      # 优先离线获取依赖，缓存命中时跳过 pub.dev 请求
+      - name: 获取依赖（优先离线）
+        id: pub-offline
+        run: flutter pub get --offline
+        continue-on-error: true
+
+      - name: 获取依赖（在线回退）
+        if: steps.pub-offline.conclusion != 'success'
         run: flutter pub get
 
       - name: 运行代码分析
@@ -65,6 +72,7 @@ jobs:
               flutter build apk
               --release
               --split-per-abi
+              --no-pub
               --build-name=${{ github.ref_name }}
               --build-number=${{ github.run_number }}
             artifact-path: build/app/outputs/flutter-apk/vaultly-*.apk
@@ -74,6 +82,7 @@ jobs:
             build-command: >
               flutter build appbundle
               --release
+              --no-pub
               --build-name=${{ github.ref_name }}
               --build-number=${{ github.run_number }}
             artifact-path: build/app/outputs/bundle/release/vaultly-*.aab
@@ -89,8 +98,8 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
-      # 官方 Gradle 缓存方案 — 自动管理 Gradle distribution 和依赖缓存
-      # 相比手动 actions/cache，具有更智能的缓存键和失效策略
+      # 官方 Gradle 缓存方案 — 自动管理 Gradle distribution、依赖缓存和构建缓存
+      # 相比手动 actions/cache，缓存键和失效策略更智能
       - name: 设置 Gradle 缓存
         uses: gradle/actions/setup-gradle@v4
 
@@ -103,7 +112,8 @@ jobs:
             ${{ env.ANDROID_SDK_ROOT }}/platforms
             ${{ env.ANDROID_SDK_ROOT }}/platform-tools
             ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools
-          key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/app/build.gradle.kts') }}
+          # 缓存键基于工具链版本（SDK/Flutter），业务代码变化不应失效 SDK 缓存
+          key: ${{ runner.os }}-android-sdk-${{ env.JAVA_VERSION }}-${{ env.FLUTTER_VERSION }}
           restore-keys: |
             ${{ runner.os }}-android-sdk-
 

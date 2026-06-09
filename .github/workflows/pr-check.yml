@@ -16,9 +16,10 @@ env:
   JAVA_VERSION: '17'
 
 jobs:
-  # 代码格式检查
-  format-check:
-    name: 代码格式检查
+  # 代码检查和测试：合并到同一 Runner，共享缓存
+  # 关键优化：原本三个独立 Runner 会重复下载 Flutter/Pub/Dart artifacts
+  analyze-and-test:
+    name: 代码分析和测试
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
@@ -31,7 +32,14 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 获取依赖
+      # 优先离线获取依赖，缓存命中时跳过 pub.dev 请求
+      - name: 获取依赖（优先离线）
+        id: pub-offline
+        run: flutter pub get --offline
+        continue-on-error: true
+
+      - name: 获取依赖（在线回退）
+        if: steps.pub-offline.conclusion != 'success'
         run: flutter pub get
 
       - name: 检查代码格式
@@ -41,59 +49,24 @@ jobs:
             exit 1
           fi
 
-  # 代码分析
-  analyze:
-    name: 代码分析
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
-
-      - name: 获取依赖
-        run: flutter pub get
-
       - name: 运行代码分析
         run: flutter analyze --fatal-infos
-
-  # 单元测试
-  test:
-    name: 单元测试
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
-
-      - name: 获取依赖
-        run: flutter pub get
 
       - name: 运行测试
         run: flutter test --coverage
 
       - name: 上传覆盖率报告
-        uses: codecov/codecov-action@v3
+        if: always()
+        uses: codecov/codecov-action@v4
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
 
-  # Android 构建测试
+  # Android 构建测试：debug 模式快速验证
   build-android-test:
     name: Android 构建测试
     runs-on: ubuntu-latest
-    needs: [format-check, analyze]
+    needs: [analyze-and-test]
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -104,6 +77,7 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
+      # 官方 Gradle 缓存方案 — 自动管理 Gradle distribution、依赖缓存和构建缓存
       - name: 设置 Gradle 缓存
         uses: gradle/actions/setup-gradle@v4
 
@@ -116,7 +90,8 @@ jobs:
             ${{ env.ANDROID_SDK_ROOT }}/platforms
             ${{ env.ANDROID_SDK_ROOT }}/platform-tools
             ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools
-          key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/app/build.gradle.kts') }}
+          # 缓存键应基于 SDK 版本而非业务代码，因为 SDK 升级才需要重建
+          key: ${{ runner.os }}-android-sdk-${{ env.JAVA_VERSION }}-${{ env.FLUTTER_VERSION }}
           restore-keys: |
             ${{ runner.os }}-android-sdk-
 
@@ -127,6 +102,7 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # Flutter 依赖缓存命中时跳过网络请求
       - name: 获取依赖（优先离线）
         id: pub-offline
         run: flutter pub get --offline
@@ -137,28 +113,24 @@ jobs:
         run: flutter pub get
 
       - name: 构建 Android Debug APK
-        run: flutter build apk --debug
+        run: flutter build apk --debug --no-pub
 
   # PR 检查汇总
   pr-check-summary:
     name: PR 检查汇总
-    needs: [format-check, analyze, test, build-android-test]
+    needs: [analyze-and-test, build-android-test]
     runs-on: ubuntu-latest
     if: always()
 
     steps:
       - name: 检查所有任务状态
         run: |
-          echo "格式检查: ${{ needs.format-check.result }}"
-          echo "代码分析: ${{ needs.analyze.result }}"
-          echo "单元测试: ${{ needs.test.result }}"
+          echo "代码分析/测试: ${{ needs.analyze-and-test.result }}"
           echo "Android 构建: ${{ needs.build-android-test.result }}"
 
       - name: 检查是否通过
         if: |
-          needs.format-check.result != 'success' ||
-          needs.analyze.result != 'success' ||
-          needs.test.result != 'success' ||
+          needs.analyze-and-test.result != 'success' ||
           needs.build-android-test.result != 'success'
         run: |
           echo "❌ PR 检查未通过"

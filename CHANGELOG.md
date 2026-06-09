@@ -8,6 +8,12 @@
 ## [未发布]
 
 ### 改进
+- **CI/CD 缓存优化**
+  - `pr-check.yml`：合并 `format-check`/`analyze`/`test` 三个独立 job 为单个 `analyze-and-test`，共享 Runner 和 Flutter 缓存，减少约 1-2 分钟
+  - 修正 Android SDK 缓存键：基于工具链版本（Java/Flutter）而非业务代码，业务变更不再导致 SDK 缓存失效
+  - 矩阵构建添加 `--no-pub` 参数，避免重复执行 `flutter pub get`
+  - `analyze-and-test` 添加 `flutter pub get --offline` 离线回退机制
+  - 升级 `codecov-action` 到 v4
 - **Android 构建触发方式**
   - 构建工作流改为仅 Tag 推送时触发，不再监听分支推送和 PR
   - 保留 `workflow_dispatch` 手动触发能力
