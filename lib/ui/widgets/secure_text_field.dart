@@ -26,6 +26,7 @@ class SecureTextField extends StatefulWidget {
   final bool showStrengthIndicator;
   final bool showCopyButton;
   final int? passwordStrength;
+  final Widget? suffixIcon;
 
   const SecureTextField({
     super.key,
@@ -46,6 +47,7 @@ class SecureTextField extends StatefulWidget {
     this.showStrengthIndicator = false,
     this.showCopyButton = false,
     this.passwordStrength,
+    this.suffixIcon,
   });
 
   @override
@@ -96,6 +98,7 @@ class _SecureTextFieldState extends State<SecureTextField> {
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (widget.suffixIcon != null) widget.suffixIcon!,
                 if (widget.showCopyButton && widget.controller?.text.isNotEmpty == true)
                   IconButton(
                     icon: const Icon(Icons.copy_outlined),

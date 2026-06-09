@@ -46,6 +46,12 @@ dependencies:
   # QR 码
   mobile_scanner: ^7.2.0
 
+  # 图片选择
+  image_picker: ^1.1.2
+
+  # OCR 文字识别
+  google_mlkit_text_recognition: ^0.13.0
+
   # UUID
   uuid: ^4.5.2
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/models/vault_entry.dart';
 import '../../core/providers/vault_service_provider.dart';
+import '../../core/services/ocr_service.dart';
 import '../../core/utils/password_generator.dart';
 import '../widgets/secure_text_field.dart';
 import '../widgets/password_strength_indicator.dart';
@@ -194,6 +196,113 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已扫描: ${result.issuer.isNotEmpty ? result.issuer : result.label}')),
       );
+    }
+  }
+
+  Future<void> _scanBankCard() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('拍照识别'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('从图库选择'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null || !mounted) return;
+
+    final ocrService = OcrService();
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('正在识别银行卡信息...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final OcrResult result = source == ImageSource.camera
+          ? await ocrService.scanFromCamera()
+          : await ocrService.scanFromGallery();
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // 关闭加载提示
+
+      if (result.hasAnyData) {
+        setState(() {
+          if (result.cardNumber != null) {
+            // 格式化卡号：每4位一组显示
+            final digits = result.cardNumber!.replaceAll(RegExp(r'\s'), '');
+            final buffer = StringBuffer();
+            for (int i = 0; i < digits.length; i++) {
+              if (i > 0 && i % 4 == 0) buffer.write(' ');
+              buffer.write(digits[i]);
+            }
+            _cardNumberController.text = buffer.toString();
+          }
+          if (result.cardHolderName != null) {
+            _cardHolderController.text = result.cardHolderName!;
+          }
+          if (result.expiryMonth != null && result.expiryYear != null) {
+            _expiryMonth = result.expiryMonth;
+            _expiryYear = result.expiryYear;
+          }
+        });
+
+        final detected = <String>[];
+        if (result.cardNumber != null) detected.add('卡号');
+        if (result.cardHolderName != null) detected.add('持卡人');
+        if (result.expiryMonth != null) detected.add('有效期');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                detected.isNotEmpty
+                    ? '已识别: ${detected.join('、')}'
+                    : '未识别到银行卡信息，请尝试更清晰的图片',
+              ),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('未识别到银行卡信息，请尝试更清晰的图片')),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // 关闭加载提示
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('识别失败: $e')),
+      );
+    } finally {
+      ocrService.dispose();
     }
   }
 
@@ -525,6 +634,11 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         controller: _cardNumberController,
         labelText: '卡号 *',
         prefixIcon: Icons.credit_card,
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.document_scanner),
+          onPressed: _scanBankCard,
+          tooltip: '扫描银行卡',
+        ),
         validator: (value) {
           if (value == null || value.isEmpty) {
             return '请输入卡号';

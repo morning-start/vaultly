@@ -47,5 +47,9 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Vaultly 使用 Face ID 快速解锁保险库，保护您的密码安全</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Vaultly 需要使用相机来扫描识别银行卡信息</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vaultly 需要访问您的相册以选择银行卡图片进行识别</string>
 </dict>
 </plist>
