@@ -5,7 +5,8 @@ import '../crypto/services/crypto_service.dart';
 import '../services/biometric_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
-  return AuthService();
+  final biometricService = ref.watch(biometricServiceProvider);
+  return AuthService(biometricService: biometricService);
 });
 
 final cryptoServiceProvider = Provider<CryptoService>((ref) {
@@ -25,7 +26,8 @@ class AuthState {
   final String? error;
 
   // 生物识别状态
-  final bool biometricAvailable;
+  final bool biometricAvailable; // 用户是否在应用内启用了生物识别
+  final bool deviceSupportsBiometric; // 设备硬件是否支持生物识别
   final String? biometricTypeName;
   final IconData? biometricIcon;
   final bool isAuthenticatingWithBiometric;
@@ -36,6 +38,7 @@ class AuthState {
     this.isLoading = false,
     this.error,
     this.biometricAvailable = false,
+    this.deviceSupportsBiometric = false,
     this.biometricTypeName,
     this.biometricIcon,
     this.isAuthenticatingWithBiometric = false,
@@ -47,6 +50,7 @@ class AuthState {
     bool? isLoading,
     String? error,
     bool? biometricAvailable,
+    bool? deviceSupportsBiometric,
     String? biometricTypeName,
     IconData? biometricIcon,
     bool? isAuthenticatingWithBiometric,
@@ -58,6 +62,7 @@ class AuthState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       biometricAvailable: biometricAvailable ?? this.biometricAvailable,
+      deviceSupportsBiometric: deviceSupportsBiometric ?? this.deviceSupportsBiometric,
       biometricTypeName: biometricTypeName ?? this.biometricTypeName,
       biometricIcon: biometricIcon ?? this.biometricIcon,
       isAuthenticatingWithBiometric: isAuthenticatingWithBiometric ?? this.isAuthenticatingWithBiometric,
@@ -80,20 +85,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // 检查生物识别可用性
     try {
       final bioAvailability = await _authService.checkBiometricAvailability();
+      final biometricIcon = await _biometricService.getBiometricIcon();
+
       if (bioAvailability is BiometricAvailable) {
-        final biometricIcon = await _biometricService.getBiometricIcon();
-        
         state = state.copyWith(
           isPasswordSet: isPasswordSet,
           biometricAvailable: bioAvailability.available,
+          deviceSupportsBiometric: true,
           biometricTypeName: bioAvailability.biometricTypeName,
           biometricIcon: biometricIcon,
           isLoading: false,
         );
-      } else {
+      } else if (bioAvailability is BiometricUnavailable) {
         state = state.copyWith(
           isPasswordSet: isPasswordSet,
           biometricAvailable: false,
+          deviceSupportsBiometric: false,
+          biometricTypeName: null,
+          biometricIcon: null,
           isLoading: false,
         );
       }
@@ -102,6 +111,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isPasswordSet: isPasswordSet,
         biometricAvailable: false,
+        deviceSupportsBiometric: false,
         isLoading: false,
       );
     }
@@ -193,9 +203,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 启用生物识别解锁
   ///
   /// 流程：
-  /// 1. 验证主密码
-  /// 2. 使用系统指纹进行认证
-  /// 3. 认证成功后保存密钥到安全存储
+  /// 1. 调用系统指纹认证（OS 级认证流程）
+  /// 2. 验证主密码并派生加密密钥
+  /// 3. 保存密钥到安全存储
   Future<bool> enableBiometric(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
@@ -208,6 +218,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           isLoading: false,
           biometricAvailable: true,
+          deviceSupportsBiometric: true,
           biometricTypeName: bioAvailability is BiometricAvailable ? bioAvailability.biometricTypeName : '生物识别',
           biometricIcon: icon,
           error: null,

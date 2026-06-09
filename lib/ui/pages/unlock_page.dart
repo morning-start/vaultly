@@ -14,6 +14,27 @@ class UnlockPage extends ConsumerStatefulWidget {
 class _UnlockPageState extends ConsumerState<UnlockPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
+  bool _autoBiometricAttempted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 延迟一帧后检查是否自动弹出指纹认证
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoTriggerBiometricIfAvailable();
+    });
+  }
+
+  /// 当生物识别已启用时，自动弹出系统指纹对话框
+  /// 类似于 1Password / Bitwarden 等密码管理器的行为
+  void _autoTriggerBiometricIfAvailable() {
+    if (_autoBiometricAttempted) return;
+    final authState = ref.read(authNotifierProvider);
+    if (authState.biometricAvailable && !authState.isAuthenticatingWithBiometric) {
+      _autoBiometricAttempted = true;
+      _biometricUnlock();
+    }
+  }
 
   @override
   void dispose() {

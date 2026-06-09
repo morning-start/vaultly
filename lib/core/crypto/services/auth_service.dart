@@ -26,12 +26,15 @@ class AuthService {
   static const int _longLockDurationMinutes = 30;
 
   final FlutterSecureStorage _secureStorage;
+  final BiometricService _biometricService;
   Uint8List? _encryptionKey;
   bool _isUnlocked = false;
 
   AuthService({
     FlutterSecureStorage? secureStorage,
-  })  : _secureStorage = secureStorage ?? _createSecureStorage();
+    BiometricService? biometricService,
+  })  : _secureStorage = secureStorage ?? _createSecureStorage(),
+        _biometricService = biometricService ?? BiometricService();
 
   /// 创建配置好的安全存储实例
   static FlutterSecureStorage _createSecureStorage() {
@@ -162,9 +165,9 @@ class AuthService {
   /// 启用生物识别解锁
   ///
   /// 流程：
-  /// 1. 验证主密码是否正确
-  /// 2. 使用系统指纹API进行认证
-  /// 3. 认证成功后，将加密密钥保存到安全存储
+  /// 1. 调用系统生物识别认证（使用 OS 级认证流程）
+  /// 2. 系统认证通过后，验证主密码并派生加密密钥
+  /// 3. 将加密密钥保存到安全存储，用于后续生物识别解锁
   /// 返回是否启用成功
   Future<bool> enableBiometric(String password) async {
     // 检查是否已设置密码
@@ -173,37 +176,45 @@ class AuthService {
       throw AuthException('请先设置主密码');
     }
 
-    // 验证主密码（验证成功后 encryptionKey 已经在内存中）
-    final isPasswordCorrect = await verifyMasterPassword(password);
-    if (!isPasswordCorrect) {
-      throw AuthException('主密码错误');
-    }
-
-    // 执行生物识别认证（使用系统已注册的指纹）
-    final biometricService = BiometricService();
+    // 1. 调用系统生物识别认证（这是系统认证流程，弹系统指纹对话框）
     try {
-      final isAuthenticated = await biometricService.authenticate(
+      final isAuthenticated = await _biometricService.authenticate(
         reason: '启用生物识别解锁',
       );
 
       if (!isAuthenticated) {
         return false;
       }
-
-      // 生物识别认证成功，将内存中的 encryptionKey 保存到安全存储
-      if (_encryptionKey == null) {
-        throw AuthException('密钥数据不存在');
-      }
-
-      await _secureStorage.write(
-        key: _keyBiometricEncryptionKey,
-        value: base64Encode(_encryptionKey!),
-      );
-
-      return true;
     } on BiometricException catch (e) {
       throw AuthException(e.message);
     }
+
+    // 2. 系统认证通过后，验证主密码并派生加密密钥
+    // 直接派生密钥比对，不使用 verifyMasterPassword（避免解锁副作用）
+    final saltBase64 = await _secureStorage.read(key: _keySalt);
+    final storedHash = await _secureStorage.read(key: _keyMasterPassword);
+    if (saltBase64 == null || storedHash == null) {
+      throw AuthException('密钥数据不存在，请先设置主密码');
+    }
+
+    final salt = base64Decode(saltBase64);
+    final keyMaterial = CryptoService.deriveKeyMaterial(password, salt);
+
+    if (keyMaterial.hash != storedHash) {
+      throw AuthException('主密码错误');
+    }
+
+    // 3. 保存加密密钥到安全存储
+    await _secureStorage.write(
+      key: _keyBiometricEncryptionKey,
+      value: base64Encode(keyMaterial.key),
+    );
+
+    // 同时设置内存状态
+    _encryptionKey = keyMaterial.key;
+    _isUnlocked = true;
+
+    return true;
   }
 
   /// 禁用生物识别解锁
@@ -246,8 +257,7 @@ class AuthService {
 
     try {
       // 执行生物识别认证
-      final biometricService = BiometricService();
-      final isAuthenticated = await biometricService.authenticate(
+      final isAuthenticated = await _biometricService.authenticate(
         reason: '验证身份以解锁 Vaultly 保险库',
       );
 
@@ -289,8 +299,7 @@ class AuthService {
       }
 
       // 检查设备支持情况
-      final biometricService = BiometricService();
-      final isDeviceAvailable = await biometricService.isBiometricEnrolled();
+      final isDeviceAvailable = await _biometricService.isBiometricEnrolled();
 
       if (!isDeviceAvailable) {
         return const BiometricUnavailable(
@@ -303,7 +312,7 @@ class AuthService {
       final isUserEnabled = await isBiometricEnabledByUser();
 
       // 获取生物识别类型名称
-      final typeName = await biometricService.getBiometricTypeName();
+      final typeName = await _biometricService.getBiometricTypeName();
 
       if (isUserEnabled) {
         return BiometricAvailable(

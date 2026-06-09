@@ -134,29 +134,29 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '启用步骤',
+                            '启用流程',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 12),
                           _buildStep(
                             context,
                             number: 1,
-                            title: '验证身份',
-                            description: '输入您的主密码验证身份',
+                            title: '系统指纹认证',
+                            description: '调用系统指纹进行身份验证，使用您已注册的指纹信息',
                           ),
                           const SizedBox(height: 12),
                           _buildStep(
                             context,
                             number: 2,
-                            title: '指纹认证',
-                            description: '使用已注册的系统指纹完成认证',
+                            title: '验证主密码',
+                            description: '输入主密码确认身份，用于派生加密密钥',
                           ),
                           const SizedBox(height: 12),
                           _buildStep(
                             context,
                             number: 3,
                             title: '启用成功',
-                            description: '之后可使用$biometricTypeName快速解锁',
+                            description: '之后可使用$biometricTypeName快速解锁保险库',
                           ),
                         ],
                       ),
@@ -168,7 +168,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                   SecureTextField(
                     controller: _passwordController,
                     labelText: '主密码',
-                    hintText: '请输入主密码验证身份',
+                    hintText: '请输入主密码用于派生加密密钥',
                     prefixIcon: Icons.lock,
                     autofocus: true,
                     validator: (value) {
@@ -180,18 +180,21 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                     onSubmitted: (_) => _enableBiometric(),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                  ElevatedButton.icon(
-                    onPressed: authState.isLoading ? null : _enableBiometric,
-                    icon: Icon(biometricIcon),
-                    label: authState.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text('启用 $biometricTypeName'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: authState.isLoading ? null : _enableBiometric,
+                      icon: Icon(biometricIcon),
+                      label: authState.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text('启用 $biometricTypeName'),
+                    ),
                   ),
                 ] else ...[
                   // 已启用状态
