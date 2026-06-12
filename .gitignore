@@ -261,3 +261,5 @@ fabric.properties
 **/skills/
 **/documents/
 .atomcode
+fgt.exe
+.fgt-config
