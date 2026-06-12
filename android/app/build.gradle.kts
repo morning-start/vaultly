@@ -80,3 +80,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Google Play Core - Flutter 引擎依赖动态分包 API，R8 校验需要此库
+    implementation("com.google.android.play:core:1.10.3")
+}
