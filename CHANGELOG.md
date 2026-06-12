@@ -22,6 +22,9 @@
 - **Android 构建修复**
   - 移除阿里云镜像源（502 Bad Gateway），回退到官方 Google/Maven Central 仓库
   - 依赖 GitHub Actions 缓存保障后续构建速度
+- **R8 混淆构建失败修复**
+  - 创建 `proguard-rules.pro`，添加 Flutter 引擎、插件、ML Kit、AndroidX、Kotlin 等完整 keep 规则
+  - 在 `release` buildType 中添加 `proguardFiles` 配置，防止 R8 误删反射/JNI 调用类
 
 ## [3.0.0] - 2026-05-05
 

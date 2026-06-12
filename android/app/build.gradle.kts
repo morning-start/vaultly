@@ -61,6 +61,12 @@ android {
 
     buildTypes {
         release {
+            // R8 代码压缩/混淆规则
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
             val hasReleaseSigning = signingConfigs.getByName("release").storeFile != null
             signingConfig = if (keystorePropertiesFile.exists() && hasReleaseSigning) {
                 signingConfigs.getByName("release")
