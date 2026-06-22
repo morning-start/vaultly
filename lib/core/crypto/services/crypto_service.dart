@@ -9,8 +9,8 @@ import 'package:pointycastle/key_derivators/argon2.dart';
 /// 加密服务
 ///
 /// 参考文档: wiki/02-架构设计/安全架构.md
-/// 使用 AES-256-GCM 加密算法
-/// 使用 Argon2id 进行密钥派生（符合文档要求）
+/// 使用 AES-256-GCM 加密算法保护条目内容。
+/// 使用 Argon2id 进行密钥派生，以降低主密码被暴力破解的风险。
 class CryptoService {
   static const int _keyLength = 32; // 256 bits
   static const int _ivLength = 12; // 96 bits for GCM
@@ -58,6 +58,7 @@ class CryptoService {
     );
     final encrypted = encrypter.encrypt(plainText, iv: encrypt_lib.IV(iv));
 
+    // 认证标签会与密文一并写入，解密时用于校验数据完整性。
     final cipherText = encrypted.bytes;
     final authTag = cipherText.sublist(cipherText.length - 16);
     final cipher = cipherText.sublist(0, cipherText.length - 16);
@@ -76,6 +77,7 @@ class CryptoService {
     final cipher = base64Decode(encryptedData.cipherText);
     final authTag = base64Decode(encryptedData.authTag);
 
+    // GCM 需要将密文和认证标签重新拼接后再解密。
     final combined = Uint8List.fromList([...cipher, ...authTag]);
     final encrypted = encrypt_lib.Encrypted(combined);
 
@@ -142,6 +144,7 @@ class CryptoService {
     Uint8List salt,
   ) {
     // 使用 Argon2id 派生密钥
+    // 同时保存派生密钥和验证哈希，分别服务于数据加解密和密码校验。
     final key = deriveKeyWithArgon2id(password, salt);
 
     // 使用 SHA-256 生成验证哈希（用于快速验证密码）

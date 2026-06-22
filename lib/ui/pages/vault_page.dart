@@ -27,6 +27,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     _initializeVault();
   }
 
+  /// 页面初始化时加载保险库数据，并把解密密钥交给业务层。
   Future<void> _initializeVault() async {
     final vaultService = ref.read(vaultServiceProvider);
     final authService = ref.read(authServiceProvider);
@@ -56,6 +57,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     super.dispose();
   }
 
+  /// 根据搜索词、类型筛选和收藏状态对条目进行排序和过滤。
   List<VaultEntry> _getFilteredEntries(List<VaultEntry> entries) {
     var filtered = entries.toList();
 
@@ -85,6 +87,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     return filtered;
   }
 
+  /// 添加条目后返回列表页，并刷新保险库视图。
   void _navigateToAddEntry() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AddEntryPage()),
@@ -94,6 +97,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     }
   }
 
+  /// 打开条目详情页，返回后刷新列表状态。
   void _navigateToEntryDetail(VaultEntry entry) async {
     await Navigator.of(context).push(
       MaterialPageRoute(

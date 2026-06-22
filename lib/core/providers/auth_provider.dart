@@ -17,6 +17,10 @@ final biometricServiceProvider = Provider<BiometricService>((ref) {
   return BiometricService();
 });
 
+/// 保险库解锁状态。
+///
+/// 集中保存认证结果、主密码是否已设置以及生物识别能力探测结果，
+/// 供路由守卫和页面层统一消费。
 final isVaultUnlockedProvider = StateProvider<bool>((ref) => false);
 
 class AuthState {
@@ -26,6 +30,7 @@ class AuthState {
   final String? error;
 
   // 生物识别状态
+  /// 生物识别相关状态集中存放，便于在设置页和解锁页展示一致的能力信息。
   final bool biometricAvailable; // 用户是否在应用内启用了生物识别
   final bool deviceSupportsBiometric; // 设备硬件是否支持生物识别
   final String? biometricTypeName;
@@ -70,6 +75,9 @@ class AuthState {
   }
 }
 
+/// 认证状态控制器。
+///
+/// 负责主密码初始化、密码解锁、生物识别解锁和锁定状态管理。
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
   final BiometricService _biometricService;
@@ -78,6 +86,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _init();
   }
 
+  /// 首次加载时探测是否已设置主密码，并同步检测设备生物识别能力。
   Future<void> _init() async {
     state = state.copyWith(isLoading: true);
     final isPasswordSet = await _authService.isPasswordSet();
@@ -117,6 +126,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 设置主密码后同步更新状态，并重新探测可用的生物识别能力。
   Future<bool> setupPassword(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
@@ -152,6 +162,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 使用主密码解锁保险库。
   Future<bool> unlock(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
@@ -169,6 +180,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// 使用生物识别解锁
+  /// 使用系统生物识别完成解锁。
   Future<bool> unlockWithBiometric() async {
     try {
       state = state.copyWith(

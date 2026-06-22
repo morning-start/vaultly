@@ -6,8 +6,8 @@ import '../models/vault_entry.dart';
 
 /// 保险库服务
 ///
-/// 负责加密存储和管理保险库条目
-/// 使用单例模式确保全局只有一个实例
+/// 负责加密存储、读取和维护保险库条目。
+/// 采用单例模式，保证加密密钥、内存态条目列表和持久化状态一致。
 ///
 /// 参考文档: wiki/03-模块设计/保险库模块.md
 class VaultService {
@@ -44,10 +44,16 @@ class VaultService {
 
   List<VaultEntry> get entries => List.unmodifiable(_entries);
 
+  /// 设置当前会话的加密密钥。
+  ///
+  /// 解锁后由认证模块注入，后续的读写、加密和解密都依赖该密钥。
   void setEncryptionKey(Uint8List key) {
     _encryptionKey = key;
   }
 
+  /// 从安全存储加载整个保险库。
+  ///
+  /// 数据在存储层以 JSON 形式保存，敏感字段会被单独加密后再序列化。
   Future<void> loadVault() async {
     if (_encryptionKey == null) {
       throw VaultException('Encryption key not set');
@@ -61,6 +67,7 @@ class VaultService {
 
     try {
       final data = jsonDecode(encryptedData) as Map<String, dynamic>;
+      // 先反序列化再按条目类型恢复具体模型，便于兼容不同字段结构。
       final entriesJson = data['entries'] as List<dynamic>;
 
       _entries = entriesJson.map((e) {
@@ -72,6 +79,9 @@ class VaultService {
     }
   }
 
+  /// 将当前内存中的保险库重新写回安全存储。
+  ///
+  /// 写入前会对敏感字段执行字段级加密，非敏感结构字段保持可读，方便导出和调试。
   Future<void> saveVault() async {
     if (_encryptionKey == null) {
       throw VaultException('Encryption key not set');
@@ -90,7 +100,7 @@ class VaultService {
     await _secureStorage.write(key: _keyVaultData, value: data);
   }
 
-  /// 根据类型将 JSON 转换为对应的条目类型
+  /// 根据类型将 JSON 转换为对应的条目类型。
   VaultEntry _entryFromJson(Map<String, dynamic> json) {
     final type = EntryType.values.firstWhere(
       (e) => e.name == json['type'],
@@ -116,7 +126,7 @@ class VaultService {
 
     final encrypted = entry.toJson();
 
-    // 加密登录凭证字段
+    // 按条目类型做字段级加密，保留基础结构便于列表展示和同步。
     if (entry is LoginEntry) {
       if (entry.password != null && entry.password!.isNotEmpty) {
         encrypted['passwordEncrypted'] = CryptoService.encrypt(entry.password!, _encryptionKey!).toJson();
@@ -173,7 +183,7 @@ class VaultService {
 
     final data = entry.toJson();
 
-    // 解密登录凭证字段
+    // 解密阶段与加密阶段使用相同的字段约定，保证导入导出一致。
     if (entry is LoginEntry) {
       if (data['passwordEncrypted'] is Map) {
         final encrypted = EncryptedData.fromJson(data['passwordEncrypted'] as Map<String, dynamic>);
@@ -237,6 +247,7 @@ class VaultService {
     return _entryFromJson(data);
   }
 
+  /// 新增条目并刷新持久化数据。
   Future<String> addEntry(VaultEntry entry) async {
     entry.touch();
     _entries.add(entry);
@@ -244,6 +255,7 @@ class VaultService {
     return entry.uuid;
   }
 
+  /// 更新已有条目并刷新持久化数据。
   Future<void> updateEntry(VaultEntry entry) async {
     final index = _entries.indexWhere((e) => e.uuid == entry.uuid);
     if (index == -1) {
@@ -255,11 +267,13 @@ class VaultService {
     await saveVault();
   }
 
+  /// 删除指定条目并刷新持久化数据。
   Future<void> deleteEntry(String id) async {
     _entries.removeWhere((e) => e.uuid == id);
     await saveVault();
   }
 
+  /// 获取单个条目。
   Future<VaultEntry?> getEntry(String id) async {
     try {
       return _entries.firstWhere((e) => e.uuid == id);
@@ -268,10 +282,12 @@ class VaultService {
     }
   }
 
+  /// 获取全部条目。
   Future<List<VaultEntry>> getAllEntries() async {
     return List.unmodifiable(_entries);
   }
 
+  /// 按类型筛选条目。
   Future<List<VaultEntry>> getEntriesByType(EntryType type) async {
     return _entries.where((e) => e.type == type).toList();
   }

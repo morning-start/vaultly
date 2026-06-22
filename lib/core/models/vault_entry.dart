@@ -1,3 +1,6 @@
+/// 保险库条目类型。
+///
+/// 这些类型用于驱动页面表单、列表展示和字段级加密逻辑。
 enum EntryType {
   login,
   bankCard,
@@ -26,6 +29,9 @@ enum FieldType {
   number,
 }
 
+/// 自定义字段数据结构。
+///
+/// 支持普通文本、隐藏值、日期、网址、邮箱、手机号和数字等字段。
 class CustomField {
   final String name;
   final String value;
@@ -57,6 +63,9 @@ class CustomField {
   };
 }
 
+/// 保险库基础条目。
+///
+/// 作为各类条目的公共父类，保存通用元数据、标签、收藏标记和自定义字段。
 class VaultEntry {
   final String id;
   String title;
@@ -82,6 +91,7 @@ class VaultEntry {
 
   String get uuid => id;
 
+  /// 触发更新时间刷新。
   void touch() {
     updatedAt = DateTime.now();
   }

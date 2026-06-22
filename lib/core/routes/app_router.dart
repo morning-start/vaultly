@@ -16,7 +16,10 @@ import '../models/vault_entry.dart';
 /// 应用路由配置
 ///
 /// 参考文档: wiki/06-开发计划/任务清单.md T004
-/// 使用 GoRouter 进行路由管理
+/// 使用 GoRouter 进行路由管理。
+///
+/// 该路由表同时承担登录态守卫职责：根据是否已设置主密码、
+/// 是否已解锁以及当前加载状态，限制不同页面的访问范围。
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
 
@@ -30,33 +33,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final location = state.uri.path;
 
-      // 加载中：如果在启动页则停留，否则不处理
+      // 启动阶段仅允许停留在启动页，避免状态未初始化时误入业务页面。
       if (isLoading) {
         if (location == '/') return null;
-        // 加载期间不允许访问其他页面，回到启动页等待
         return '/';
       }
 
-      // 已解锁状态
+      // 已解锁状态下允许访问保险库相关页面。
       if (isAuthenticated) {
-        // 已解锁用户不能访问启动页、设置页、解锁页
         if (location == '/' || location == '/setup' || location == '/unlock') {
           return '/vault';
         }
         return null;
       }
 
-      // 未解锁状态
+      // 已设置主密码但尚未解锁时，只允许进入解锁页。
       if (isPasswordSet) {
-        // 已设置密码但未解锁，只能访问解锁页
         if (location != '/unlock') {
           return '/unlock';
         }
         return null;
       }
 
-      // 未设置密码状态
-      // 只能访问设置页
+      // 首次使用时仅开放主密码设置页。
       if (location != '/setup') {
         return '/setup';
       }
