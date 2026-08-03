@@ -36,10 +36,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     final encryptionKey = authService.encryptionKey;
     if (encryptionKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('错误：未找到加密密钥'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('错误：未找到加密密钥')),
       );
       return;
     }
@@ -83,10 +80,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       if (!mounted) return;
       syncNotifier.setError('上传失败: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('上传失败: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('上传失败: $e')),
       );
     }
   }
@@ -106,7 +100,6 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.orange),
             child: const Text('继续下载'),
           ),
         ],
@@ -126,10 +119,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     if (encryptionKey == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('错误：未找到加密密钥'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('错误：未找到加密密钥')),
         );
       }
       return;
