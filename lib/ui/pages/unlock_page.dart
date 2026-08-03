@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,14 +14,27 @@ class UnlockPage extends ConsumerStatefulWidget {
   ConsumerState<UnlockPage> createState() => _UnlockPageState();
 }
 
-class _UnlockPageState extends ConsumerState<UnlockPage> {
+class _UnlockPageState extends ConsumerState<UnlockPage>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
+  late final AnimationController _shakeController;
   bool _autoBiometricAttempted = false;
+
+  /// 错误抖动偏移：衰减正弦波
+  double get _shakeOffset {
+    final value = _shakeController.value;
+    if (value == 0) return 0;
+    return math.sin(value * math.pi * 4) * 10 * (1 - value);
+  }
 
   @override
   void initState() {
     super.initState();
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
     // 延迟一帧后检查是否自动弹出指纹认证
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoTriggerBiometricIfAvailable();
@@ -39,6 +54,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   @override
   void dispose() {
+    _shakeController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -54,6 +70,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     if (success) {
       context.go('/vault');
     } else {
+      _shakeController.forward(from: 0);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('密码错误，请重试'), backgroundColor: Colors.red),
       );
@@ -165,9 +182,15 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
                   const SizedBox(height: AppTokens.spaceXL),
 
-                  // 密码输入框
-                  SecureTextField(
-                    controller: _passwordController,
+                  // 密码输入框（错误时抖动反馈）
+                  AnimatedBuilder(
+                    animation: _shakeController,
+                    builder: (context, child) => Transform.translate(
+                      offset: Offset(_shakeOffset, 0),
+                      child: child,
+                    ),
+                    child: SecureTextField(
+                      controller: _passwordController,
                     labelText: '主密码',
                     hintText: '请输入主密码',
                     prefixIcon: Icons.lock,
@@ -179,7 +202,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                       }
                       return null;
                     },
-                    onSubmitted: (_) => _unlock(),
+                      onSubmitted: (_) => _unlock(),
+                    ),
                   ),
 
                   const SizedBox(height: AppTokens.spaceL),
