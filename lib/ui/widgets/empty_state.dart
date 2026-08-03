@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/tokens.dart';
 
 /// 空状态占位组件
 ///
@@ -96,25 +97,25 @@ class EmptyState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(AppTokens.spaceXXL),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: AppTokens.stateIconContainer,
+              height: AppTokens.stateIconContainer,
               decoration: BoxDecoration(
                 color: colorScheme.primaryContainer.withAlpha(76),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
-                size: 40,
+                size: AppTokens.stateIconSize,
                 color: colorScheme.primary,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppTokens.spaceXL),
             Text(
               title,
               style: theme.textTheme.titleLarge?.copyWith(
@@ -124,7 +125,7 @@ class EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTokens.spaceS),
               Text(
                 subtitle!,
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -134,7 +135,7 @@ class EmptyState extends StatelessWidget {
               ),
             ],
             if (actionLabel != null || customAction != null) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: AppTokens.spaceXL),
               customAction ??
                   FilledButton.icon(
                     onPressed: onActionPressed,

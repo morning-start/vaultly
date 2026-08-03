@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme/tokens.dart';
 
 /// 安全文本输入框
 ///
@@ -63,11 +64,13 @@ class _SecureTextFieldState extends State<SecureTextField> {
     });
   }
 
-  Color _getStrengthColor(int strength) {
-    if (strength < 40) return Colors.red;
-    if (strength < 70) return Colors.orange;
-    if (strength < 90) return Colors.yellow.shade700;
-    return Colors.green;
+  /// 根据强度与主题亮度返回可读的颜色（深色模式使用浅色变体保证对比度）
+  Color _getStrengthColor(int strength, ColorScheme colorScheme) {
+    final isDark = colorScheme.brightness == Brightness.dark;
+    if (strength < 40) return colorScheme.error;
+    if (strength < 70) return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+    if (strength < 90) return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    return isDark ? Colors.green.shade300 : Colors.green.shade700;
   }
 
   String _getStrengthText(int strength) {
@@ -126,27 +129,27 @@ class _SecureTextFieldState extends State<SecureTextField> {
               ],
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
               borderSide: BorderSide(color: colorScheme.outline),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
               borderSide: BorderSide(color: colorScheme.outline),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
               borderSide: BorderSide(color: colorScheme.primary, width: 2),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
               borderSide: BorderSide(color: colorScheme.error),
             ),
             focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
               borderSide: BorderSide(color: colorScheme.error, width: 2),
             ),
             disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
               borderSide: BorderSide(color: colorScheme.outline.withAlpha(128)),
             ),
             filled: !widget.enabled,
@@ -177,7 +180,7 @@ class _SecureTextFieldState extends State<SecureTextField> {
                     value: (widget.passwordStrength! / 100).clamp(0.0, 1.0),
                     backgroundColor: colorScheme.surfaceContainerHighest,
                     valueColor: AlwaysStoppedAnimation(
-                      _getStrengthColor(widget.passwordStrength!),
+                      _getStrengthColor(widget.passwordStrength!, colorScheme),
                     ),
                     minHeight: 4,
                   ),
@@ -187,7 +190,7 @@ class _SecureTextFieldState extends State<SecureTextField> {
               Text(
                 '强度: ${_getStrengthText(widget.passwordStrength!)}',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: _getStrengthColor(widget.passwordStrength!),
+                  color: _getStrengthColor(widget.passwordStrength!, colorScheme),
                   fontWeight: FontWeight.w500,
                 ),
               ),

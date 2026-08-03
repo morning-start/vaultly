@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/tokens.dart';
 
 /// 错误状态组件
 ///
@@ -100,25 +101,25 @@ class ErrorState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(AppTokens.spaceXXL),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: AppTokens.stateIconContainer,
+              height: AppTokens.stateIconContainer,
               decoration: BoxDecoration(
                 color: colorScheme.errorContainer.withAlpha(76),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
-                size: 40,
+                size: AppTokens.stateIconSize,
                 color: colorScheme.error,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppTokens.spaceXL),
             Text(
               title,
               style: theme.textTheme.titleLarge?.copyWith(
@@ -128,7 +129,7 @@ class ErrorState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (message != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTokens.spaceS),
               Text(
                 message!,
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -138,7 +139,7 @@ class ErrorState extends StatelessWidget {
               ),
             ],
             if (onRetryPressed != null || customAction != null) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: AppTokens.spaceXL),
               customAction ??
                   OutlinedButton.icon(
                     onPressed: onRetryPressed,
@@ -175,11 +176,11 @@ class ErrorBanner extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.all(AppTokens.spaceL),
+      padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL, vertical: AppTokens.spaceM),
       decoration: BoxDecoration(
         color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTokens.radiusM),
         border: Border.all(
           color: colorScheme.error.withAlpha(128),
           width: 1,
