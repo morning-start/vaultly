@@ -20,13 +20,31 @@ class VaultPage extends ConsumerStatefulWidget {
 
 class _VaultPageState extends ConsumerState<VaultPage> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   String _searchQuery = '';
   EntryType? _selectedFilter;
+  bool _fabVisible = true;
+  double _lastScrollOffset = 0;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _initializeVault();
+  }
+
+  /// 滚动联动：向下滚动隐藏 FAB，向上滚动或回到顶部时显示。
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final offset = _scrollController.offset;
+    final delta = offset - _lastScrollOffset;
+    if (delta.abs() < 4) return;
+
+    final shouldShow = delta < 0 || offset <= 0;
+    if (shouldShow != _fabVisible) {
+      setState(() => _fabVisible = shouldShow);
+    }
+    _lastScrollOffset = offset;
   }
 
   /// 页面初始化时加载保险库数据，并把解密密钥交给业务层。
@@ -56,6 +74,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -223,13 +242,28 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         ? EmptyState.search(query: _searchQuery)
                         : EmptyState.vault(onAddPressed: _navigateToAddEntry))
                     : ListView.builder(
+                        controller: _scrollController,
                         itemCount: filteredEntries.length,
                         padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
                         itemBuilder: (context, index) {
                           final entry = filteredEntries[index];
-                          return EntryCardWidget(
-                            entry: entry,
-                            onTap: () => _navigateToEntryDetail(entry),
+                          // 新条目淡入 + 上移过渡（按 uuid 复用元素避免重复播放）
+                          return TweenAnimationBuilder<double>(
+                            key: ValueKey(entry.uuid),
+                            tween: Tween(begin: 0, end: 1),
+                            duration: AppTokens.animNormal,
+                            curve: Curves.easeOut,
+                            builder: (context, value, child) => Opacity(
+                              opacity: value,
+                              child: Transform.translate(
+                                offset: Offset(0, AppTokens.spaceS * (1 - value)),
+                                child: child,
+                              ),
+                            ),
+                            child: EntryCardWidget(
+                              entry: entry,
+                              onTap: () => _navigateToEntryDetail(entry),
+                            ),
                           );
                         },
                       ),
@@ -252,10 +286,18 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           onRetryPressed: () => ref.invalidate(vaultEntriesProvider),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _navigateToAddEntry,
-        icon: const Icon(Icons.add),
-        label: const Text('添加'),
+      floatingActionButton: IgnorePointer(
+        ignoring: !_fabVisible,
+        child: AnimatedScale(
+          scale: _fabVisible ? 1 : 0,
+          duration: AppTokens.animNormal,
+          curve: AppTokens.easeStandard,
+          child: FloatingActionButton.extended(
+            onPressed: _navigateToAddEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('添加'),
+          ),
+        ),
       ),
     );
   }
