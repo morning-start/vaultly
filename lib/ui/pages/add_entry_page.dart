@@ -12,6 +12,7 @@ import '../widgets/entry_type_helper.dart';
 import '../widgets/password_generator_dialog.dart';
 import '../widgets/section_card.dart';
 import '../widgets/loading_button.dart';
+import '../widgets/type_picker.dart';
 import '../theme/tokens.dart';
 import 'qr_scanner_page.dart';
 
@@ -487,28 +488,11 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           padding: const EdgeInsets.all(AppTokens.spaceL),
           children: [
             if (!_isEditing) ...[
-              InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: '条目类型',
-                  prefixIcon: Icon(Icons.category),
-                ),
-                child: DropdownButton<EntryType>(
-                  value: _selectedType,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  items: const [
-                    DropdownMenuItem(value: EntryType.login, child: Text('登录凭证')),
-                    DropdownMenuItem(value: EntryType.bankCard, child: Text('银行卡')),
-                    DropdownMenuItem(value: EntryType.secureNote, child: Text('安全笔记')),
-                    DropdownMenuItem(value: EntryType.identity, child: Text('身份信息')),
-                    DropdownMenuItem(value: EntryType.custom, child: Text('自定义')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedType = value);
-                    }
-                  },
-                ),
+              EntryTypePicker(
+                value: _selectedType,
+                onChanged: (value) {
+                  setState(() => _selectedType = value);
+                },
               ),
               const SizedBox(height: AppTokens.spaceL),
             ],
