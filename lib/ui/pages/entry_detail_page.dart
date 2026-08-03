@@ -9,6 +9,7 @@ import '../../core/services/clipboard_service.dart';
 import '../../core/services/totp_service.dart';
 import '../widgets/entry_type_helper.dart';
 import '../widgets/confirm_dialog.dart';
+import '../theme/tokens.dart';
 import 'add_entry_page.dart';
 
 class EntryDetailPage extends ConsumerStatefulWidget {
@@ -188,19 +189,19 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppTokens.spaceL),
         children: [
           _buildTypeHeader(entry),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppTokens.spaceL),
 
           ..._buildTypeSpecificFields(entry),
 
           if (entry.tags.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: AppTokens.spaceL),
             _buildTagsSection(entry),
           ],
 
-          const SizedBox(height: 24),
+          const SizedBox(height: AppTokens.spaceXL),
           _buildMetadataSection(entry),
         ],
       ),
@@ -208,13 +209,20 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   Widget _buildTypeHeader(VaultEntry entry) {
+    final typeColor = EntryTypeHelper.getColor(entry.type);
     return Card(
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: EntryTypeHelper.getColor(entry.type),
+        leading: Container(
+          width: AppTokens.iconBadgeSize,
+          height: AppTokens.iconBadgeSize,
+          decoration: BoxDecoration(
+            color: typeColor.withAlpha(40),
+            borderRadius: BorderRadius.circular(AppTokens.radiusM),
+          ),
           child: Icon(
             EntryTypeHelper.getIcon(entry.type),
-            color: Colors.white,
+            color: typeColor,
+            size: 22,
           ),
         ),
         title: Text(EntryTypeHelper.getName(entry.type)),
@@ -281,14 +289,14 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       if (entry.isMarkdown)
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppTokens.spaceL),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Icon(Icons.description, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     Text('Markdown 内容', style: Theme.of(context).textTheme.titleSmall),
                   ],
                 ),
@@ -331,7 +339,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     final showValue = !isSensitive || _isSensitiveVisible(fieldKey);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       child: ListTile(
         leading: Icon(icon),
         title: Text(label),
@@ -359,7 +367,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Widget _buildDisplayField(String label, String value, IconData icon) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       child: ListTile(
         leading: Icon(icon),
         title: Text(label),
@@ -370,7 +378,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Widget _buildUrlField(String label, String value, IconData icon) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       child: ListTile(
         leading: Icon(icon),
         title: Text(label),
@@ -414,7 +422,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     final color = progress < 0.3 ? Colors.red : Theme.of(context).colorScheme.primary;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       color: Theme.of(context).colorScheme.primaryContainer,
       child: Column(
         children: [
@@ -450,7 +458,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Widget _buildNoteField(String label, String value) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -478,8 +486,8 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
         Text('标签', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: AppTokens.spaceS,
+          runSpacing: AppTokens.spaceS,
           children: entry.tags.map((tag) => Chip(
             label: Text(tag),
             avatar: const Icon(Icons.tag, size: 16),
