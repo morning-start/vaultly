@@ -120,11 +120,21 @@ class _SecureTextFieldState extends State<SecureTextField> {
                     tooltip: '复制',
                   ),
                 IconButton(
-                  icon: Icon(
-                    _obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                  ),
                   onPressed: _toggleVisibility,
                   tooltip: _obscureText ? '显示密码' : '隐藏密码',
+                  icon: AnimatedSwitcher(
+                    duration: AppTokens.animFast,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: animation, child: child),
+                    ),
+                    child: Icon(
+                      _obscureText
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      key: ValueKey(_obscureText),
+                    ),
+                  ),
                 ),
               ],
             ),
