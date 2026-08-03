@@ -72,19 +72,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // 设置主密码页
       GoRoute(
         path: '/setup',
-        builder: (context, state) => const SetupPasswordPage(),
+        pageBuilder: (context, state) => _fadePage(const SetupPasswordPage()),
       ),
 
       // 解锁页
       GoRoute(
         path: '/unlock',
-        builder: (context, state) => const UnlockPage(),
+        pageBuilder: (context, state) => _fadePage(const UnlockPage()),
       ),
 
       // 保险库主页
       GoRoute(
         path: '/vault',
-        builder: (context, state) => const VaultPage(),
+        pageBuilder: (context, state) => _fadePage(const VaultPage()),
       ),
 
       // 添加条目页
@@ -162,6 +162,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+/// 页面淡入过渡
+Page<void> _fadePage(Widget child) => CustomTransitionPage<void>(
+  child: child,
+  transitionDuration: const Duration(milliseconds: 250),
+  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+      FadeTransition(opacity: animation, child: child),
+);
 
 /// 路由扩展方法
 extension GoRouterExtension on BuildContext {
