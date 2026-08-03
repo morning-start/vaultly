@@ -11,6 +11,7 @@ import '../widgets/password_strength_indicator.dart';
 import '../widgets/entry_type_helper.dart';
 import '../widgets/password_generator_dialog.dart';
 import '../widgets/section_card.dart';
+import '../widgets/loading_button.dart';
 import '../theme/tokens.dart';
 import 'qr_scanner_page.dart';
 
@@ -64,6 +65,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   DateTime? _birthDate;
 
   int _passwordStrength = 0;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -309,8 +311,21 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   }
 
   Future<void> _saveEntry() async {
+    if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() => _isSaving = true);
+    try {
+      await _persistEntry();
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  /// 构建条目并写入保险库（由 _saveEntry 包裹，负责 loading 状态）
+  Future<void> _persistEntry() async {
     final vaultService = ref.read(vaultServiceProvider);
 
     final tags = _tagsController.text
@@ -461,7 +476,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         title: Text(_isEditing ? '编辑条目' : '添加条目'),
         actions: [
           TextButton(
-            onPressed: _saveEntry,
+            onPressed: _isSaving ? null : _saveEntry,
             child: const Text('保存'),
           ),
         ],
@@ -534,10 +549,11 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
               children: _buildTypeSpecificFields(),
             ),
 
-            ElevatedButton.icon(
+            LoadingButton.filled(
               onPressed: _saveEntry,
-              icon: const Icon(Icons.save),
-              label: Text(_isEditing ? '更新条目' : '添加条目'),
+              icon: Icons.save,
+              label: _isEditing ? '更新条目' : '添加条目',
+              isLoading: _isSaving,
             ),
           ],
         ),
