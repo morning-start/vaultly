@@ -6,6 +6,7 @@ import '../../core/providers/vault_service_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../widgets/entry_card_widget.dart';
 import '../widgets/empty_state.dart';
+import '../theme/tokens.dart';
 import 'add_entry_page.dart';
 import 'entry_detail_page.dart';
 
@@ -144,7 +145,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppTokens.spaceL),
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -168,7 +169,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
                 child: Row(
                   children: [
                     FilterChip(
@@ -178,7 +179,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = null);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('登录'),
                       selected: _selectedFilter == EntryType.login,
@@ -186,7 +187,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = EntryType.login);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('银行卡'),
                       selected: _selectedFilter == EntryType.bankCard,
@@ -194,7 +195,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = EntryType.bankCard);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('笔记'),
                       selected: _selectedFilter == EntryType.secureNote,
@@ -202,7 +203,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = EntryType.secureNote);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('身份'),
                       selected: _selectedFilter == EntryType.identity,
@@ -213,7 +214,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTokens.spaceS),
 
               Expanded(
                 child: filteredEntries.isEmpty
@@ -226,7 +227,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                       )
                     : ListView.builder(
                         itemCount: filteredEntries.length,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
                         itemBuilder: (context, index) {
                           final entry = filteredEntries[index];
                           return EntryCardWidget(
