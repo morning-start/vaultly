@@ -1,8 +1,4 @@
 {
-  "dart.flutterSdkPath": ".fvm/versions/3.38.9",
-  "cSpell.words": [
-    "vaultly"
-  ],
   "files.exclude": {
     "linux": true,
     "macos": true,
