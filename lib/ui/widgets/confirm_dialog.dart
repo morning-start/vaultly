@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/tokens.dart';
 
 /// 确认对话框
 ///
@@ -43,7 +44,6 @@ class ConfirmDialog extends StatelessWidget {
         confirmLabel: '删除',
         cancelLabel: '取消',
         icon: Icons.delete_outline,
-        iconColor: Colors.red,
         isDangerous: true,
       ),
     );
@@ -82,7 +82,6 @@ class ConfirmDialog extends StatelessWidget {
         confirmLabel: '丢弃',
         cancelLabel: '继续编辑',
         icon: Icons.delete_forever_outlined,
-        iconColor: Colors.orange,
         isDangerous: true,
       ),
     );
@@ -102,7 +101,6 @@ class ConfirmDialog extends StatelessWidget {
         confirmLabel: '清除',
         cancelLabel: '取消',
         icon: Icons.cleaning_services_outlined,
-        iconColor: Colors.red,
         isDangerous: true,
       ),
     );
@@ -280,7 +278,7 @@ class _InputConfirmDialogState extends State<InputConfirmDialog> {
           decoration: InputDecoration(
             hintText: widget.hintText,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
             ),
           ),
           keyboardType: widget.keyboardType,

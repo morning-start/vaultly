@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth_provider.dart';
 import '../widgets/secure_text_field.dart';
+import '../theme/tokens.dart';
 
 class BiometricSettingsPage extends ConsumerStatefulWidget {
   const BiometricSettingsPage({super.key});
@@ -30,10 +31,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('生物识别已启用'),
-          backgroundColor: Colors.green,
-        ),
+        const SnackBar(content: Text('生物识别已启用')),
       );
       _passwordController.clear();
     }
@@ -66,10 +64,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
       await ref.read(authNotifierProvider.notifier).disableBiometric();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('生物识别已禁用'),
-            backgroundColor: Colors.orange,
-          ),
+          const SnackBar(content: Text('生物识别已禁用')),
         );
       }
     }
@@ -88,13 +83,13 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppTokens.spaceXL),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 24),
+                const SizedBox(height: AppTokens.spaceXL),
 
                 // 图标和标题
                 Icon(
@@ -105,14 +100,14 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                       : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: AppTokens.spaceL),
                 Text(
                   biometricEnabled ? '$biometricTypeName 已启用' : '启用 $biometricTypeName',
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: 8),
+                const SizedBox(height: AppTokens.spaceS),
                 Text(
                   biometricEnabled
                       ? '您可以使用$biometricTypeName快速解锁保险库'
@@ -123,7 +118,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: AppTokens.spaceXL),
 
                 // 如果未启用，显示启用表单
                 if (!biometricEnabled) ...[
@@ -137,21 +132,21 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                             '启用流程',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppTokens.spaceM),
                           _buildStep(
                             context,
                             number: 1,
                             title: '系统指纹认证',
                             description: '调用系统指纹进行身份验证，使用您已注册的指纹信息',
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppTokens.spaceM),
                           _buildStep(
                             context,
                             number: 2,
                             title: '验证主密码',
                             description: '输入主密码确认身份，用于派生加密密钥',
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppTokens.spaceM),
                           _buildStep(
                             context,
                             number: 3,
@@ -163,7 +158,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppTokens.spaceXL),
 
                   SecureTextField(
                     controller: _passwordController,
@@ -180,7 +175,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                     onSubmitted: (_) => _enableBiometric(),
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppTokens.spaceL),
 
                   SizedBox(
                     width: double.infinity,
@@ -208,7 +203,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                             Icons.check_circle,
                             color: Theme.of(context).colorScheme.primary,
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppTokens.spaceM),
                           Expanded(
                             child: Text(
                               '$biometricTypeName 已启用，可用于快速解锁',
@@ -222,7 +217,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppTokens.spaceXL),
 
                   OutlinedButton.icon(
                     onPressed: _disableBiometric,
@@ -235,7 +230,7 @@ class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
                   ),
                 ],
 
-                const SizedBox(height: 32),
+                const SizedBox(height: AppTokens.spaceXL),
 
                 // 错误提示
                 if (authState.error != null) ...[

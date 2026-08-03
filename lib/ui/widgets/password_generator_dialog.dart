@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/password_generator.dart';
+import '../theme/tokens.dart';
 
 /// 密码生成器对话框
 ///
@@ -55,11 +56,13 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
     });
   }
 
-  Color _getStrengthColor() {
-    if (_strength < 40) return Colors.red;
-    if (_strength < 70) return Colors.orange;
-    if (_strength < 90) return Colors.yellow.shade700;
-    return Colors.green;
+  /// 根据强度与主题亮度返回可读的颜色（深色模式使用浅色变体保证对比度）
+  Color _getStrengthColor(ColorScheme colorScheme) {
+    final isDark = colorScheme.brightness == Brightness.dark;
+    if (_strength < 40) return colorScheme.error;
+    if (_strength < 70) return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+    if (_strength < 90) return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    return isDark ? Colors.green.shade300 : Colors.green.shade700;
   }
 
   String _getStrengthText() {
@@ -71,6 +74,9 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final strengthColor = _getStrengthColor(colorScheme);
+
     return AlertDialog(
       title: const Text('生成密码'),
       content: SingleChildScrollView(
@@ -80,10 +86,10 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
           children: [
             // 生成的密码显示
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppTokens.spaceM),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppTokens.radiusM),
               ),
               child: Column(
                 children: [
@@ -95,23 +101,23 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppTokens.spaceS),
                   LinearProgressIndicator(
                     value: _strength / 100,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    valueColor: AlwaysStoppedAnimation(_getStrengthColor()),
+                    backgroundColor: colorScheme.surface,
+                    valueColor: AlwaysStoppedAnimation(strengthColor),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppTokens.spaceXS),
                   Text(
                     '强度: ${_getStrengthText()} ($_strength/100)',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _getStrengthColor(),
+                      color: strengthColor,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppTokens.spaceL),
 
             // 密码长度
             Row(
@@ -136,6 +142,7 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
 
             // 易读模式
             SwitchListTile(
+              contentPadding: EdgeInsets.zero,
               title: const Text('易读模式'),
               subtitle: const Text('排除容易混淆的字符'),
               value: _readable,
@@ -147,37 +154,44 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
 
             // 字符类型选项
             if (!_readable) ...[
-              CheckboxListTile(
-                title: const Text('大写字母 (A-Z)'),
-                value: _includeUppercase,
-                onChanged: (value) {
-                  setState(() => _includeUppercase = value ?? true);
-                  _generatePassword();
-                },
-              ),
-              CheckboxListTile(
-                title: const Text('小写字母 (a-z)'),
-                value: _includeLowercase,
-                onChanged: (value) {
-                  setState(() => _includeLowercase = value ?? true);
-                  _generatePassword();
-                },
-              ),
-              CheckboxListTile(
-                title: const Text('数字 (0-9)'),
-                value: _includeNumbers,
-                onChanged: (value) {
-                  setState(() => _includeNumbers = value ?? true);
-                  _generatePassword();
-                },
-              ),
-              CheckboxListTile(
-                title: const Text('特殊字符 (!@#...)'),
-                value: _includeSymbols,
-                onChanged: (value) {
-                  setState(() => _includeSymbols = value ?? true);
-                  _generatePassword();
-                },
+              const SizedBox(height: AppTokens.spaceS),
+              Wrap(
+                spacing: AppTokens.spaceS,
+                runSpacing: AppTokens.spaceS,
+                children: [
+                  FilterChip(
+                    label: const Text('大写 A-Z'),
+                    selected: _includeUppercase,
+                    onSelected: (value) {
+                      setState(() => _includeUppercase = value || _includeLowercase || _includeNumbers || _includeSymbols);
+                      _generatePassword();
+                    },
+                  ),
+                  FilterChip(
+                    label: const Text('小写 a-z'),
+                    selected: _includeLowercase,
+                    onSelected: (value) {
+                      setState(() => _includeLowercase = value || _includeUppercase || _includeNumbers || _includeSymbols);
+                      _generatePassword();
+                    },
+                  ),
+                  FilterChip(
+                    label: const Text('数字 0-9'),
+                    selected: _includeNumbers,
+                    onSelected: (value) {
+                      setState(() => _includeNumbers = value || _includeUppercase || _includeLowercase || _includeSymbols);
+                      _generatePassword();
+                    },
+                  ),
+                  FilterChip(
+                    label: const Text('符号 !@#'),
+                    selected: _includeSymbols,
+                    onSelected: (value) {
+                      setState(() => _includeSymbols = value || _includeUppercase || _includeLowercase || _includeNumbers);
+                      _generatePassword();
+                    },
+                  ),
+                ],
               ),
             ],
           ],

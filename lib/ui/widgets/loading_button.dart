@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/tokens.dart';
 
 /// 加载按钮
 ///
@@ -111,7 +112,7 @@ class LoadingButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectiveOnPressed = (isLoading || !enabled) ? null : onPressed;
     final effectiveMinimumSize = minimumSize ?? const Size(88, 44);
-    final effectivePadding = padding ?? const EdgeInsets.symmetric(horizontal: 24, vertical: 12);
+    final effectivePadding = padding ?? AppTokens.buttonPadding;
 
     switch (type) {
       case ButtonType.elevated:

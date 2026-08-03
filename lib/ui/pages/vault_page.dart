@@ -6,6 +6,8 @@ import '../../core/providers/vault_service_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../widgets/entry_card_widget.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/error_state.dart';
+import '../theme/tokens.dart';
 import 'add_entry_page.dart';
 import 'entry_detail_page.dart';
 
@@ -18,13 +20,31 @@ class VaultPage extends ConsumerStatefulWidget {
 
 class _VaultPageState extends ConsumerState<VaultPage> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   String _searchQuery = '';
   EntryType? _selectedFilter;
+  bool _fabVisible = true;
+  double _lastScrollOffset = 0;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _initializeVault();
+  }
+
+  /// 滚动联动：向下滚动隐藏 FAB，向上滚动或回到顶部时显示。
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final offset = _scrollController.offset;
+    final delta = offset - _lastScrollOffset;
+    if (delta.abs() < 4) return;
+
+    final shouldShow = delta < 0 || offset <= 0;
+    if (shouldShow != _fabVisible) {
+      setState(() => _fabVisible = shouldShow);
+    }
+    _lastScrollOffset = offset;
   }
 
   /// 页面初始化时加载保险库数据，并把解密密钥交给业务层。
@@ -54,6 +74,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -144,7 +165,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppTokens.spaceL),
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -159,8 +180,6 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                             },
                           )
                         : null,
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   onChanged: (value) {
                     setState(() => _searchQuery = value);
@@ -170,7 +189,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
                 child: Row(
                   children: [
                     FilterChip(
@@ -180,7 +199,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = null);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('登录'),
                       selected: _selectedFilter == EntryType.login,
@@ -188,7 +207,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = EntryType.login);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('银行卡'),
                       selected: _selectedFilter == EntryType.bankCard,
@@ -196,7 +215,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = EntryType.bankCard);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('笔记'),
                       selected: _selectedFilter == EntryType.secureNote,
@@ -204,7 +223,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                         setState(() => _selectedFilter = EntryType.secureNote);
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTokens.spaceS),
                     FilterChip(
                       label: const Text('身份'),
                       selected: _selectedFilter == EntryType.identity,
@@ -215,25 +234,36 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTokens.spaceS),
 
               Expanded(
                 child: filteredEntries.isEmpty
-                    ? EmptyState(
-                        icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.inbox_outlined,
-                        title: _searchQuery.isNotEmpty ? '未找到匹配的条目' : '暂无条目',
-                        subtitle: _searchQuery.isNotEmpty
-                            ? '尝试其他搜索词'
-                            : '点击下方按钮添加您的第一个条目',
-                      )
+                    ? (_searchQuery.isNotEmpty
+                        ? EmptyState.search(query: _searchQuery)
+                        : EmptyState.vault(onAddPressed: _navigateToAddEntry))
                     : ListView.builder(
+                        controller: _scrollController,
                         itemCount: filteredEntries.length,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
                         itemBuilder: (context, index) {
                           final entry = filteredEntries[index];
-                          return EntryCardWidget(
-                            entry: entry,
-                            onTap: () => _navigateToEntryDetail(entry),
+                          // 新条目淡入 + 上移过渡（按 uuid 复用元素避免重复播放）
+                          return TweenAnimationBuilder<double>(
+                            key: ValueKey(entry.uuid),
+                            tween: Tween(begin: 0, end: 1),
+                            duration: AppTokens.animNormal,
+                            curve: Curves.easeOut,
+                            builder: (context, value, child) => Opacity(
+                              opacity: value,
+                              child: Transform.translate(
+                                offset: Offset(0, AppTokens.spaceS * (1 - value)),
+                                child: child,
+                              ),
+                            ),
+                            child: EntryCardWidget(
+                              entry: entry,
+                              onTap: () => _navigateToEntryDetail(entry),
+                            ),
                           );
                         },
                       ),
@@ -246,42 +276,28 @@ class _VaultPageState extends ConsumerState<VaultPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(),
-              SizedBox(height: 16),
+              SizedBox(height: AppTokens.spaceL),
               Text('加载中...'),
             ],
           ),
         ),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '加载失败: $error',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () {
-                  ref.invalidate(vaultEntriesProvider);
-                },
-                child: const Text('重试'),
-              ),
-            ],
-          ),
+        error: (error, stack) => ErrorState.load(
+          message: '加载失败: $error',
+          onRetryPressed: () => ref.invalidate(vaultEntriesProvider),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _navigateToAddEntry,
-        icon: const Icon(Icons.add),
-        label: const Text('添加'),
+      floatingActionButton: IgnorePointer(
+        ignoring: !_fabVisible,
+        child: AnimatedScale(
+          scale: _fabVisible ? 1 : 0,
+          duration: AppTokens.animNormal,
+          curve: AppTokens.easeStandard,
+          child: FloatingActionButton.extended(
+            onPressed: _navigateToAddEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('添加'),
+          ),
+        ),
       ),
     );
   }
