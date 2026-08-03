@@ -159,8 +159,6 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                             },
                           )
                         : null,
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   onChanged: (value) {
                     setState(() => _searchQuery = value);
