@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/password_policy.dart';
+import '../theme/tokens.dart';
 
 class PasswordStrengthIndicator extends StatelessWidget {
   final int strength;
@@ -17,7 +18,8 @@ class PasswordStrengthIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     if (strength == 0) return const SizedBox.shrink();
 
-    final color = _getStrengthColor(strength);
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = _getStrengthColor(strength, colorScheme);
     final label = PasswordPolicy.getStrengthLabel(strength);
 
     return Column(
@@ -25,16 +27,16 @@ class PasswordStrengthIndicator extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(AppTokens.radiusS),
           child: LinearProgressIndicator(
             value: strength / 100,
-            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+            backgroundColor: colorScheme.surfaceContainerHighest,
             valueColor: AlwaysStoppedAnimation<Color>(color),
             minHeight: height ?? 4,
           ),
         ),
         if (showLabel) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: AppTokens.spaceXS),
           Text(
             '密码强度: $label',
             style: TextStyle(
@@ -48,21 +50,12 @@ class PasswordStrengthIndicator extends StatelessWidget {
     );
   }
 
-  Color _getStrengthColor(int strength) {
-    final colorName = PasswordPolicy.getStrengthColor(strength);
-    switch (colorName) {
-      case 'red':
-        return Colors.red;
-      case 'orange':
-        return Colors.orange;
-      case 'yellow':
-        return Colors.yellow.shade700;
-      case 'lightGreen':
-        return Colors.lightGreen;
-      case 'green':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
+  /// 根据强度与主题亮度返回可读的颜色（深色模式使用浅色变体保证对比度）
+  Color _getStrengthColor(int strength, ColorScheme colorScheme) {
+    final isDark = colorScheme.brightness == Brightness.dark;
+    if (strength < 40) return colorScheme.error;
+    if (strength < 70) return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+    if (strength < 90) return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    return isDark ? Colors.green.shade300 : Colors.green.shade700;
   }
 }
