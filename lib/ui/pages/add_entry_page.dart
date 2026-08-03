@@ -10,6 +10,8 @@ import '../widgets/secure_text_field.dart';
 import '../widgets/password_strength_indicator.dart';
 import '../widgets/entry_type_helper.dart';
 import '../widgets/password_generator_dialog.dart';
+import '../widgets/section_card.dart';
+import '../theme/tokens.dart';
 import 'qr_scanner_page.dart';
 
 class AddEntryPage extends ConsumerStatefulWidget {
@@ -467,9 +469,9 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppTokens.spaceL),
           children: [
-            if (!_isEditing)
+            if (!_isEditing) ...[
               InputDecorator(
                 decoration: const InputDecoration(
                   labelText: '条目类型',
@@ -493,37 +495,44 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
                   },
                 ),
               ),
-            if (!_isEditing) const SizedBox(height: 16),
+              const SizedBox(height: AppTokens.spaceL),
+            ],
 
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: '标题 *',
-                hintText: '例如：Google 账号',
-                prefixIcon: Icon(Icons.title),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return '请输入标题';
-                }
-                return null;
-              },
+            SectionCard(
+              title: '基本信息',
+              icon: Icons.info_outline,
+              children: [
+                TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: '标题 *',
+                    hintText: '例如：Google 账号',
+                    prefixIcon: Icon(Icons.title),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return '请输入标题';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppTokens.spaceL),
+                TextFormField(
+                  controller: _tagsController,
+                  decoration: const InputDecoration(
+                    labelText: '标签',
+                    hintText: '用逗号分隔多个标签',
+                    prefixIcon: Icon(Icons.tag),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
 
-            ..._buildTypeSpecificFields(),
-
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: _tagsController,
-              decoration: const InputDecoration(
-                labelText: '标签',
-                hintText: '用逗号分隔多个标签',
-                prefixIcon: Icon(Icons.tag),
-              ),
+            SectionCard(
+              title: _typeSectionTitle,
+              icon: _typeSectionIcon,
+              children: _buildTypeSpecificFields(),
             ),
-            const SizedBox(height: 32),
 
             ElevatedButton.icon(
               onPressed: _saveEntry,
@@ -535,6 +544,18 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       ),
     );
   }
+
+  /// 当前类型的分区标题
+  String get _typeSectionTitle => switch (_selectedType) {
+    EntryType.login => '登录凭证',
+    EntryType.bankCard => '银行卡信息',
+    EntryType.secureNote => '笔记内容',
+    EntryType.identity => '身份信息',
+    EntryType.custom => '自定义字段',
+  };
+
+  /// 当前类型的分区图标
+  IconData get _typeSectionIcon => EntryTypeHelper.getIcon(_selectedType);
 
   List<Widget> _buildTypeSpecificFields() {
     switch (_selectedType) {
@@ -561,7 +582,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           prefixIcon: Icon(Icons.person),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _emailController,
         decoration: const InputDecoration(
@@ -570,13 +591,13 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
         keyboardType: TextInputType.emailAddress,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       SecureTextField(
         controller: _passwordController,
         labelText: '密码',
         prefixIcon: Icons.lock,
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: AppTokens.spaceS),
       Row(
         children: [
           IconButton(
@@ -592,7 +613,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ],
       ),
       PasswordStrengthIndicator(strength: _passwordStrength),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _urlController,
         decoration: const InputDecoration(
@@ -602,7 +623,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
         keyboardType: TextInputType.url,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _totpSecretController,
         decoration: InputDecoration(
@@ -616,7 +637,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           ),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _notesController,
         maxLines: 3,
@@ -646,7 +667,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           return null;
         },
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       InputDecorator(
         decoration: const InputDecoration(
           labelText: '卡类型',
@@ -669,7 +690,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           },
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _cardHolderController,
         decoration: const InputDecoration(
@@ -678,7 +699,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
         textCapitalization: TextCapitalization.words,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       ListTile(
         leading: const Icon(Icons.calendar_today),
         title: const Text('有效期'),
@@ -690,13 +711,13 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           child: const Text('选择'),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       SecureTextField(
         controller: _cvvController,
         labelText: 'CVV',
         prefixIcon: Icons.security,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _bankNameController,
         decoration: const InputDecoration(
@@ -715,7 +736,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         value: _isMarkdown,
         onChanged: (value) => setState(() => _isMarkdown = value),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _noteContentController,
         maxLines: 10,
@@ -749,7 +770,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
               textCapitalization: TextCapitalization.words,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: AppTokens.spaceL),
           Expanded(
             child: TextFormField(
               controller: _lastNameController,
@@ -762,7 +783,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           ),
         ],
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _middleNameController,
         decoration: const InputDecoration(
@@ -771,7 +792,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
         textCapitalization: TextCapitalization.words,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       ListTile(
         leading: const Icon(Icons.cake),
         title: const Text('出生日期'),
@@ -783,13 +804,13 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           child: const Text('选择'),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       SecureTextField(
         controller: _idNumberController,
         labelText: '证件号码',
         prefixIcon: Icons.badge,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _phoneController,
         decoration: const InputDecoration(
@@ -798,7 +819,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
         keyboardType: TextInputType.phone,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _emailController,
         decoration: const InputDecoration(
@@ -807,7 +828,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         ),
         keyboardType: TextInputType.emailAddress,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: AppTokens.spaceL),
       TextFormField(
         controller: _addressController,
         maxLines: 2,
@@ -873,7 +894,7 @@ class _ExpiryDatePickerState extends State<_ExpiryDatePicker> {
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: AppTokens.spaceL),
           Expanded(
             child: InputDecorator(
               decoration: const InputDecoration(labelText: '年'),
