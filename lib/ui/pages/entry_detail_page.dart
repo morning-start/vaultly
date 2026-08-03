@@ -169,13 +169,16 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
           ),
           PopupMenuButton(
             itemBuilder: (context) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete, color: Colors.red, size: 20),
-                    SizedBox(width: 8),
-                    Text('删除', style: TextStyle(color: Colors.red)),
+                    Icon(Icons.delete, color: Theme.of(context).colorScheme.error, size: 20),
+                    const SizedBox(width: AppTokens.spaceS),
+                    Text(
+                      '删除',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
                   ],
                 ),
               ),

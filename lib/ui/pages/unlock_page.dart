@@ -72,7 +72,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
     } else {
       _shakeController.forward(from: 0);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('密码错误，请重试'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('密码错误，请重试')),
       );
       _passwordController.clear();
     }
