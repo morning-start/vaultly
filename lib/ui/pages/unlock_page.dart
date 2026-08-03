@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 import '../widgets/secure_text_field.dart';
+import '../theme/tokens.dart';
 
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
@@ -80,6 +81,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
+    final colorScheme = Theme.of(context).colorScheme;
     final biometricAvailable = authState.biometricAvailable;
     final isAuthenticating = authState.isAuthenticatingWithBiometric;
     final biometricTypeName = authState.biometricTypeName ?? '生物识别';
@@ -87,118 +89,150 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('解锁保险库')),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 48),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colorScheme.primaryContainer.withAlpha(140),
+              colorScheme.surface,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppTokens.spaceXL),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: AppTokens.spaceXXL),
 
-                // 主图标（根据状态切换）
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: isAuthenticating
-                      ? Icon(
-                          biometricIcon,
-                          size: 80,
-                          color: Theme.of(context).colorScheme.primary.withAlpha(153),
-                        )
-                      : Icon(
-                          Icons.lock_open,
-                          size: 80,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                ),
-
-                const SizedBox(height: 24),
-                Text(
-                  '欢迎回来',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isAuthenticating
-                      ? '正在验证$biometricTypeName...'
-                      : '请输入主密码来解锁您的保险库',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 32),
-
-                // 密码输入框
-                SecureTextField(
-                  controller: _passwordController,
-                  labelText: '主密码',
-                  hintText: '请输入主密码',
-                  prefixIcon: Icons.lock,
-                  autofocus: !isAuthenticating,
-                  enabled: !isAuthenticating,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return '请输入密码';
-                    }
-                    return null;
-                  },
-                  onSubmitted: (_) => _unlock(),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 错误提示
-                if (authState.error != null && !isAuthenticating) ...[
-                  Card(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              authState.error!,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onErrorContainer,
+                  // 品牌 Logo 徽章（根据状态切换）
+                  AnimatedSwitcher(
+                    duration: AppTokens.animNormal,
+                    child: isAuthenticating
+                        ? Container(
+                            key: const ValueKey('authenticating'),
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colorScheme.primaryContainer,
+                            ),
+                            child: Icon(
+                              biometricIcon,
+                              size: 44,
+                              color: colorScheme.primary,
+                            ),
+                          )
+                        : Container(
+                            key: const ValueKey('logo'),
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colorScheme.surface.withAlpha(220),
+                              boxShadow: AppTokens.cardShadow(
+                                Colors.black.withAlpha(32),
                               ),
                             ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(AppTokens.spaceL),
+                              child: Image.asset('assets/logo.png'),
+                            ),
                           ),
-                        ],
+                  ),
+
+                  const SizedBox(height: AppTokens.spaceXL),
+                  Text(
+                    '欢迎回来',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppTokens.spaceS),
+                  Text(
+                    isAuthenticating
+                        ? '正在验证$biometricTypeName...'
+                        : '请输入主密码来解锁您的保险库',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: AppTokens.spaceXL),
+
+                  // 密码输入框
+                  SecureTextField(
+                    controller: _passwordController,
+                    labelText: '主密码',
+                    hintText: '请输入主密码',
+                    prefixIcon: Icons.lock,
+                    autofocus: !isAuthenticating,
+                    enabled: !isAuthenticating,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return '请输入密码';
+                      }
+                      return null;
+                    },
+                    onSubmitted: (_) => _unlock(),
+                  ),
+
+                  const SizedBox(height: AppTokens.spaceL),
+
+                  // 错误提示
+                  if (authState.error != null && !isAuthenticating) ...[
+                    Card(
+                      color: colorScheme.errorContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppTokens.spaceM),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              color: colorScheme.error,
+                            ),
+                            const SizedBox(width: AppTokens.spaceS),
+                            Expanded(
+                              child: Text(
+                                authState.error!,
+                                style: TextStyle(
+                                  color: colorScheme.onErrorContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                    const SizedBox(height: AppTokens.spaceL),
+                  ],
+
+                  ElevatedButton(
+                    onPressed: (authState.isLoading || isAuthenticating) ? null : _unlock,
+                    child: authState.isLoading || isAuthenticating
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('解锁'),
                   ),
-                  const SizedBox(height: 16),
-                ],
 
-                ElevatedButton(
-                  onPressed: (authState.isLoading || isAuthenticating) ? null : _unlock,
-                  child: authState.isLoading || isAuthenticating
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('解锁'),
-                ),
-
-                // 生物识别按钮区域（只显示一个）
-                if (biometricAvailable) ...[
-                  const SizedBox(height: 16),
-                  if (isAuthenticating)
-                    _buildAuthenticatingIndicator(biometricTypeName)
-                  else
-                    _buildBiometricButton(biometricTypeName, biometricIcon),
+                  // 生物识别按钮区域（只显示一个）
+                  if (biometricAvailable) ...[
+                    const SizedBox(height: AppTokens.spaceL),
+                    if (isAuthenticating)
+                      _buildAuthenticatingIndicator(biometricTypeName)
+                    else
+                      _buildBiometricButton(biometricTypeName, biometricIcon),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
