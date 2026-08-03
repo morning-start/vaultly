@@ -419,39 +419,66 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   Widget _buildTotpField(String label, String code, int remainingSeconds) {
     final progress = remainingSeconds / 30;
-    final color = progress < 0.3 ? Colors.red : Theme.of(context).colorScheme.primary;
+    final color = progress < 0.3
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.primary;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       color: Theme.of(context).colorScheme.primaryContainer,
-      child: Column(
-        children: [
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            valueColor: AlwaysStoppedAnimation(color),
-          ),
-          ListTile(
-            leading: Icon(Icons.timer, color: Theme.of(context).colorScheme.primary),
-            title: Text(label),
-            subtitle: Text(
-              '${code.substring(0, 3)} ${code.substring(3)}',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
-                color: Theme.of(context).colorScheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.all(AppTokens.spaceL),
+        child: Row(
+          children: [
+            // 倒计时环形进度
+            SizedBox(
+              width: 44,
+              height: 44,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 3,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                  Text(
+                    '$remainingSeconds',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-            trailing: Text(
-              '${remainingSeconds}s',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
+            const SizedBox(width: AppTokens.spaceL),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.labelMedium),
+                  const SizedBox(height: AppTokens.spaceXS),
+                  Text(
+                    '${code.substring(0, 3)} ${code.substring(3)}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 4,
+                      fontFamily: 'monospace',
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
               ),
             ),
-            onTap: () => _copyToClipboard(code, label),
-          ),
-        ],
+            IconButton(
+              icon: const Icon(Icons.copy),
+              tooltip: '复制验证码',
+              onPressed: () => _copyToClipboard(code, label),
+            ),
+          ],
+        ),
       ),
     );
   }
