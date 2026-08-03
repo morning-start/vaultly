@@ -7,6 +7,7 @@ import '../../core/utils/password_policy.dart';
 import '../widgets/secure_text_field.dart';
 import '../widgets/password_strength_indicator.dart';
 import '../widgets/password_suggestions_widget.dart';
+import '../theme/tokens.dart';
 
 class SetupPasswordPage extends ConsumerStatefulWidget {
   const SetupPasswordPage({super.key});
@@ -82,27 +83,48 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
       appBar: AppBar(
         title: const Text('创建保险库'),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).colorScheme.primaryContainer.withAlpha(140),
+              Theme.of(context).colorScheme.surface,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppTokens.spaceXL),
+            child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 24),
-                Icon(
-                  Icons.lock_outline,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.primary,
+                const SizedBox(height: AppTokens.spaceXL),
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Theme.of(context).colorScheme.surface.withAlpha(220),
+                    boxShadow: AppTokens.cardShadow(
+                      Colors.black.withAlpha(32),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppTokens.spaceL),
+                    child: Image.asset('assets/logo.png'),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppTokens.spaceXL),
                 Text(
                   '创建主密码',
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppTokens.spaceS),
                 Text(
                   '请设置一个强密码来保护您的保险库',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -110,7 +132,7 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: AppTokens.spaceXL),
                 SecureTextField(
                   controller: _passwordController,
                   labelText: '主密码',
@@ -119,9 +141,9 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
                   validator: _validatePassword,
                   onChanged: (_) => _updatePasswordStrength(),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppTokens.spaceS),
                 PasswordStrengthIndicator(strength: _passwordStrength),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppTokens.spaceL),
                 SecureTextField(
                   controller: _confirmController,
                   labelText: '确认密码',
@@ -129,9 +151,9 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
                   prefixIcon: Icons.lock_outline,
                   validator: _validateConfirmPassword,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppTokens.spaceL),
                 PasswordSuggestionsWidget.policy(),
-                const SizedBox(height: 32),
+                const SizedBox(height: AppTokens.spaceXL),
                 ElevatedButton(
                   onPressed: authState.isLoading ? null : _setupPassword,
                   child: authState.isLoading
@@ -146,6 +168,7 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
