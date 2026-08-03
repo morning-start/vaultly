@@ -273,25 +273,31 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
           const SizedBox(height: 16),
           InkWell(
             onTap: _biometricUnlock,
-            borderRadius: BorderRadius.circular(50),
+            customBorder: const CircleBorder(),
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppTokens.spaceL),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withAlpha(100),
-                  width: 1,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Theme.of(context).colorScheme.primary,
+                    Theme.of(context).colorScheme.tertiary,
+                  ],
+                ),
+                boxShadow: AppTokens.cardShadow(
+                  Theme.of(context).colorScheme.primary.withAlpha(90),
                 ),
               ),
               child: Icon(
                 icon,
                 size: 40,
-                color: Theme.of(context).colorScheme.primary,
+                color: Theme.of(context).colorScheme.onPrimary,
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppTokens.spaceS),
           Text(
             '使用$typeName 解锁',
             style: TextStyle(
