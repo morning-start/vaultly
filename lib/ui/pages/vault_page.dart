@@ -6,6 +6,7 @@ import '../../core/providers/vault_service_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../widgets/entry_card_widget.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/error_state.dart';
 import '../theme/tokens.dart';
 import 'add_entry_page.dart';
 import 'entry_detail_page.dart';
@@ -218,13 +219,9 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
               Expanded(
                 child: filteredEntries.isEmpty
-                    ? EmptyState(
-                        icon: _searchQuery.isNotEmpty ? Icons.search_off : Icons.inbox_outlined,
-                        title: _searchQuery.isNotEmpty ? '未找到匹配的条目' : '暂无条目',
-                        subtitle: _searchQuery.isNotEmpty
-                            ? '尝试其他搜索词'
-                            : '点击下方按钮添加您的第一个条目',
-                      )
+                    ? (_searchQuery.isNotEmpty
+                        ? EmptyState.search(query: _searchQuery)
+                        : EmptyState.vault(onAddPressed: _navigateToAddEntry))
                     : ListView.builder(
                         itemCount: filteredEntries.length,
                         padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
@@ -245,36 +242,14 @@ class _VaultPageState extends ConsumerState<VaultPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(),
-              SizedBox(height: 16),
+              SizedBox(height: AppTokens.spaceL),
               Text('加载中...'),
             ],
           ),
         ),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '加载失败: $error',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () {
-                  ref.invalidate(vaultEntriesProvider);
-                },
-                child: const Text('重试'),
-              ),
-            ],
-          ),
+        error: (error, stack) => ErrorState.load(
+          message: '加载失败: $error',
+          onRetryPressed: () => ref.invalidate(vaultEntriesProvider),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
