@@ -1,0 +1,442 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../domain/sync_models.dart';
+import 'sync_providers.dart';
+import '../../../../shared/widgets/secure_text_field.dart';
+import '../../../../shared/widgets/confirm_dialog.dart';
+
+class WebDAVConfigPage extends ConsumerStatefulWidget {
+  const WebDAVConfigPage({super.key});
+
+  @override
+  ConsumerState<WebDAVConfigPage> createState() => _WebDAVConfigPageState();
+}
+
+class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _urlController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  bool _isLoading = false;
+  bool _enableEncryption = true;
+  bool _enableCompression = true;
+  SyncMode _syncMode = SyncMode.manual;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    setState(() => _isLoading = true);
+
+    final webDAVService = ref.read(webDAVServiceProvider);
+    final config = await webDAVService.getConfig();
+
+    if (config != null && mounted) {
+      setState(() {
+        _urlController.text = config.serverUrl;
+        _usernameController.text = config.username;
+        _passwordController.text = config.password ?? '';
+        _enableEncryption = config.enableEncryption;
+        _enableCompression = config.enableCompression;
+        _syncMode = config.syncMode;
+      });
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveConfig() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final config = SyncConfig(
+      id: 'webdav_default',
+      serverUrl: _urlController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+      enableEncryption: _enableEncryption,
+      enableCompression: _enableCompression,
+      syncMode: _syncMode,
+    );
+
+    final webDAVService = ref.read(webDAVServiceProvider);
+
+    final result = await webDAVService.testConnection(config);
+
+    if (!mounted) return;
+
+    if (!result.success) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('连接失败: ${result.errorMessage ?? "请检查配置信息"}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await webDAVService.saveConfig(config);
+
+    if (!mounted) return;
+
+    await ref.read(webDAVConfigProvider.notifier).refresh();
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('配置已保存')),
+    );
+  }
+
+  Future<void> _clearConfig() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => ConfirmDialog(
+        title: '确认清除',
+        content: '确定要清除 WebDAV 配置吗？',
+        confirmLabel: '清除',
+        isDangerous: true,
+      ),
+    );
+
+    if (confirmed == true) {
+      final webDAVService = ref.read(webDAVServiceProvider);
+      await webDAVService.clearConfig();
+
+      if (mounted) {
+        await ref.read(webDAVConfigProvider.notifier).refresh();
+
+        if (!mounted) return;
+
+        setState(() {
+          _urlController.clear();
+          _usernameController.clear();
+          _passwordController.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('配置已清除')),
+        );
+      }
+    }
+  }
+
+  Future<void> _testConnection() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final config = SyncConfig(
+      id: 'webdav_default',
+      serverUrl: _urlController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    final webDAVService = ref.read(webDAVServiceProvider);
+    final result = await webDAVService.testConnection(config);
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.success ? '连接成功' : '连接失败: ${result.errorMessage ?? ""}'),
+        backgroundColor: result.success ? Colors.green : Colors.red,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final configState = ref.watch(webDAVConfigProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('WebDAV 同步'),
+        actions: [
+          if (configState.isConfigured)
+            TextButton(
+              onPressed: _clearConfig,
+              child: const Text('清除配置'),
+            ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildStatusCard(configState.isConfigured),
+                    const SizedBox(height: 24),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '服务器配置',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _urlController,
+                              decoration: const InputDecoration(
+                                labelText: '服务器地址 *',
+                                hintText: 'https://dav.example.com',
+                                prefixIcon: Icon(Icons.cloud),
+                              ),
+                              keyboardType: TextInputType.url,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return '请输入服务器地址';
+                                }
+                                if (!value.startsWith('http')) {
+                                  return '地址必须以 http:// 或 https:// 开头';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _usernameController,
+                              decoration: const InputDecoration(
+                                labelText: '用户名 *',
+                                prefixIcon: Icon(Icons.person),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return '请输入用户名';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            SecureTextField(
+                              controller: _passwordController,
+                              labelText: '密码 *',
+                              prefixIcon: Icons.lock,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return '请输入密码';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '同步设置',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 16),
+                            InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: '同步模式',
+                                prefixIcon: Icon(Icons.sync),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<SyncMode>(
+                                  value: _syncMode,
+                                  isExpanded: true,
+                                  items: const [
+                                    DropdownMenuItem(value: SyncMode.manual, child: Text('手动同步')),
+                                    DropdownMenuItem(value: SyncMode.uploadOnly, child: Text('仅上传（备份模式）')),
+                                    DropdownMenuItem(value: SyncMode.downloadOnly, child: Text('仅下载（恢复模式）')),
+                                    DropdownMenuItem(value: SyncMode.auto, child: Text('自动双向同步')),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _syncMode = value);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            SwitchListTile(
+                              title: const Text('启用端到端加密'),
+                              subtitle: const Text(
+                                '数据在传输前加密，服务器仅存储密文',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              value: _enableEncryption,
+                              onChanged: (value) {
+                                setState(() => _enableEncryption = value);
+                              },
+                              secondary: Icon(
+                                _enableEncryption
+                                    ? Icons.lock
+                                    : Icons.lock_open,
+                                color: _enableEncryption
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SwitchListTile(
+                              title: const Text('启用 GZIP 压缩'),
+                              subtitle: const Text(
+                                '减少传输数据量，加快同步速度',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              value: _enableCompression,
+                              onChanged: (value) {
+                                setState(() => _enableCompression = value);
+                              },
+                              secondary: const Icon(Icons.compress),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _testConnection,
+                            icon: const Icon(Icons.network_check),
+                            label: const Text('测试连接'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _saveConfig,
+                            icon: const Icon(Icons.save),
+                            label: const Text('保存配置'),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    Card(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '使用说明',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _enableEncryption
+                                  ? '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
+                                    '2. 数据将以加密形式存储在服务器上（推荐）\n'
+                                    '3. 加密使用 AES-256-GCM，密钥由主密码派生'
+                                  : '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
+                                    '2. ⚠️ 数据将以明文形式存储在服务器上（不推荐）\n'
+                                    '3. 建议仅在可信的私有服务器上关闭加密',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildStatusCard(bool isConfigured) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isConfigured
+                    ? Colors.green.withAlpha(26)
+                    : Colors.orange.withAlpha(26),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isConfigured ? Icons.cloud_done : Icons.cloud_off,
+                color: isConfigured ? Colors.green : Colors.orange,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isConfigured ? '已配置' : '未配置',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isConfigured
+                        ? 'WebDAV 同步已启用'
+                        : '请配置 WebDAV 服务器信息',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

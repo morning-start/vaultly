@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/auth_provider.dart';
+import '../../features/auth/presentation/auth_providers.dart';
 
 /// 自动锁定服务
 ///
 /// 负责监控用户活动，在闲置一段时间后自动锁定应用
 /// 支持的时间间隔：5分钟、15分钟、30分钟
-class AutoLockService extends ChangeNotifier {
+///
+/// 重构为纯逻辑类，状态管理由 Riverpod Notifier 负责。
+class AutoLockService {
   static const List<int> lockDurations = [5, 15, 30]; // 分钟
   static const int defaultLockDuration = 5; // 默认5分钟
 
@@ -15,9 +17,6 @@ class AutoLockService extends ChangeNotifier {
   DateTime? _lastActivityTime;
   int _lockDurationMinutes;
   bool _isMonitoring = false;
-
-  // 用户活动监听器
-  final List<VoidCallback> _onLockCallbacks = [];
 
   AutoLockService({int lockDurationMinutes = defaultLockDuration})
       : _lockDurationMinutes = lockDurationMinutes;
@@ -34,7 +33,6 @@ class AutoLockService extends ChangeNotifier {
     }
     _lockDurationMinutes = minutes;
     _resetTimer();
-    notifyListeners();
   }
 
   /// 是否正在监控
@@ -59,7 +57,6 @@ class AutoLockService extends ChangeNotifier {
     _isMonitoring = true;
     _lastActivityTime = DateTime.now();
     _startTimer();
-    notifyListeners();
   }
 
   /// 停止监控
@@ -67,15 +64,11 @@ class AutoLockService extends ChangeNotifier {
     _isMonitoring = false;
     _inactivityTimer?.cancel();
     _inactivityTimer = null;
-    notifyListeners();
   }
 
   /// 释放资源
-  @override
   void dispose() {
     stopMonitoring();
-    _onLockCallbacks.clear();
-    super.dispose();
   }
 
   // ==================== 活动跟踪 ====================
@@ -104,28 +97,13 @@ class AutoLockService extends ChangeNotifier {
     );
   }
 
+  /// 锁定触发 - 由外部注入回调
+  VoidCallback? onLockRequested;
+
   /// 锁定触发
   void _onLockTriggered() {
     stopMonitoring();
-
-    // 触发所有注册的回调
-    for (final callback in _onLockCallbacks) {
-      callback();
-    }
-
-    notifyListeners();
-  }
-
-  // ==================== 回调注册 ====================
-
-  /// 注册锁定回调
-  void addOnLockListener(VoidCallback callback) {
-    _onLockCallbacks.add(callback);
-  }
-
-  /// 移除锁定回调
-  void removeOnLockListener(VoidCallback callback) {
-    _onLockCallbacks.remove(callback);
+    onLockRequested?.call();
   }
 
   // ==================== 快捷方法 ====================
@@ -149,33 +127,129 @@ class AutoLockService extends ChangeNotifier {
   }
 }
 
-/// 自动锁定服务 Provider
-final autoLockServiceProvider = ChangeNotifierProvider<AutoLockService>((ref) {
-  final service = AutoLockService();
+/// 自动锁定状态
+class AutoLockState {
+  final bool isEnabled;
+  final int durationMinutes;
+  final bool isMonitoring;
+  final int? remainingSeconds;
 
-  // 监听锁定事件，触发认证状态锁定
-  service.addOnLockListener(() {
-    final authNotifier = ref.read(authNotifierProvider.notifier);
-    authNotifier.lock();
+  const AutoLockState({
+    this.isEnabled = true,
+    this.durationMinutes = AutoLockService.defaultLockDuration,
+    this.isMonitoring = false,
+    this.remainingSeconds,
   });
 
-  // 应用生命周期监听
-  ref.onDispose(() {
-    service.dispose();
-  });
+  AutoLockState copyWith({
+    bool? isEnabled,
+    int? durationMinutes,
+    bool? isMonitoring,
+    int? remainingSeconds,
+  }) {
+    return AutoLockState(
+      isEnabled: isEnabled ?? this.isEnabled,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      isMonitoring: isMonitoring ?? this.isMonitoring,
+      remainingSeconds: remainingSeconds ?? this.remainingSeconds,
+    );
+  }
+}
 
-  return service;
-});
+/// 自动锁定状态管理 Notifier
+class AutoLockNotifier extends StateNotifier<AutoLockState> {
+  final AutoLockService _service;
+  Timer? _refreshTimer;
 
-/// 自动锁定配置 Provider
-final autoLockDurationProvider = StateProvider<int>((ref) {
-  return AutoLockService.defaultLockDuration;
-});
+  AutoLockNotifier(this._service) : super(const AutoLockState());
 
-/// 自动锁定启用状态 Provider
-final autoLockEnabledProvider = StateProvider<bool>((ref) {
-  return true;
-});
+  /// 初始化配置
+  void initialize({required bool enabled, required int durationMinutes}) {
+    _service.lockDurationMinutes = durationMinutes;
+    state = state.copyWith(
+      isEnabled: enabled,
+      durationMinutes: durationMinutes,
+    );
+    if (enabled) {
+      startMonitoring();
+    }
+  }
+
+  /// 开始监控
+  void startMonitoring() {
+    _service.startMonitoring();
+    state = state.copyWith(isMonitoring: true);
+    _startRefreshTimer();
+  }
+
+  /// 停止监控
+  void stopMonitoring() {
+    _service.stopMonitoring();
+    state = state.copyWith(isMonitoring: false);
+    _stopRefreshTimer();
+  }
+
+  /// 切换启用状态
+  void toggleEnabled() {
+    final newEnabled = !state.isEnabled;
+    state = state.copyWith(isEnabled: newEnabled);
+    if (newEnabled) {
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
+  }
+
+  /// 更新锁定时长
+  void updateDuration(int minutes) {
+    _service.lockDurationMinutes = minutes;
+    state = state.copyWith(durationMinutes: minutes);
+  }
+
+  /// 记录用户活动
+  void recordActivity() {
+    _service.recordActivity();
+  }
+
+  /// 暂停监控
+  void pause() {
+    _service.pause();
+  }
+
+  /// 恢复监控
+  void resume() {
+    _service.resume();
+    if (state.isMonitoring) {
+      _startRefreshTimer();
+    }
+  }
+
+  /// 立即锁定
+  void lockNow() {
+    _service.lockNow();
+    state = state.copyWith(isMonitoring: false);
+  }
+
+  void _startRefreshTimer() {
+    _stopRefreshTimer();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final remaining = _service.remainingSeconds;
+      state = state.copyWith(remainingSeconds: remaining);
+    });
+  }
+
+  void _stopRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopRefreshTimer();
+    _service.dispose();
+    super.dispose();
+  }
+}
 
 /// 全局活动监听器 Widget
 ///
@@ -211,31 +285,24 @@ class _AutoLockActivityListenerState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final autoLockService = ref.read(autoLockServiceProvider);
+    final autoLockNotifier = ref.read(autoLockNotifierProvider.notifier);
 
     switch (state) {
       case AppLifecycleState.resumed:
-        // 应用回到前台，恢复监控
-        autoLockService.resume();
-        break;
+        autoLockNotifier.resume();
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
-        // 应用进入后台，暂停监控
-        autoLockService.pause();
-        break;
+        autoLockNotifier.pause();
       case AppLifecycleState.detached:
-        // 应用被销毁
-        autoLockService.stopMonitoring();
-        break;
+        autoLockNotifier.stopMonitoring();
     }
   }
 
   void _startMonitoring() {
-    final isEnabled = ref.read(autoLockEnabledProvider);
+    final isEnabled = ref.read(autoLockNotifierProvider).isEnabled;
     if (isEnabled) {
-      final autoLockService = ref.read(autoLockServiceProvider);
-      autoLockService.startMonitoring();
+      ref.read(autoLockNotifierProvider.notifier).startMonitoring();
     }
   }
 
@@ -250,7 +317,40 @@ class _AutoLockActivityListenerState
   }
 
   void _onActivity() {
-    final autoLockService = ref.read(autoLockServiceProvider);
-    autoLockService.recordActivity();
+    final autoLockNotifier = ref.read(autoLockNotifierProvider.notifier);
+    autoLockNotifier.recordActivity();
   }
 }
+
+/// Providers
+
+final autoLockServiceProvider = Provider<AutoLockService>((ref) {
+  final service = AutoLockService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+final autoLockNotifierProvider =
+    StateNotifierProvider<AutoLockNotifier, AutoLockState>((ref) {
+  final service = ref.watch(autoLockServiceProvider);
+  final notifier = AutoLockNotifier(service);
+
+  // 监听锁定事件，触发认证状态锁定
+  service.onLockRequested = () {
+    // 直接调用 stopMonitoring，它内部会更新状态
+    notifier.stopMonitoring();
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    authNotifier.lock();
+  };
+
+  return notifier;
+});
+
+/// 兼容旧代码的 Provider（逐步迁移）
+final autoLockDurationProvider = StateProvider<int>((ref) {
+  return AutoLockService.defaultLockDuration;
+});
+
+final autoLockEnabledProvider = StateProvider<bool>((ref) {
+  return true;
+});

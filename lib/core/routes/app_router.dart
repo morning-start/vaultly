@@ -1,66 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../ui/pages/splash_page.dart';
-import '../../ui/pages/setup_password_page.dart';
-import '../../ui/pages/unlock_page.dart';
-import '../../ui/pages/vault_page.dart';
-import '../../ui/pages/add_entry_page.dart';
-import '../../ui/pages/entry_detail_page.dart';
-import '../../ui/pages/webdav_config_page.dart';
-import '../../ui/pages/webdav_sync_page.dart';
-import '../../ui/pages/biometric_settings_page.dart';
-import '../providers/auth_provider.dart';
-import '../models/vault_entry.dart';
+import '../../features/auth/presentation/splash_page.dart';
+import '../../features/auth/presentation/setup_password_page.dart';
+import '../../features/auth/presentation/unlock_page.dart';
+import '../../features/auth/presentation/biometric_settings_page.dart';
+import '../../features/auth/presentation/auth_providers.dart';
+import '../../features/auth/domain/auth_state.dart';
+import '../../features/vault/presentation/vault_page.dart';
+import '../../features/vault/presentation/add_entry_page.dart';
+import '../../features/vault/presentation/entry_detail_page.dart';
+import '../../features/vault/domain/vault_entry.dart';
+import '../../features/sync/presentation/webdav_config_page.dart';
+import '../../features/sync/presentation/webdav_sync_page.dart';
 
 /// 应用路由配置
 ///
-/// 参考文档: wiki/06-开发计划/任务清单.md T004
-/// 使用 GoRouter 进行路由管理。
-///
-/// 该路由表同时承担登录态守卫职责：根据是否已设置主密码、
-/// 是否已解锁以及当前加载状态，限制不同页面的访问范围。
+/// 使用 GoRouter 进行路由管理，并通过 AuthStatus 状态机实现显式路由守卫。
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authNotifierProvider);
+  final authStatus = AuthStatus.from(authState);
 
   return GoRouter(
     initialLocation: '/',
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      final isAuthenticated = authState.isUnlocked;
-      final isPasswordSet = authState.isPasswordSet;
-      final isLoading = authState.isLoading;
-
       final location = state.uri.path;
 
-      // 启动阶段仅允许停留在启动页，避免状态未初始化时误入业务页面。
-      if (isLoading) {
-        if (location == '/') return null;
-        return '/';
-      }
+      switch (authStatus) {
+        case AuthStatusLoading():
+          // 启动阶段仅允许停留在启动页
+          return location == '/' ? null : '/';
 
-      // 已解锁状态下允许访问保险库相关页面。
-      if (isAuthenticated) {
-        if (location == '/' || location == '/setup' || location == '/unlock') {
-          return '/vault';
-        }
-        return null;
-      }
+        case AuthStatusUnlocked():
+          // 已解锁时，将认证页面重定向到保险库
+          if (location == '/' || location == '/setup' || location == '/unlock') {
+            return '/vault';
+          }
+          return null;
 
-      // 已设置主密码但尚未解锁时，只允许进入解锁页。
-      if (isPasswordSet) {
-        if (location != '/unlock') {
-          return '/unlock';
-        }
-        return null;
-      }
+        case AuthStatusLocked():
+          // 已设置密码但未解锁，只允许进入解锁页
+          return location != '/unlock' ? '/unlock' : null;
 
-      // 首次使用时仅开放主密码设置页。
-      if (location != '/setup') {
-        return '/setup';
+        case AuthStatusNeedsSetup():
+          // 首次使用，仅开放设置页
+          return location != '/setup' ? '/setup' : null;
       }
-
-      return null;
     },
     routes: [
       // 启动页
