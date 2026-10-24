@@ -2,119 +2,95 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/vault_service.dart';
 import '../domain/vault_entry.dart';
+import '../domain/vault_notifier.dart';
+import '../domain/search/entry_search_strategy.dart';
 import '../../auth/presentation/auth_providers.dart';
 
 /// Vault 服务提供者
 ///
-/// 注意：VaultService 目前使用单例模式，后续版本将迁移为纯 Riverpod 管理。
-/// 新代码建议直接使用 vaultServiceProvider。
+/// VaultService 封装加密存储细节（持久化、字段级加解密），
+/// 对外状态经 [vaultNotifierProvider] 暴露。
 final vaultServiceProvider = Provider<VaultService>((ref) {
-  final service = VaultService.instance;
-
-  // 监听认证状态变化，同步加密密钥
-  final authNotifier = ref.watch(authNotifierProvider.notifier);
-  final encryptionKey = authNotifier.encryptionKey;
-
-  if (encryptionKey != null) {
-    service.setEncryptionKey(encryptionKey);
-  }
-
-  return service;
+  return VaultService.instance;
 });
 
-/// Vault 数据变更通知器
+/// Vault 状态提供者（应用内唯一条目数据源）
 ///
-/// 用于通知 Vault 数据发生变化，触发相关 Provider 刷新
-final vaultChangeNotifierProvider =
-    StateNotifierProvider<VaultChangeNotifier, int>((ref) {
-  return VaultChangeNotifier();
-});
+/// 创建时接线 [SessionKeyBridge]：
+/// - 密钥发布（解锁/改密）→ 加载保险库 / 重加密；
+/// - 密钥回收（锁定）→ 清空内存态。
+final vaultNotifierProvider =
+    StateNotifierProvider<VaultNotifier, VaultState>((ref) {
+  final notifier = VaultNotifier(ref.watch(vaultServiceProvider));
+  final bridge = ref.watch(sessionKeyBridgeProvider);
 
-/// Vault 变更通知器
-///
-/// 使用简单的计数器模式，每次数据变更时递增计数
-/// 其他 Provider 可以监听这个计数器来触发刷新
-class VaultChangeNotifier extends StateNotifier<int> {
-  VaultChangeNotifier() : super(0);
-
-  /// 通知数据已变更
-  void notifyChanged() {
-    state = state + 1;
+  void onPublished(Uint8List key) {
+    // 改密与解锁都走 publish：未加载时加载，已加载时用新密钥重加密
+    if (notifier.isLoaded) {
+      notifier.rotateKey(key);
+    } else {
+      notifier.unlock(key);
+    }
   }
 
-  /// 重置计数器
-  void reset() {
-    state = 0;
+  void onRevoked() {
+    notifier.lock();
   }
-}
 
-/// Vault 条目列表提供者
-///
-/// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
-final vaultEntriesProvider = FutureProvider<List<VaultEntry>>((ref) async {
-  // 监听变更通知器
-  ref.watch(vaultChangeNotifierProvider);
+  bridge.onPublished(onPublished);
+  bridge.onRevoked(onRevoked);
+  ref.onDispose(() {
+    bridge.removeListeners(published: onPublished, revoked: onRevoked);
+  });
 
-  final vaultService = ref.watch(vaultServiceProvider);
-  return vaultService.getAllEntries();
+  return notifier;
 });
 
-/// 按类型筛选的 Vault 条目提供者
-///
-/// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
+/// Vault 条目列表（同步快照，无 Future 开销）
+final vaultEntriesProvider = Provider<List<VaultEntry>>((ref) {
+  return ref.watch(vaultNotifierProvider).entries;
+});
+
+/// 按类型筛选的条目列表
 final vaultEntriesByTypeProvider =
-    FutureProvider.family<List<VaultEntry>, EntryType>((ref, type) async {
-  // 监听变更通知器
-  ref.watch(vaultChangeNotifierProvider);
-
-  final vaultService = ref.watch(vaultServiceProvider);
-  return vaultService.getEntriesByType(type);
+    Provider.family<List<VaultEntry>, EntryType>((ref, type) {
+  return ref.watch(vaultEntriesProvider).where((e) => e.type == type).toList();
 });
 
-/// Vault 搜索提供者
-///
-/// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
+/// 搜索结果（空查询返回全部）
 final vaultSearchProvider =
-    FutureProvider.family<List<VaultEntry>, String>((ref, query) async {
-  // 监听变更通知器
-  ref.watch(vaultChangeNotifierProvider);
+    Provider.family<List<VaultEntry>, String>((ref, query) {
+  if (query.isEmpty) return ref.watch(vaultEntriesProvider);
 
-  final vaultService = ref.watch(vaultServiceProvider);
-  return vaultService.searchEntries(query);
+  final lowerQuery = query.toLowerCase();
+  const basicStrategy = BasicSearchStrategy();
+
+  return ref
+      .watch(vaultEntriesProvider)
+      .where((entry) =>
+          basicStrategy.matches(entry, lowerQuery) ||
+          SearchStrategyFactory.getStrategy(entry.type)
+              .matches(entry, lowerQuery))
+      .toList();
 });
 
-/// Vault 收藏列表提供者
-///
-/// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
-final vaultFavoritesProvider = FutureProvider<List<VaultEntry>>((ref) async {
-  // 监听变更通知器
-  ref.watch(vaultChangeNotifierProvider);
-
-  final vaultService = ref.watch(vaultServiceProvider);
-  return vaultService.getFavorites();
+/// 收藏条目
+final vaultFavoritesProvider = Provider<List<VaultEntry>>((ref) {
+  return ref.watch(vaultEntriesProvider).where((e) => e.isFavorite).toList();
 });
 
-/// Vault 标签列表提供者
-///
-/// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
-final vaultTagsProvider = FutureProvider<List<String>>((ref) async {
-  // 监听变更通知器
-  ref.watch(vaultChangeNotifierProvider);
-
-  final vaultService = ref.watch(vaultServiceProvider);
-  return vaultService.getAllTags();
+/// 全部标签（去重排序）
+final vaultTagsProvider = Provider<List<String>>((ref) {
+  final tags = <String>{};
+  for (final entry in ref.watch(vaultEntriesProvider)) {
+    tags.addAll(entry.tags);
+  }
+  return tags.toList()..sort();
 });
 
-/// Vault 统计信息提供者
-///
-/// 监听 vaultChangeNotifierProvider，数据变更时自动刷新
-final vaultStatsProvider = FutureProvider<Map<String, int>>((ref) async {
-  // 监听变更通知器
-  ref.watch(vaultChangeNotifierProvider);
-
-  final vaultService = ref.watch(vaultServiceProvider);
-  final entries = await vaultService.getAllEntries();
-
+/// 统计信息
+final vaultStatsProvider = Provider<Map<String, int>>((ref) {
+  final entries = ref.watch(vaultEntriesProvider);
   return {
     'total': entries.length,
     'login': entries.where((e) => e.type == EntryType.login).length,
@@ -125,10 +101,11 @@ final vaultStatsProvider = FutureProvider<Map<String, int>>((ref) async {
   };
 });
 
-/// 加密密钥提供者
-///
-/// 提供当前会话的加密密钥，供需要加密解密的服务使用
-final encryptionKeyProvider = Provider<Uint8List?>((ref) {
-  final authNotifier = ref.watch(authNotifierProvider.notifier);
-  return authNotifier.encryptionKey;
+/// 单个条目（路由参数驱动）
+final vaultEntryByIdProvider =
+    Provider.family<VaultEntry?, String>((ref, id) {
+  for (final entry in ref.watch(vaultEntriesProvider)) {
+    if (entry.uuid == id) return entry;
+  }
+  return null;
 });

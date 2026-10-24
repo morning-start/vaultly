@@ -82,8 +82,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   }
 
   Future<void> _loadEntry() async {
-    final vaultService = ref.read(vaultServiceProvider);
-    final entry = await vaultService.getEntry(widget.entryId!);
+    final entry = ref.read(vaultEntryByIdProvider(widget.entryId!));
 
     if (entry != null && mounted) {
       setState(() {
@@ -329,7 +328,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
   /// 构建条目并写入保险库（由 _saveEntry 包裹，负责 loading 状态）
   Future<void> _persistEntry() async {
-    final vaultService = ref.read(vaultServiceProvider);
+    final vaultNotifier = ref.read(vaultNotifierProvider.notifier);
 
     final tags = _tagsController.text
         .split(',')
@@ -426,17 +425,22 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         break;
     }
 
+    bool success;
     if (_isEditing) {
-      await vaultService.updateEntry(entry);
+      success = await vaultNotifier.updateEntry(entry);
     } else {
-      await vaultService.addEntry(entry);
+      success = await vaultNotifier.addEntry(entry);
     }
 
-    if (mounted) {
+    if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_isEditing ? '条目更新成功' : '条目添加成功')),
       );
       context.pop();
+    } else if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}')),
+      );
     }
   }
 

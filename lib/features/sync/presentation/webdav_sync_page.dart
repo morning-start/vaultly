@@ -49,10 +49,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     syncNotifier.startSync(enableEncryption ? '正在加密上传...' : '正在上传...');
 
     try {
-      final vaultService = ref.read(vaultServiceProvider);
-
-      // 获取当前保险库数据
-      final entries = await vaultService.getAllEntries();
+      // 获取当前保险库数据（内存态快照，已解密）
+      final entries = ref.read(vaultNotifierProvider).entries;
       final vaultData = {
         'version': 1,
         'exportTime': DateTime.now().toIso8601String(),
@@ -143,37 +141,31 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
         throw Exception('下载的数据为空');
       }
 
-      // 恢复数据到保险库
-      final vaultService = ref.read(vaultServiceProvider);
-
-      // 确保加密密钥已设置
-      vaultService.setEncryptionKey(encryptionKey);
-
-      // 清除现有数据
-      final existingEntries = await vaultService.getAllEntries();
-      for (final entry in existingEntries) {
-        await vaultService.deleteEntry(entry.uuid);
-      }
-
-      // 导入新数据
+      // 原子替换：解析全部条目后一次性替换并持久化，
+      // 避免逐条删除/添加导致每条都全量序列化+加密+写盘。
+      // VaultNotifier 写操作成功后自动刷新内存态并通知 UI。
       final entriesJson = data['entries'] as List<dynamic>?;
-      int importedCount = 0;
+      final importedEntries = <VaultEntry>[];
       if (entriesJson != null) {
         for (final entryJson in entriesJson) {
           try {
-            final entry = _parseEntryFromJson(entryJson as Map<String, dynamic>);
+            final entry =
+                _parseEntryFromJson(entryJson as Map<String, dynamic>);
             if (entry != null) {
-              await vaultService.addEntry(entry);
-              importedCount++;
+              importedEntries.add(entry);
             }
           } catch (e) {
-            // 继续导入其他条目
+            // 跳过损坏条目，继续导入其他条目
           }
         }
       }
 
-      // 重新加载 Vault 以确保数据已正确写入存储
-      await vaultService.loadVault();
+      final vaultNotifier = ref.read(vaultNotifierProvider.notifier);
+      final success = await vaultNotifier.replaceAllEntries(importedEntries);
+      if (!success) {
+        throw Exception(
+            '恢复失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}');
+      }
 
       if (!mounted) return;
 
@@ -181,11 +173,10 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       configNotifier.updateSyncTime(DateTime.now());
       syncNotifier.completeSync('下载成功');
 
-      // 通知 Vault 数据已变更，触发所有相关 Provider 刷新
-      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('数据已从 WebDAV 恢复，导入 $importedCount 条记录')),
+        SnackBar(
+            content:
+                Text('数据已从 WebDAV 恢复，导入 ${importedEntries.length} 条记录')),
       );
     } catch (e) {
       if (!mounted) return;

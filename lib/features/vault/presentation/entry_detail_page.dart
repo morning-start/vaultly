@@ -24,7 +24,6 @@ class EntryDetailPage extends ConsumerStatefulWidget {
 }
 
 class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
-  VaultEntry? _entry;
   String? _totpCode;
   int? _totpRemainingSeconds;
   Timer? _totpTimer;
@@ -32,50 +31,21 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   final Map<String, bool> _showSensitive = {};
 
   @override
-  void initState() {
-    super.initState();
-    _loadEntry();
-  }
-
-  @override
   void dispose() {
     _totpTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadEntry() async {
-    final vaultService = ref.read(vaultServiceProvider);
-    final entry = await vaultService.getEntry(widget.entryId);
-    if (entry != null && mounted) {
-      setState(() => _entry = entry);
-      if (entry is LoginEntry && entry.totpSecret != null) {
-        _startTotpTimer();
-      }
-    }
-  }
+  void _updateTotp(String secret) {
+    final totpService = TOTPService();
+    final code = totpService.generateTOTP(secret);
+    final remaining = totpService.getRemainingSeconds();
 
-  void _startTotpTimer() {
-    _updateTotp();
-    _totpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _updateTotp();
-    });
-  }
-
-  void _updateTotp() {
-    if (_entry is LoginEntry) {
-      final loginEntry = _entry as LoginEntry;
-      if (loginEntry.totpSecret != null) {
-        final totpService = TOTPService();
-        final code = totpService.generateTOTP(loginEntry.totpSecret!);
-        final remaining = totpService.getRemainingSeconds();
-
-        if (mounted) {
-          setState(() {
-            _totpCode = code;
-            _totpRemainingSeconds = remaining;
-          });
-        }
-      }
+    if (mounted) {
+      setState(() {
+        _totpCode = code;
+        _totpRemainingSeconds = remaining;
+      });
     }
   }
 
@@ -97,41 +67,31 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     }
   }
 
-  Future<void> _deleteEntry() async {
-    if (_entry == null) return;
-
+  Future<void> _deleteEntry(VaultEntry entry) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => ConfirmDialog(
         title: '确认删除',
-        content: '确定要删除 "${_entry!.title}" 吗？',
+        content: '确定要删除 "${entry.title}" 吗？',
         confirmLabel: '删除',
         isDangerous: true,
       ),
     );
 
     if (confirmed == true) {
-      final vaultService = ref.read(vaultServiceProvider);
-      await vaultService.deleteEntry(_entry!.uuid);
+      await ref.read(vaultNotifierProvider.notifier).deleteEntry(entry.uuid);
       if (mounted) {
         context.pop();
       }
     }
   }
 
-  Future<void> _toggleFavorite() async {
-    if (_entry == null) return;
-    final vaultService = ref.read(vaultServiceProvider);
-    await vaultService.toggleFavorite(_entry!.uuid);
-    await _loadEntry();
+  Future<void> _toggleFavorite(VaultEntry entry) async {
+    await ref.read(vaultNotifierProvider.notifier).toggleFavorite(entry.uuid);
   }
 
-  Future<void> _editEntry() async {
-    if (_entry == null) return;
-
-    await context.push('/entry/${_entry!.uuid}/edit');
-
-    await _loadEntry();
+  Future<void> _editEntry(VaultEntry entry) async {
+    await context.push('/entry/${entry.uuid}/edit');
   }
 
   bool _isSensitiveVisible(String fieldKey) {
@@ -146,13 +106,25 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_entry == null) {
+    final entry = ref.watch(vaultEntryByIdProvider(widget.entryId));
+
+    if (entry == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final entry = _entry!;
+    // TOTP 定时器随条目生命周期启动/停止
+    if (entry is LoginEntry && entry.totpSecret != null) {
+      _totpTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        _updateTotp(entry.totpSecret!);
+      });
+      _updateTotp(entry.totpSecret!);
+    } else {
+      _totpTimer?.cancel();
+      _totpTimer = null;
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -174,12 +146,12 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
                       ? Icons.star_rounded
                       : Icons.star_border_rounded,
                 ),
-                onPressed: _toggleFavorite,
+                onPressed: () => _toggleFavorite(entry),
                 tooltip: entry.isFavorite ? '取消收藏' : '收藏',
               ),
               IconButton(
                 icon: const Icon(Icons.edit_rounded),
-                onPressed: _editEntry,
+                onPressed: () => _editEntry(entry),
                 tooltip: '编辑',
               ),
               PopupMenuButton(
@@ -204,7 +176,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
                 ],
                 onSelected: (value) {
                   if (value == 'delete') {
-                    _deleteEntry();
+                    _deleteEntry(entry);
                   }
                 },
               ),

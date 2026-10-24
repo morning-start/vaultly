@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../features/auth/presentation/auth_providers.dart';
+import '../../auth/presentation/auth_providers.dart';
 import '../domain/vault_entry.dart';
+import '../domain/vault_notifier.dart';
 import 'vault_providers.dart';
 import '../../../ui/theme/tokens.dart';
 import 'widgets/entry_card_widget.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/error_state.dart';
 
+/// 保险库主页
+///
+/// 纯响应式：列表来自 [vaultEntriesProvider]（同步快照），
+/// 写操作由 VaultNotifier 统一处理，页面无需手动刷新。
 class VaultPage extends ConsumerStatefulWidget {
   const VaultPage({super.key});
 
@@ -28,7 +33,6 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _initializeVault();
   }
 
   void _onScroll() {
@@ -44,27 +48,6 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     _lastScrollOffset = offset;
   }
 
-  Future<void> _initializeVault() async {
-    final vaultService = ref.read(vaultServiceProvider);
-    final authNotifier = ref.read(authNotifierProvider.notifier);
-
-    final encryptionKey = authNotifier.encryptionKey;
-    if (encryptionKey == null) return;
-
-    vaultService.setEncryptionKey(encryptionKey);
-
-    try {
-      await vaultService.loadVault();
-      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载保险库失败: $e')),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -73,7 +56,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   }
 
   List<VaultEntry> _getFilteredEntries(List<VaultEntry> entries) {
-    var filtered = entries.toList();
+    var filtered = entries;
 
     if (_selectedFilter != null) {
       filtered = filtered.where((e) => e.type == _selectedFilter).toList();
@@ -101,24 +84,18 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     return filtered;
   }
 
-  void _navigateToAddEntry() async {
-    await context.push('/add');
-    if (mounted) {
-      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
-    }
+  void _navigateToAddEntry() {
+    context.push('/add');
   }
 
-  void _navigateToEntryDetail(VaultEntry entry) async {
-    await context.push('/entry/${entry.uuid}');
-    if (mounted) {
-      ref.read(vaultChangeNotifierProvider.notifier).notifyChanged();
-    }
+  void _navigateToEntryDetail(VaultEntry entry) {
+    context.push('/entry/${entry.uuid}');
   }
 
   @override
   Widget build(BuildContext context) {
-    final entriesAsync = ref.watch(vaultEntriesProvider);
-    final colorScheme = Theme.of(context).colorScheme;
+    final vaultState = ref.watch(vaultNotifierProvider);
+    final entries = _getFilteredEntries(vaultState.entries);
 
     return Scaffold(
       body: NestedScrollView(
@@ -158,166 +135,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
             ],
           ),
         ],
-        body: entriesAsync.when(
-          data: (entries) {
-            final filteredEntries = _getFilteredEntries(entries);
-
-            return Column(
-              children: [
-                // 搜索栏
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppTokens.spaceL,
-                    AppTokens.spaceS,
-                    AppTokens.spaceL,
-                    0,
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(AppTokens.radiusL),
-                      border: Border.all(
-                        color: _searchQuery.isNotEmpty
-                            ? colorScheme.primary.withAlpha(80)
-                            : colorScheme.outlineVariant.withAlpha(60),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: AppTokens.spaceL),
-                        Icon(
-                          Icons.search_rounded,
-                          color: _searchQuery.isNotEmpty
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                          size: 22,
-                        ),
-                        const SizedBox(width: AppTokens.spaceM),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: const InputDecoration(
-                              hintText: '搜索条目...',
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                vertical: AppTokens.spaceM,
-                              ),
-                            ),
-                            onChanged: (value) {
-                              setState(() => _searchQuery = value);
-                            },
-                          ),
-                        ),
-                        if (_searchQuery.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 20),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                // 筛选器
-                SizedBox(
-                  height: 56,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppTokens.spaceL,
-                      vertical: AppTokens.spaceS,
-                    ),
-                    children: [
-                      _buildFilterChip(
-                        label: '全部',
-                        icon: Icons.dashboard_rounded,
-                        selected: _selectedFilter == null,
-                        onTap: () => setState(() => _selectedFilter = null),
-                      ),
-                      _buildFilterChip(
-                        label: '登录',
-                        icon: Icons.login_rounded,
-                        selected: _selectedFilter == EntryType.login,
-                        onTap: () => setState(() => _selectedFilter = EntryType.login),
-                      ),
-                      _buildFilterChip(
-                        label: '银行卡',
-                        icon: Icons.credit_card_rounded,
-                        selected: _selectedFilter == EntryType.bankCard,
-                        onTap: () => setState(() => _selectedFilter = EntryType.bankCard),
-                      ),
-                      _buildFilterChip(
-                        label: '笔记',
-                        icon: Icons.sticky_note_2_rounded,
-                        selected: _selectedFilter == EntryType.secureNote,
-                        onTap: () => setState(() => _selectedFilter = EntryType.secureNote),
-                      ),
-                      _buildFilterChip(
-                        label: '身份',
-                        icon: Icons.person_rounded,
-                        selected: _selectedFilter == EntryType.identity,
-                        onTap: () => setState(() => _selectedFilter = EntryType.identity),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppTokens.spaceS),
-                // 条目列表或空状态
-                Expanded(
-                  child: filteredEntries.isEmpty
-                      ? (_searchQuery.isNotEmpty
-                          ? EmptyState.search(query: _searchQuery)
-                          : EmptyState.vault(onAddPressed: _navigateToAddEntry))
-                      : ListView.builder(
-                          itemCount: filteredEntries.length,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppTokens.spaceL,
-                          ),
-                          itemBuilder: (context, index) {
-                            final entry = filteredEntries[index];
-                            return TweenAnimationBuilder<double>(
-                              key: ValueKey(entry.uuid),
-                              tween: Tween(begin: 0, end: 1),
-                              duration: AppTokens.animNormal,
-                              curve: AppTokens.easeOutQuart,
-                              builder: (context, value, child) => Opacity(
-                                opacity: value,
-                                child: Transform.translate(
-                                  offset: Offset(
-                                    0,
-                                    AppTokens.spaceS * (1 - value),
-                                  ),
-                                  child: child,
-                                ),
-                              ),
-                              child: EntryCardWidget(
-                                entry: entry,
-                                onTap: () => _navigateToEntryDetail(entry),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            );
-          },
-          loading: () => const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: AppTokens.spaceL),
-                Text('加载中...'),
-              ],
-            ),
-          ),
-          error: (error, stack) => ErrorState.load(
-            message: '加载失败: $error',
-            onRetryPressed: () => ref.invalidate(vaultEntriesProvider),
-          ),
-        ),
+        body: _buildBody(vaultState, entries),
       ),
       floatingActionButton: AnimatedScale(
         scale: _fabVisible ? 1 : 0,
@@ -350,6 +168,175 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(VaultState vaultState, List<VaultEntry> entries) {
+    // 加载中
+    if (!vaultState.isLoaded) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: AppTokens.spaceL),
+            Text('加载中...'),
+          ],
+        ),
+      );
+    }
+
+    // 加载失败
+    if (vaultState.error != null && vaultState.entries.isEmpty) {
+      return ErrorState.load(
+        message: '加载失败: ${vaultState.error}',
+        onRetryPressed: () =>
+            ref.read(vaultNotifierProvider.notifier).reload(),
+      );
+    }
+
+    return Column(
+      children: [
+        // 搜索栏
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTokens.spaceL,
+            AppTokens.spaceS,
+            AppTokens.spaceL,
+            0,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(AppTokens.radiusL),
+              border: Border.all(
+                color: _searchQuery.isNotEmpty
+                    ? Theme.of(context).colorScheme.primary.withAlpha(80)
+                    : Theme.of(context).colorScheme.outlineVariant.withAlpha(60),
+              ),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: AppTokens.spaceL),
+                Icon(
+                  Icons.search_rounded,
+                  color: _searchQuery.isNotEmpty
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 22,
+                ),
+                const SizedBox(width: AppTokens.spaceM),
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: '搜索条目...',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: AppTokens.spaceM,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() => _searchQuery = value);
+                    },
+                  ),
+                ),
+                if (_searchQuery.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+        // 筛选器
+        SizedBox(
+          height: 56,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTokens.spaceL,
+              vertical: AppTokens.spaceS,
+            ),
+            children: [
+              _buildFilterChip(
+                label: '全部',
+                icon: Icons.dashboard_rounded,
+                selected: _selectedFilter == null,
+                onTap: () => setState(() => _selectedFilter = null),
+              ),
+              _buildFilterChip(
+                label: '登录',
+                icon: Icons.login_rounded,
+                selected: _selectedFilter == EntryType.login,
+                onTap: () => setState(() => _selectedFilter = EntryType.login),
+              ),
+              _buildFilterChip(
+                label: '银行卡',
+                icon: Icons.credit_card_rounded,
+                selected: _selectedFilter == EntryType.bankCard,
+                onTap: () =>
+                    setState(() => _selectedFilter = EntryType.bankCard),
+              ),
+              _buildFilterChip(
+                label: '笔记',
+                icon: Icons.sticky_note_2_rounded,
+                selected: _selectedFilter == EntryType.secureNote,
+                onTap: () =>
+                    setState(() => _selectedFilter = EntryType.secureNote),
+              ),
+              _buildFilterChip(
+                label: '身份',
+                icon: Icons.person_rounded,
+                selected: _selectedFilter == EntryType.identity,
+                onTap: () =>
+                    setState(() => _selectedFilter = EntryType.identity),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppTokens.spaceS),
+        // 条目列表或空状态
+        Expanded(
+          child: entries.isEmpty
+              ? (_searchQuery.isNotEmpty
+                  ? EmptyState.search(query: _searchQuery)
+                  : EmptyState.vault(onAddPressed: _navigateToAddEntry))
+              : ListView.builder(
+                  itemCount: entries.length,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTokens.spaceL,
+                  ),
+                  itemBuilder: (context, index) {
+                    final entry = entries[index];
+                    return TweenAnimationBuilder<double>(
+                      key: ValueKey(entry.uuid),
+                      tween: Tween(begin: 0, end: 1),
+                      duration: AppTokens.animNormal,
+                      curve: AppTokens.easeOutQuart,
+                      builder: (context, value, child) => Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(
+                            0,
+                            AppTokens.spaceS * (1 - value),
+                          ),
+                          child: child,
+                        ),
+                      ),
+                      child: EntryCardWidget(
+                        entry: entry,
+                        onTap: () => _navigateToEntryDetail(entry),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
