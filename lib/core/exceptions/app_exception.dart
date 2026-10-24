@@ -87,6 +87,19 @@ class VaultException extends AppException {
         code: 'VAULT_SAVE_FAILED',
         originalError: error,
       );
+
+  /// 保险库解密失败（密钥不匹配或数据损坏）。
+  ///
+  /// 携带原始错误与堆栈，便于诊断；上层应阻止后续写入避免数据被覆盖。
+  factory VaultException.decryptionFailed(
+    Object? error,
+    StackTrace? stackTrace,
+  ) =>
+      VaultException(
+        '保险库解密失败，数据可能已损坏或密钥不匹配',
+        code: 'VAULT_DECRYPT_FAILED',
+        originalError: error,
+      );
 }
 
 /// 同步服务异常

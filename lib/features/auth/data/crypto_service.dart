@@ -179,12 +179,22 @@ class EncryptedData {
     'version': version,
   };
 
-  factory EncryptedData.fromJson(Map<String, dynamic> json) => EncryptedData(
-    cipherText: json['cipherText'],
-    iv: json['iv'],
-    authTag: json['authTag'],
-    version: json['version'],
-  );
+  factory EncryptedData.fromJson(Map<String, dynamic> json) {
+    final cipherText = json['cipherText'];
+    final iv = json['iv'];
+    final authTag = json['authTag'];
+
+    if (cipherText is! String || iv is! String || authTag is! String) {
+      throw const FormatException('EncryptedData 字段缺失或类型错误');
+    }
+
+    return EncryptedData(
+      cipherText: cipherText,
+      iv: iv,
+      authTag: authTag,
+      version: (json['version'] as num?)?.toInt() ?? 1,
+    );
+  }
 }
 
 class KeyMaterial {

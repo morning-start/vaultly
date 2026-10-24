@@ -44,19 +44,24 @@ abstract class FieldBasedEncryptionStrategy implements EntryEncryptionStrategy {
       if (value != null && value.isNotEmpty) {
         encrypted[encryptedField] = CryptoService.encrypt(value, key).toJson();
       }
+      // 无论字段是否存在，都必须移除明文字段，
+      // 否则明文会与密文一起写入持久化存储（加密形同虚设）。
+      encrypted.remove(originalField);
     }
 
     return encrypted;
   }
 
   @override
-  void decryptFields(VaultEntry entry, Map<String, dynamic> data, Uint8List key) {
-    for (final entry in encryptedFieldMap.entries) {
-      final originalField = entry.key;
-      final encryptedField = entry.value;
+  void decryptFields(Map<String, dynamic> data, Uint8List key) {
+    for (final fieldEntry in encryptedFieldMap.entries) {
+      final originalField = fieldEntry.key;
+      final encryptedField = fieldEntry.value;
 
       if (data[encryptedField] is Map) {
-        final encrypted = EncryptedData.fromJson(data[encryptedField] as Map<String, dynamic>);
+        final encrypted =
+            EncryptedData.fromJson(data[encryptedField] as Map<String, dynamic>);
+        // 以密文解出的值为准，覆盖可能残留的旧格式明文字段。
         data[originalField] = CryptoService.decrypt(encrypted, key);
       }
     }

@@ -81,15 +81,19 @@ class VaultService {
 
     try {
       final data = jsonDecode(encryptedData) as Map<String, dynamic>;
-      // 先反序列化再按条目类型恢复具体模型，便于兼容不同字段结构。
+      // 先解密原始持久化 JSON（密文字段在这里），
+      // 再按条目类型恢复具体模型，便于兼容不同字段结构。
       final entriesJson = data['entries'] as List<dynamic>;
 
-      _entries = entriesJson.map((e) {
-        final entry = _entryFromJson(e as Map<String, dynamic>);
-        return _decryptEntry(entry);
-      }).toList();
-    } catch (e) {
+      _entries = entriesJson
+          .map((e) => _decryptPersistedJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e, stackTrace) {
+      // 解密/解析失败时不能静默清空内存态：一旦后续 saveVault 执行，
+      // 空列表会覆盖持久化数据，造成不可恢复的数据丢失。
+      // 抛出异常让调用方（UI 层）感知并阻止后续写入。
       _entries = [];
+      throw VaultException.decryptionFailed(e, stackTrace);
     }
   }
 
@@ -101,10 +105,10 @@ class VaultService {
       throw VaultException.keyNotSet();
     }
 
-    final entriesJson = _entries.map((e) {
-      final entry = _encryptEntry(e);
-      return entry.toJson();
-    }).toList();
+    // 直接使用策略返回的加密 JSON 持久化；
+    // 不能再经过 entry.toJson()，否则密文字段会被丢弃。
+    final entriesJson =
+        _entries.map(_encryptEntry).toList();
 
     final data = jsonEncode({
       'entries': entriesJson,
@@ -135,29 +139,25 @@ class VaultService {
     }
   }
 
-  VaultEntry _encryptEntry(VaultEntry entry) {
-    if (_encryptionKey == null) return entry;
-
+  /// 加密单个条目，返回可直接持久化的 JSON（敏感字段为密文）。
+  Map<String, dynamic> _encryptEntry(VaultEntry entry) {
     final strategy = _encryptionStrategies[entry.type];
-    if (strategy != null) {
-      final encrypted = strategy.encryptFields(entry, _encryptionKey!);
-      return _entryFromJson(encrypted);
+    if (_encryptionKey != null && strategy != null) {
+      return strategy.encryptFields(entry, _encryptionKey!);
     }
-
-    return entry;
+    return entry.toJson();
   }
 
-  VaultEntry _decryptEntry(VaultEntry entry) {
-    if (_encryptionKey == null) return entry;
+  /// 解密持久化 JSON 并重建条目对象。
+  VaultEntry _decryptPersistedJson(Map<String, dynamic> json) {
+    final strategy = _encryptionStrategies[_entryFromJson(json).type];
 
-    final data = entry.toJson();
-    final strategy = _encryptionStrategies[entry.type];
-
-    if (strategy != null) {
-      strategy.decryptFields(entry, data, _encryptionKey!);
+    if (_encryptionKey != null && strategy != null) {
+      // 直接解密原始持久化 JSON —— 密文字段只存在于这里。
+      strategy.decryptFields(json, _encryptionKey!);
     }
 
-    return _entryFromJson(data);
+    return _entryFromJson(json);
   }
 
   /// 新增条目并刷新持久化数据。
@@ -183,6 +183,14 @@ class VaultService {
   /// 删除指定条目并刷新持久化数据。
   Future<void> deleteEntry(String id) async {
     _entries.removeWhere((e) => e.uuid == id);
+    await saveVault();
+  }
+
+  /// 原子替换全部条目并持久化一次。
+  ///
+  /// 供恢复/导入流程使用，避免逐条增删导致每条都全量写盘。
+  Future<void> replaceAllEntries(List<VaultEntry> newEntries) async {
+    _entries = List.of(newEntries);
     await saveVault();
   }
 
@@ -215,9 +223,12 @@ class VaultService {
     final lowerQuery = query.toLowerCase();
     final results = <VaultEntry>[];
 
+    // 基础策略为无状态常量，避免在循环内重复实例化。
+    const basicStrategy = BasicSearchStrategy();
+
     for (final entry in _entries) {
       // 先使用基础策略搜索标题和标签
-      if (BasicSearchStrategy().matches(entry, lowerQuery)) {
+      if (basicStrategy.matches(entry, lowerQuery)) {
         results.add(entry);
         continue;
       }
