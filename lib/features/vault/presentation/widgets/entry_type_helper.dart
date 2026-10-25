@@ -1,24 +1,19 @@
 import 'package:flutter/material.dart';
+import '../../../../ui/theme/vaultly_colors.dart';
 import '../../domain/vault_entry.dart';
 
+/// 条目类型静态辅助：图标与名称
+///
+/// 颜色已迁移至主题扩展 [VaultlyColors]（明暗自适应），
+/// 使用方式：`Theme.of(context).colorScheme.entryType(type)`。
 class EntryTypeHelper {
   static IconData getIcon(EntryType type) {
     return switch (type) {
-      EntryType.login => Icons.login,
-      EntryType.bankCard => Icons.credit_card,
-      EntryType.secureNote => Icons.note,
-      EntryType.identity => Icons.person,
-      EntryType.custom => Icons.folder,
-    };
-  }
-
-  static Color getColor(EntryType type) {
-    return switch (type) {
-      EntryType.login => Colors.blue,
-      EntryType.bankCard => Colors.green,
-      EntryType.secureNote => Colors.orange,
-      EntryType.identity => Colors.purple,
-      EntryType.custom => Colors.grey,
+      EntryType.login => Icons.key_rounded,
+      EntryType.bankCard => Icons.credit_card_rounded,
+      EntryType.secureNote => Icons.sticky_note_2_rounded,
+      EntryType.identity => Icons.person_rounded,
+      EntryType.custom => Icons.folder_rounded,
     };
   }
 
