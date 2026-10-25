@@ -5,12 +5,22 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../domain/vault_entry.dart';
 import 'vault_providers.dart';
-import '../../../features/tools/clipboard_service.dart';
-import '../../../features/tools/totp_service.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
+import '../../../shared/widgets/field_row.dart';
+import '../../../shared/widgets/mono_text.dart';
+import '../../../shared/widgets/type_badge.dart';
 import '../../../ui/theme/tokens.dart';
+import '../../../ui/theme/vaultly_colors.dart';
+import '../../../features/tools/totp_service.dart';
+import '../../../features/tools/clipboard_service.dart';
 import 'widgets/entry_type_helper.dart';
 
+/// 条目详情页
+///
+/// 紧凑头部（类型徽章 + 标题 + 类型 chip + 时间）替代原渐变 Hero；
+/// 字段统一 [FieldRow]（点按复制 + ✓ 反馈）；TOTP 大号等宽分组 +
+/// 环形倒计时；银行卡可视化卡面。
 class EntryDetailPage extends ConsumerStatefulWidget {
   final String entryId;
 
@@ -28,7 +38,14 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   int? _totpRemainingSeconds;
   Timer? _totpTimer;
 
-  final Map<String, bool> _showSensitive = {};
+  @override
+  void initState() {
+    super.initState();
+    final entry = ref.read(vaultEntryByIdProvider(widget.entryId));
+    if (entry is LoginEntry && (entry.totpSecret ?? '').isNotEmpty) {
+      _startTotpTimer();
+    }
+  }
 
   @override
   void dispose() {
@@ -36,34 +53,26 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     super.dispose();
   }
 
-  void _updateTotp(String secret) {
-    final totpService = TOTPService();
-    final code = totpService.generateTOTP(secret);
-    final remaining = totpService.getRemainingSeconds();
-
-    if (mounted) {
-      setState(() {
-        _totpCode = code;
-        _totpRemainingSeconds = remaining;
-      });
-    }
+  void _startTotpTimer() {
+    _updateTotp();
+    _totpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _updateTotp();
+    });
   }
 
-  Future<void> _copyToClipboard(String? text, String label) async {
-    if (text == null || text.isEmpty) return;
+  void _updateTotp() {
+    final entry = ref.read(vaultEntryByIdProvider(widget.entryId));
+    if (entry is LoginEntry && (entry.totpSecret ?? '').isNotEmpty) {
+      final totpService = TOTPService();
+      final code = totpService.generateTOTP(entry.totpSecret!);
+      final remaining = totpService.getRemainingSeconds();
 
-    await ClipboardService.copy(text);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$label 已复制到剪贴板'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTokens.radiusM),
-          ),
-        ),
-      );
+      if (mounted) {
+        setState(() {
+          _totpCode = code;
+          _totpRemainingSeconds = remaining;
+        });
+      }
     }
   }
 
@@ -72,14 +81,16 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       context: context,
       builder: (context) => ConfirmDialog(
         title: '确认删除',
-        content: '确定要删除 "${entry.title}" 吗？',
+        content: '确定要删除 "${entry.title}" 吗？此操作不可恢复。',
         confirmLabel: '删除',
         isDangerous: true,
       ),
     );
 
     if (confirmed == true) {
-      await ref.read(vaultNotifierProvider.notifier).deleteEntry(entry.uuid);
+      await ref
+          .read(vaultNotifierProvider.notifier)
+          .deleteEntry(entry.uuid);
       if (mounted) {
         context.pop();
       }
@@ -87,21 +98,9 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   Future<void> _toggleFavorite(VaultEntry entry) async {
-    await ref.read(vaultNotifierProvider.notifier).toggleFavorite(entry.uuid);
-  }
-
-  Future<void> _editEntry(VaultEntry entry) async {
-    await context.push('/entry/${entry.uuid}/edit');
-  }
-
-  bool _isSensitiveVisible(String fieldKey) {
-    return _showSensitive[fieldKey] ?? false;
-  }
-
-  void _toggleSensitiveVisibility(String fieldKey) {
-    setState(() {
-      _showSensitive[fieldKey] = !(_showSensitive[fieldKey] ?? false);
-    });
+    await ref
+        .read(vaultNotifierProvider.notifier)
+        .toggleFavorite(entry.uuid);
   }
 
   @override
@@ -109,240 +108,137 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     final entry = ref.watch(vaultEntryByIdProvider(widget.entryId));
 
     if (entry == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        appBar: AppBar(
+          leading: BackButton(onPressed: () => context.pop()),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    // TOTP 定时器随条目生命周期启动/停止
-    if (entry is LoginEntry && entry.totpSecret != null) {
-      _totpTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
-        _updateTotp(entry.totpSecret!);
-      });
-      _updateTotp(entry.totpSecret!);
-    } else {
-      _totpTimer?.cancel();
-      _totpTimer = null;
-    }
-
     final colorScheme = Theme.of(context).colorScheme;
+    final typeColor = colorScheme.entryType(entry.type);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // 现代渐变 Hero AppBar
-          SliverAppBar(
-            expandedHeight: 180,
-            pinned: true,
-            stretch: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.pop(),
+      appBar: AppBar(
+        leading: BackButton(onPressed: () => context.pop()),
+        actions: [
+          IconButton(
+            icon: Icon(
+              entry.isFavorite
+                  ? Icons.star_rounded
+                  : Icons.star_border_rounded,
+              color: entry.isFavorite ? colorScheme.favorite : null,
             ),
-            actions: [
-              IconButton(
-                icon: Icon(
-                  entry.isFavorite
-                      ? Icons.star_rounded
-                      : Icons.star_border_rounded,
+            onPressed: () => _toggleFavorite(entry),
+            tooltip: entry.isFavorite ? '取消收藏' : '收藏',
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_rounded),
+            onPressed: () => context.push('/entry/${entry.uuid}/edit'),
+            tooltip: '编辑',
+          ),
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_rounded,
+                        color: colorScheme.error, size: 20),
+                    const SizedBox(width: AppTokens.spaceS),
+                    Text('删除', style: TextStyle(color: colorScheme.error)),
+                  ],
                 ),
-                onPressed: () => _toggleFavorite(entry),
-                tooltip: entry.isFavorite ? '取消收藏' : '收藏',
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit_rounded),
-                onPressed: () => _editEntry(entry),
-                tooltip: '编辑',
-              ),
-              PopupMenuButton(
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.delete_rounded,
-                          color: colorScheme.error,
-                          size: 20,
-                        ),
-                        const SizedBox(width: AppTokens.spaceS),
-                        Text(
-                          '删除',
-                          style: TextStyle(color: colorScheme.error),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                onSelected: (value) {
-                  if (value == 'delete') {
-                    _deleteEntry(entry);
-                  }
-                },
               ),
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                entry.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                ),
-              ),
-              background: _buildHeroBackground(entry),
-            ),
-          ),
-          // 内容区域
-          SliverPadding(
-            padding: const EdgeInsets.all(AppTokens.spaceL),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // 类型信息卡片
-                _buildTypeCard(entry),
-                const SizedBox(height: AppTokens.spaceL),
-                // 动态字段区域
-                ..._buildTypeSpecificFields(entry),
-                if (entry.tags.isNotEmpty) ...[
-                  const SizedBox(height: AppTokens.spaceL),
-                  _buildTagsSection(entry),
-                ],
-                const SizedBox(height: AppTokens.spaceXL),
-                _buildMetadataSection(entry),
-                const SizedBox(height: AppTokens.spaceXXL),
-              ]),
-            ),
+            onSelected: (value) {
+              if (value == 'delete') _deleteEntry(entry);
+            },
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildHeroBackground(VaultEntry entry) {
-    final typeColor = EntryTypeHelper.getColor(entry.type);
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            typeColor.withAlpha(60),
-            typeColor.withAlpha(20),
-            colorScheme.surface,
-          ],
-        ),
-      ),
-      child: Align(
-        alignment: Alignment.bottomLeft,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTokens.spaceL,
-            0,
-            AppTokens.spaceL,
-            AppTokens.spaceXL,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [typeColor, typeColor.withAlpha(180)],
-                  ),
-                  borderRadius: BorderRadius.circular(AppTokens.radiusL),
-                  boxShadow: AppTokens.cardShadow(typeColor, opacity: 0.15),
-                ),
-                child: Icon(
-                  EntryTypeHelper.getIcon(entry.type),
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: AppTokens.spaceM),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    EntryTypeHelper.getName(entry.type),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: typeColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  Text(
-                    '创建于 ${_formatDate(entry.createdAt)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeCard(VaultEntry entry) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(AppTokens.spaceL),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withAlpha(60),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  EntryTypeHelper.getColor(entry.type),
-                  EntryTypeHelper.getColor(entry.type).withAlpha(100),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceM),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppTokens.spaceL),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 紧凑头部
+            Row(
               children: [
-                Text(
-                  EntryTypeHelper.getName(entry.type),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                TypeBadge(type: entry.type, size: 56),
+                const SizedBox(width: AppTokens.spaceL),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(color: colorScheme.onSurface),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                ),
-                Text(
-                  entry.tags.isNotEmpty
-                      ? entry.tags.take(3).join(' · ')
-                      : '无标签',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                      const SizedBox(height: AppTokens.spaceXS),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppTokens.spaceS,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: typeColor.withAlpha(26),
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusStadium),
+                            ),
+                            child: Text(
+                              EntryTypeHelper.getName(entry.type),
+                              style:
+                                  Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        color: typeColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                            ),
+                          ),
+                          const SizedBox(width: AppTokens.spaceS),
+                          Flexible(
+                            child: Text(
+                              '更新于 ${_formatDate(entry.updatedAt)}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: AppTokens.spaceXL),
+
+            // 类型特定内容
+            ..._buildTypeSpecificFields(entry),
+
+            if (entry.tags.isNotEmpty) ...[
+              const SizedBox(height: AppTokens.spaceL),
+              _buildTagsSection(entry),
+            ],
+
+            const SizedBox(height: AppTokens.spaceXL),
+            _buildMetadataSection(entry),
+            const SizedBox(height: AppTokens.spaceXXL),
+          ],
+        ),
       ),
     );
   }
@@ -364,80 +260,161 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   List<Widget> _buildLoginFields(LoginEntry entry) {
     return [
-      if (entry.username != null && entry.username!.isNotEmpty)
-        _buildCopyableField('用户名', entry.username!, Icons.person, isSensitive: false),
-      if (entry.email != null && entry.email!.isNotEmpty)
-        _buildCopyableField('邮箱', entry.email!, Icons.email, isSensitive: false),
-      if (entry.password != null && entry.password!.isNotEmpty)
-        _buildCopyableField('密码', entry.password!, Icons.lock, isSensitive: true),
-      if (entry.url != null && entry.url!.isNotEmpty)
-        _buildUrlField('网站', entry.url!, Icons.link),
-      if (_totpCode != null)
-        _buildTotpField('验证码', _totpCode!, _totpRemainingSeconds ?? 30),
-      if (entry.notes != null && entry.notes!.isNotEmpty)
+      if ((entry.username ?? '').isNotEmpty)
+        FieldRow(
+          label: '用户名',
+          value: entry.username!,
+          icon: Icons.person_rounded,
+        ),
+      if ((entry.email ?? '').isNotEmpty)
+        FieldRow(
+          label: '邮箱',
+          value: entry.email!,
+          icon: Icons.email_rounded,
+        ),
+      if ((entry.password ?? '').isNotEmpty)
+        FieldRow(
+          label: '密码',
+          value: entry.password!,
+          icon: Icons.password_rounded,
+          isSensitive: true,
+        ),
+      if ((entry.url ?? '').isNotEmpty)
+        FieldRow(
+          label: '网站',
+          value: entry.url!,
+          icon: Icons.link_rounded,
+          trailing: IconButton(
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            tooltip: '打开链接',
+            onPressed: () async {
+              final uri = Uri.parse(entry.url!);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
+        ),
+      if (_totpCode != null && _totpRemainingSeconds != null)
+        _buildTotpField(_totpCode!, _totpRemainingSeconds!),
+      if ((entry.notes ?? '').isNotEmpty)
         _buildNoteField('备注', entry.notes!),
     ];
   }
 
   List<Widget> _buildBankCardFields(BankCardEntry entry) {
+    final digits = (entry.cardNumber ?? '').replaceAll(' ', '');
+    final tail =
+        digits.length >= 4 ? digits.substring(digits.length - 4) : digits;
+
     return [
-      if (entry.cardNumber != null && entry.cardNumber!.isNotEmpty)
-        _buildCopyableField('卡号', entry.cardNumber!, Icons.credit_card, isSensitive: true),
-      if (entry.cardHolderName != null && entry.cardHolderName!.isNotEmpty)
-        _buildDisplayField('持卡人', entry.cardHolderName!, Icons.person),
-      if (entry.expiryMonth != null && entry.expiryYear != null)
-        _buildDisplayField(
-          '有效期',
-          '${entry.expiryMonth.toString().padLeft(2, '0')}/${entry.expiryYear}',
-          Icons.calendar_today,
+      // 可视化卡面
+      Container(
+        height: 180,
+        padding: const EdgeInsets.all(AppTokens.spaceL),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.bankCard.withAlpha(50),
+              Theme.of(context).colorScheme.bankCard.withAlpha(18),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppTokens.radiusL),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.bankCard.withAlpha(60),
+          ),
         ),
-      if (entry.cvv != null && entry.cvv!.isNotEmpty)
-        _buildCopyableField('CVV', entry.cvv!, Icons.security, isSensitive: true),
-      if (entry.bankName != null && entry.bankName!.isNotEmpty)
-        _buildDisplayField('银行', entry.bankName!, Icons.account_balance),
-      if (entry.cardType != null)
-        _buildDisplayField('卡类型', EntryTypeHelper.getCardTypeName(entry.cardType!), Icons.payment),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  (entry.bankName ?? '').isNotEmpty ? entry.bankName! : '银行卡',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.bankCard,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                if (entry.cardType != null)
+                  Text(
+                    EntryTypeHelper.getCardTypeName(entry.cardType!),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.bankCard,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+              ],
+            ),
+            const Spacer(),
+            MonoText(
+              tail.isEmpty ? '•••• •••• •••• ••••' : '•••• •••• •••• $tail',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: AppTokens.spaceM),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if ((entry.cardHolderName ?? '').isNotEmpty)
+                  Text(
+                    entry.cardHolderName!,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                if (entry.expiryMonth != null && entry.expiryYear != null)
+                  Text(
+                    '${entry.expiryMonth.toString().padLeft(2, '0')}/${entry.expiryYear}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontFamily: AppTokens.monoFamily,
+                        ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: AppTokens.spaceL),
+      if ((entry.cardNumber ?? '').isNotEmpty)
+        FieldRow(
+          label: '卡号',
+          value: entry.cardNumber!,
+          icon: Icons.credit_card_rounded,
+          isSensitive: true,
+        ),
+      if ((entry.cardHolderName ?? '').isNotEmpty)
+        FieldRow(
+          label: '持卡人',
+          value: entry.cardHolderName!,
+          icon: Icons.person_rounded,
+        ),
+      if (entry.expiryMonth != null && entry.expiryYear != null)
+        FieldRow(
+          label: '有效期',
+          value:
+              '${entry.expiryMonth.toString().padLeft(2, '0')}/${entry.expiryYear}',
+          icon: Icons.calendar_today_rounded,
+        ),
+      if ((entry.cvv ?? '').isNotEmpty)
+        FieldRow(
+          label: 'CVV',
+          value: entry.cvv!,
+          icon: Icons.security_rounded,
+          isSensitive: true,
+        ),
     ];
   }
 
   List<Widget> _buildSecureNoteFields(SecureNoteEntry entry) {
     return [
-      if (entry.isMarkdown)
-        Container(
-          padding: const EdgeInsets.all(AppTokens.spaceL),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(AppTokens.radiusL),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withAlpha(60),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.description_rounded,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppTokens.spaceS),
-                  Text(
-                    'Markdown 内容',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppTokens.spaceM),
-              Text(entry.content ?? ''),
-            ],
-          ),
-        )
-      else
-        _buildNoteField('内容', entry.content ?? ''),
+      _buildNoteField(
+        entry.isMarkdown ? 'Markdown 内容' : '内容',
+        entry.content ?? '',
+      ),
     ];
   }
 
@@ -450,195 +427,60 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
     return [
       if (nameParts.isNotEmpty)
-        _buildDisplayField('姓名', nameParts, Icons.person),
+        FieldRow(
+          label: '姓名',
+          value: nameParts,
+          icon: Icons.person_rounded,
+        ),
       if (entry.birthDate != null)
-        _buildDisplayField('出生日期', _formatDate(entry.birthDate!), Icons.cake),
-      if (entry.idNumber != null && entry.idNumber!.isNotEmpty)
-        _buildCopyableField('证件号码', entry.idNumber!, Icons.badge, isSensitive: true),
-      if (entry.phone != null && entry.phone!.isNotEmpty)
-        _buildCopyableField('电话', entry.phone!, Icons.phone, isSensitive: false),
-      if (entry.email != null && entry.email!.isNotEmpty)
-        _buildCopyableField('邮箱', entry.email!, Icons.email, isSensitive: false),
-      if (entry.address != null && entry.address!.isNotEmpty)
-        _buildCopyableField('地址', entry.address!, Icons.location_on, isSensitive: false),
+        FieldRow(
+          label: '出生日期',
+          value: _formatDate(entry.birthDate!),
+          icon: Icons.cake_rounded,
+        ),
+      if ((entry.idNumber ?? '').isNotEmpty)
+        FieldRow(
+          label: '证件号码',
+          value: entry.idNumber!,
+          icon: Icons.badge_rounded,
+          isSensitive: true,
+        ),
+      if ((entry.phone ?? '').isNotEmpty)
+        FieldRow(
+          label: '电话',
+          value: entry.phone!,
+          icon: Icons.phone_rounded,
+        ),
+      if ((entry.email ?? '').isNotEmpty)
+        FieldRow(
+          label: '邮箱',
+          value: entry.email!,
+          icon: Icons.email_rounded,
+        ),
+      if ((entry.address ?? '').isNotEmpty)
+        FieldRow(
+          label: '地址',
+          value: entry.address!,
+          icon: Icons.location_on_rounded,
+        ),
     ];
   }
 
-  Widget _buildCopyableField(
-    String label,
-    String value,
-    IconData icon, {
-    required bool isSensitive,
-  }) {
-    final fieldKey = '${label}_$value';
-    final showValue = !isSensitive || _isSensitiveVisible(fieldKey);
+  Widget _buildTotpField(String code, int remainingSeconds) {
     final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withAlpha(60),
-        ),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: colorScheme.onSurfaceVariant),
-        title: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        subtitle: Text(
-          showValue ? value : '••••••••',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: colorScheme.onSurface,
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isSensitive)
-              IconButton(
-                icon: Icon(
-                  _isSensitiveVisible(fieldKey)
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded,
-                  size: 20,
-                ),
-                onPressed: () => _toggleSensitiveVisibility(fieldKey),
-                tooltip: _isSensitiveVisible(fieldKey) ? '隐藏' : '显示',
-              ),
-            IconButton(
-              icon: const Icon(Icons.copy_rounded, size: 20),
-              onPressed: () => _copyToClipboard(value, label),
-              tooltip: '复制',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDisplayField(String label, String value, IconData icon) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withAlpha(60),
-        ),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: colorScheme.onSurfaceVariant),
-        title: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        subtitle: Text(
-          value,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: colorScheme.onSurface,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUrlField(String label, String value, IconData icon) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withAlpha(60),
-        ),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: colorScheme.primary),
-        title: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        subtitle: Text(
-          value,
-          style: TextStyle(
-            color: colorScheme.primary,
-            decoration: TextDecoration.underline,
-            decorationColor: colorScheme.primary.withAlpha(120),
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.open_in_browser_rounded, size: 20),
-              onPressed: () async {
-                final uri = Uri.parse(value);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              },
-              tooltip: '打开链接',
-            ),
-            IconButton(
-              icon: const Icon(Icons.copy_rounded, size: 20),
-              onPressed: () => _copyToClipboard(value, label),
-              tooltip: '复制',
-            ),
-          ],
-        ),
-        onTap: () async {
-          final uri = Uri.parse(value);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildTotpField(String label, String code, int remainingSeconds) {
     final progress = remainingSeconds / 30;
-    final colorScheme = Theme.of(context).colorScheme;
     final color = progress < 0.3 ? colorScheme.error : colorScheme.primary;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
+      margin: const EdgeInsets.only(
+        top: AppTokens.spaceS,
+        bottom: AppTokens.spaceS,
+      ),
       padding: const EdgeInsets.all(AppTokens.spaceL),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.primaryContainer,
-            colorScheme.primaryContainer.withAlpha(140),
-          ],
-        ),
+        color: colorScheme.primaryContainer.withAlpha(120),
         borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.primary.withAlpha(40),
-        ),
+        border: Border.all(color: colorScheme.primary.withAlpha(40)),
       ),
       child: Row(
         children: [
@@ -651,16 +493,15 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
                 CircularProgressIndicator(
                   value: progress,
                   strokeWidth: 3,
-                  backgroundColor: colorScheme.surface.withAlpha(80),
+                  backgroundColor: colorScheme.surface.withAlpha(120),
                   valueColor: AlwaysStoppedAnimation(color),
                 ),
                 Text(
                   '$remainingSeconds',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
                 ),
               ],
             ),
@@ -671,29 +512,28 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  '验证码',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                 ),
                 const SizedBox(height: AppTokens.spaceXS),
-                Text(
+                MonoText(
                   '${code.substring(0, 3)} ${code.substring(3)}',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 4,
-                    fontFamily: 'monospace',
-                    color: colorScheme.primary,
-                  ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 4,
+                        color: colorScheme.primary,
+                      ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.copy_rounded),
-            onPressed: () => _copyToClipboard(code, label),
+          _CopyIconButton(
+            value: code,
             tooltip: '复制验证码',
           ),
         ],
@@ -702,37 +542,32 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   Widget _buildNoteField(String label, String value) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       padding: const EdgeInsets.all(AppTokens.spaceL),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withAlpha(60),
-        ),
+        border: Border.all(color: colorScheme.outlineVariant.withAlpha(76)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.note_rounded,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 20,
-              ),
+              Icon(Icons.note_rounded,
+                  size: 18, color: colorScheme.onSurfaceVariant),
               const SizedBox(width: AppTokens.spaceS),
               Text(
                 label,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                style: Theme.of(context).textTheme.titleSmall,
               ),
             ],
           ),
           const SizedBox(height: AppTokens.spaceS),
-          Text(value),
+          Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
@@ -742,23 +577,17 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '标签',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-        ),
+        Text('标签', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: AppTokens.spaceS),
         Wrap(
           spacing: AppTokens.spaceS,
           runSpacing: AppTokens.spaceS,
           children: entry.tags
-              .map(
-                (tag) => Chip(
-                  label: Text(tag),
-                  avatar: const Icon(Icons.tag_rounded, size: 16),
-                ),
-              )
+              .map((tag) => Chip(
+                    label: Text(tag),
+                    avatar: const Icon(Icons.tag_rounded, size: 14),
+                    visualDensity: VisualDensity.compact,
+                  ))
               .toList(),
         ),
       ],
@@ -771,43 +600,38 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     return Container(
       padding: const EdgeInsets.all(AppTokens.spaceL),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withAlpha(60),
-        ),
+        border: Border.all(color: colorScheme.outlineVariant.withAlpha(76)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '元信息',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
+          Text('关于此条目', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: AppTokens.spaceS),
           _buildMetadataRow('创建时间', _formatDateTime(entry.createdAt)),
           _buildMetadataRow('更新时间', _formatDateTime(entry.updatedAt)),
-          _buildMetadataRow('UUID', '${entry.uuid.substring(0, 8)}...'),
+          _buildMetadataRow('UUID', '${entry.uuid.substring(0, 8)}…'),
         ],
       ),
     );
   }
 
   Widget _buildMetadataRow(String label, String value) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppTokens.spaceXS),
       child: Row(
         children: [
           Text(
-            '$label: ',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 13,
-            ),
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
           ),
-          Text(value, style: const TextStyle(fontSize: 13)),
+          const Spacer(),
+          Text(value, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
@@ -819,5 +643,30 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
 
   String _formatDateTime(DateTime date) {
     return '${_formatDate(date)} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// TOTP 专用复制按钮（复制后自动清除）
+class _CopyIconButton extends StatelessWidget {
+  final String value;
+  final String tooltip;
+
+  const _CopyIconButton({
+    required this.value,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.copy_rounded, size: 20),
+      onPressed: () async {
+        await ClipboardService().copyTOTP(value);
+        if (context.mounted) {
+          AppToast.show(context, '验证码已复制（30 秒后自动清除）');
+        }
+      },
+      tooltip: tooltip,
+    );
   }
 }

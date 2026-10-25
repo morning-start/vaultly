@@ -602,22 +602,13 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
         controller: _passwordController,
         labelText: '密码',
         prefixIcon: Icons.lock,
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.auto_awesome),
+          onPressed: _showPasswordGenerator,
+          tooltip: '生成密码',
+        ),
       ),
       const SizedBox(height: AppTokens.spaceS),
-      Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            onPressed: _showPasswordGenerator,
-            tooltip: '生成密码',
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '生成密码',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
       PasswordStrengthIndicator(strength: _passwordStrength),
       const SizedBox(height: AppTokens.spaceL),
       TextFormField(
