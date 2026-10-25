@@ -7,9 +7,7 @@ import '../domain/encryption/login_encryption_strategy.dart';
 import '../domain/encryption/bank_card_encryption_strategy.dart';
 import '../domain/encryption/secure_note_encryption_strategy.dart';
 import '../domain/encryption/identity_encryption_strategy.dart';
-import '../domain/search/entry_search_strategy.dart';
 import '../../../core/exceptions/app_exception.dart';
-
 /// 保险库服务
 ///
 /// 负责加密存储、读取和维护保险库条目。
@@ -161,28 +159,29 @@ class VaultService {
   }
 
   /// 新增条目并刷新持久化数据。
+  ///
+  /// 模型不可变：这里生成刷新时间戳后的新实例入列，调用方持有的原实例不变。
   Future<String> addEntry(VaultEntry entry) async {
-    entry.touch();
-    _entries.add(entry);
+    final stamped = entry.withUpdatedTimestamp();
+    _entries.add(stamped);
     await saveVault();
-    return entry.uuid;
+    return stamped.id;
   }
 
   /// 更新已有条目并刷新持久化数据。
   Future<void> updateEntry(VaultEntry entry) async {
-    final index = _entries.indexWhere((e) => e.uuid == entry.uuid);
+    final index = _entries.indexWhere((e) => e.id == entry.id);
     if (index == -1) {
-      throw VaultException.notFound(entry.uuid);
+      throw VaultException.notFound(entry.id);
     }
 
-    entry.touch();
-    _entries[index] = entry;
+    _entries[index] = entry.withUpdatedTimestamp();
     await saveVault();
   }
 
   /// 删除指定条目并刷新持久化数据。
   Future<void> deleteEntry(String id) async {
-    _entries.removeWhere((e) => e.uuid == id);
+    _entries.removeWhere((e) => e.id == id);
     await saveVault();
   }
 
@@ -196,11 +195,10 @@ class VaultService {
 
   /// 获取单个条目。
   Future<VaultEntry?> getEntry(String id) async {
-    try {
-      return _entries.firstWhere((e) => e.uuid == id);
-    } catch (_) {
-      return null;
+    for (final entry in _entries) {
+      if (entry.id == id) return entry;
     }
+    return null;
   }
 
   /// 获取全部条目。
@@ -208,80 +206,15 @@ class VaultService {
     return List.unmodifiable(_entries);
   }
 
-  /// 按类型筛选条目。
-  Future<List<VaultEntry>> getEntriesByType(EntryType type) async {
-    return _entries.where((e) => e.type == type).toList();
-  }
-
-  /// 搜索条目
+  /// 切换收藏状态并持久化。
   ///
-  /// 使用策略模式，根据条目类型自动选择合适的搜索策略。
-  /// 支持多字段搜索：标题、用户名、邮箱、URL、标签等
-  Future<List<VaultEntry>> searchEntries(String query) async {
-    if (query.isEmpty) return getAllEntries();
-
-    final lowerQuery = query.toLowerCase();
-    final results = <VaultEntry>[];
-
-    // 基础策略为无状态常量，避免在循环内重复实例化。
-    const basicStrategy = BasicSearchStrategy();
-
-    for (final entry in _entries) {
-      // 先使用基础策略搜索标题和标签
-      if (basicStrategy.matches(entry, lowerQuery)) {
-        results.add(entry);
-        continue;
-      }
-
-      // 再使用类型特定策略搜索其他字段
-      final typeStrategy = SearchStrategyFactory.getStrategy(entry.type);
-      if (typeStrategy.matches(entry, lowerQuery)) {
-        results.add(entry);
-      }
-    }
-
-    return results;
-  }
-
-  Future<List<VaultEntry>> getFavorites() async {
-    return _entries.where((e) => e.isFavorite).toList();
-  }
-
+  /// 条目不存在时静默忽略（与旧语义一致）。
   Future<void> toggleFavorite(String entryId) async {
-    final index = _entries.indexWhere((e) => e.uuid == entryId);
+    final index = _entries.indexWhere((e) => e.id == entryId);
     if (index != -1) {
-      _entries[index].isFavorite = !_entries[index].isFavorite;
+      _entries[index] =
+          _entries[index].copyWith(isFavorite: !_entries[index].isFavorite);
       await saveVault();
     }
-  }
-
-  Future<List<VaultEntry>> getByTag(String tag) async {
-    return _entries.where((e) => e.tags.contains(tag)).toList();
-  }
-
-  Future<void> addTag(String entryId, String tag) async {
-    final index = _entries.indexWhere((e) => e.uuid == entryId);
-    if (index != -1) {
-      if (!_entries[index].tags.contains(tag)) {
-        _entries[index].tags.add(tag);
-        await saveVault();
-      }
-    }
-  }
-
-  Future<void> removeTag(String entryId, String tag) async {
-    final index = _entries.indexWhere((e) => e.uuid == entryId);
-    if (index != -1) {
-      _entries[index].tags.remove(tag);
-      await saveVault();
-    }
-  }
-
-  Future<List<String>> getAllTags() async {
-    final tags = <String>{};
-    for (final entry in _entries) {
-      tags.addAll(entry.tags);
-    }
-    return tags.toList()..sort();
   }
 }

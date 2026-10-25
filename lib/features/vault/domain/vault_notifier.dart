@@ -140,15 +140,8 @@ class VaultNotifier extends StateNotifier<VaultState> {
   Future<bool> replaceAllEntries(List<VaultEntry> entries) =>
       _mutate(() => _service.replaceAllEntries(entries));
 
-  Future<bool> toggleFavorite(String entryId) => _mutate(() async {
-        for (final entry in _service.entries) {
-          if (entry.uuid == entryId) {
-            await _service.toggleFavorite(entryId);
-            return;
-          }
-        }
-        throw VaultException.notFound(entryId);
-      });
+  Future<bool> toggleFavorite(String entryId) =>
+      _mutate(() => _service.toggleFavorite(entryId));
 
   /// 清除错误提示
   void clearError() {
