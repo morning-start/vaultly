@@ -11,8 +11,12 @@
 ///
 /// // 使用主题
 /// final theme = AppTheme.lightTheme;
+///
+/// // 使用类型色扩展
+/// final typeColor = Theme.of(context).colorScheme.login;
 /// ```
 library;
 
 export 'app_theme.dart';
 export 'tokens.dart';
+export 'vaultly_colors.dart';
