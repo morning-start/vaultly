@@ -43,6 +43,14 @@ final vaultNotifierProvider =
     bridge.removeListeners(published: onPublished, revoked: onRevoked);
   });
 
+  // 补偿时序竞争：密钥可能在 provider 首次被 watch 之前就已发布
+  // （例如 setupPassword 后直接进入主界面），此时监听器错过发布事件。
+  // bridge 缓存的密钥仍有效时立即消费；unlock 内部幂等，重复消费无害。
+  final pendingKey = bridge.key;
+  if (pendingKey != null && !notifier.isLoaded) {
+    notifier.unlock(pendingKey);
+  }
+
   return notifier;
 });
 
