@@ -263,3 +263,5 @@ fabric.properties
 .atomcode
 fgt.exe
 .fgt-config
+# 测试截图（UI 重设计验证过程产物）
+.dsh-shots/

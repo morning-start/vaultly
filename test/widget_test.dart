@@ -1,9 +1,6 @@
-// This is a basic Flutter widget test.
+// 基础 Flutter widget 冒烟测试。
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// 验证应用能完成启动并渲染出首屏（SplashPage 的品牌文本）。
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +12,10 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const ProviderScope(child: VaultlyApp()));
 
-    // Verify that the app title is displayed.
+    // Splash 首帧渲染（auth 初始化是异步的，只 pump 必要帧数）。
+    await tester.pump();
+
+    // 验证首屏渲染出品牌文本（SplashPage 标题）。
     expect(find.text('Vaultly'), findsOneWidget);
   });
 }
