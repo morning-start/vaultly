@@ -90,7 +90,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     if (confirmed == true) {
       await ref
           .read(vaultNotifierProvider.notifier)
-          .deleteEntry(entry.uuid);
+          .deleteEntry(entry.id);
       if (mounted) {
         context.pop();
       }
@@ -100,7 +100,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   Future<void> _toggleFavorite(VaultEntry entry) async {
     await ref
         .read(vaultNotifierProvider.notifier)
-        .toggleFavorite(entry.uuid);
+        .toggleFavorite(entry.id);
   }
 
   @override
@@ -135,7 +135,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
           ),
           IconButton(
             icon: const Icon(Icons.edit_rounded),
-            onPressed: () => context.push('/entry/${entry.uuid}/edit'),
+            onPressed: () => context.push('/entry/${entry.id}/edit'),
             tooltip: '编辑',
           ),
           PopupMenuButton(
@@ -611,7 +611,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
           const SizedBox(height: AppTokens.spaceS),
           _buildMetadataRow('创建时间', _formatDateTime(entry.createdAt)),
           _buildMetadataRow('更新时间', _formatDateTime(entry.updatedAt)),
-          _buildMetadataRow('UUID', '${entry.uuid.substring(0, 8)}…'),
+          _buildMetadataRow('UUID', '${entry.id.substring(0, 8)}…'),
         ],
       ),
     );

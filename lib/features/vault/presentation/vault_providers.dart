@@ -113,7 +113,7 @@ final vaultStatsProvider = Provider<Map<String, int>>((ref) {
 final vaultEntryByIdProvider =
     Provider.family<VaultEntry?, String>((ref, id) {
   for (final entry in ref.watch(vaultEntriesProvider)) {
-    if (entry.uuid == id) return entry;
+    if (entry.id == id) return entry;
   }
   return null;
 });

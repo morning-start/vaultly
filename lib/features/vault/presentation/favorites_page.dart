@@ -22,7 +22,7 @@ class FavoritesPage extends ConsumerWidget {
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     void navigateToDetail(VaultEntry entry) {
-      context.push('/entry/${entry.uuid}');
+      context.push('/entry/${entry.id}');
     }
 
     Future<void> copyPrimaryField(VaultEntry entry) async {
@@ -44,7 +44,7 @@ class FavoritesPage extends ConsumerWidget {
 
     Future<void> unfavorite(VaultEntry entry) async {
       final vaultService = ref.read(vaultServiceProvider);
-      await vaultService.toggleFavorite(entry.uuid);
+      await vaultService.toggleFavorite(entry.id);
     }
 
     return Scaffold(
@@ -60,7 +60,7 @@ class FavoritesPage extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final entry = favorites[index];
                 return EntryCardWidget(
-                  key: ValueKey(entry.uuid),
+                  key: ValueKey(entry.id),
                   entry: entry,
                   onTap: () => navigateToDetail(entry),
                   onCopyPrimaryField: () => copyPrimaryField(entry),

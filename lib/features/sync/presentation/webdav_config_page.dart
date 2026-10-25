@@ -274,10 +274,10 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
                                   value: _syncMode,
                                   isExpanded: true,
                                   items: const [
-                                    DropdownMenuItem(value: SyncMode.manual, child: Text('手动同步')),
+                                    DropdownMenuItem(value: SyncMode.manual, child: Text('手动同步（上传备份）')),
                                     DropdownMenuItem(value: SyncMode.uploadOnly, child: Text('仅上传（备份模式）')),
                                     DropdownMenuItem(value: SyncMode.downloadOnly, child: Text('仅下载（恢复模式）')),
-                                    DropdownMenuItem(value: SyncMode.auto, child: Text('自动双向同步')),
+                                    DropdownMenuItem(value: SyncMode.auto, child: Text('自动上传（暂不支持双向合并）')),
                                   ],
                                   onChanged: (value) {
                                     if (value != null) {

@@ -91,8 +91,13 @@ class SyncOrchestrator {
 
   /// 统一同步方法
   ///
+  /// 当前实现说明（ADR-004）：无论选择何种模式，实际语义均为
+  /// 「上传备份」——`_twoWaySync` 尚未实现字段级合并，
+  /// auto/manual 模式与 uploadOnly 行为一致。真正的双向同步需要
+  /// 合并策略设计（last-write-wins 或字段级 CRDT），另立需求实现。
+  ///
   /// 流程：
-  /// 1. 根据同步模式选择上传/下载/双向同步
+  /// 1. 根据同步模式路由（当前全部为上传）
   /// 2. 根据配置决定是否加密
   /// 3. 根据配置决定是否压缩
   Future<SyncResult> sync({
@@ -124,6 +129,10 @@ class SyncOrchestrator {
 
       switch (config.syncMode) {
         case SyncMode.uploadOnly:
+        case SyncMode.auto:
+        case SyncMode.manual:
+          // TODO(bidirectional): auto/manual 待实现字段级双向合并，
+          // 当前按上传备份处理，见方法注释（ADR-004）。
           result = await syncUpload(
             vaultData: localVaultData,
             encryptionKey: encryptionKey,
@@ -134,16 +143,6 @@ class SyncOrchestrator {
           break;
         case SyncMode.downloadOnly:
           result = await syncDownload(
-            encryptionKey: encryptionKey,
-            enableEncryption: encrypt,
-            enableCompression: compress,
-            onProgress: onProgress,
-          );
-          break;
-        case SyncMode.auto:
-        case SyncMode.manual:
-          result = await _twoWaySync(
-            localVaultData: localVaultData,
             encryptionKey: encryptionKey,
             enableEncryption: encrypt,
             enableCompression: compress,
@@ -178,26 +177,9 @@ class SyncOrchestrator {
     }
   }
 
-  /// 双向同步
-  Future<SyncResult> _twoWaySync({
-    required Map<String, dynamic> localVaultData,
-    required Uint8List encryptionKey,
-    bool enableEncryption = true,
-    bool enableCompression = true,
-    Function(double progress)? onProgress,
-  }) async {
-    // TODO: 实现完整的双向同步逻辑
-    // 暂时先上传
-    return await syncUpload(
-      vaultData: localVaultData,
-      encryptionKey: encryptionKey,
-      enableEncryption: enableEncryption,
-      enableCompression: enableCompression,
-      onProgress: onProgress,
-    );
-  }
-
-  /// 上传同步
+  /// 上传同步（结果语义包装，实际传输见 [upload]）。
+  ///
+  /// ADR-004：当前所有同步模式的"双向"实现均为上传备份。
   Future<SyncResult> syncUpload({
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
@@ -206,23 +188,13 @@ class SyncOrchestrator {
     Function(double progress)? onProgress,
   }) async {
     try {
-      final config = await getConfig();
-      if (config == null) {
-        return SyncResult.failure('WebDAV 未配置');
-      }
-
-      _client.initClient(config);
-
-      final success = await _client.upload(
+      final success = await upload(
         vaultData: vaultData,
         encryptionKey: encryptionKey,
         enableEncryption: enableEncryption,
         enableCompression: enableCompression,
         onProgress: onProgress,
       );
-
-      // 更新最后同步时间
-      await _configRepository.updateLastSyncTime(DateTime.now());
 
       if (success) {
         return SyncResult.success(updated: 1);
@@ -234,7 +206,7 @@ class SyncOrchestrator {
     }
   }
 
-  /// 下载同步
+  /// 下载同步（结果语义包装，实际传输见 [download]）
   Future<SyncResult> syncDownload({
     required Uint8List encryptionKey,
     bool enableEncryption = true,
@@ -242,22 +214,12 @@ class SyncOrchestrator {
     Function(double progress)? onProgress,
   }) async {
     try {
-      final config = await getConfig();
-      if (config == null) {
-        return SyncResult.failure('WebDAV 未配置');
-      }
-
-      _client.initClient(config);
-
-      final data = await _client.download(
+      final data = await download(
         encryptionKey: encryptionKey,
         enableEncryption: enableEncryption,
         enableCompression: enableCompression,
         onProgress: onProgress,
       );
-
-      // 更新最后同步时间
-      await _configRepository.updateLastSyncTime(DateTime.now());
 
       if (data != null) {
         return SyncResult.success(updated: 1);
@@ -323,19 +285,6 @@ class SyncOrchestrator {
     await _configRepository.updateLastSyncTime(DateTime.now());
 
     return result;
-  }
-
-  /// 解决冲突
-  Future<void> resolveConflict(String entryId, ConflictResolution resolution) async {
-    // TODO: 实现冲突解决逻辑
-    debugPrint('解决冲突: $entryId -> $resolution');
-  }
-
-  /// 批量解决冲突
-  Future<void> resolveAllConflicts(Map<String, ConflictResolution> resolutions) async {
-    for (final entry in resolutions.entries) {
-      await resolveConflict(entry.key, entry.value);
-    }
   }
 
   /// 获取同步历史

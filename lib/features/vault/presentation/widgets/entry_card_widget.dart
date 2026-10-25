@@ -127,7 +127,7 @@ class _EntryCardWidgetState extends State<EntryCardWidget> {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppTokens.spaceS),
       child: Slidable(
-        key: ValueKey(widget.entry.uuid),
+        key: ValueKey(widget.entry.id),
         endActionPane: hasFavorite
             ? ActionPane(
                 motion: const BehindMotion(),

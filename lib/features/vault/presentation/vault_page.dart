@@ -85,7 +85,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   }
 
   void _navigateToEntryDetail(VaultEntry entry) {
-    context.push('/entry/${entry.uuid}');
+    context.push('/entry/${entry.id}');
   }
 
   Future<void> _copyPrimaryField(VaultEntry entry) async {
@@ -107,7 +107,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
   Future<void> _toggleFavorite(VaultEntry entry) async {
     final vaultService = ref.read(vaultServiceProvider);
-    await vaultService.toggleFavorite(entry.uuid);
+    await vaultService.toggleFavorite(entry.id);
   }
 
   @override
@@ -409,7 +409,7 @@ class _EntryListView extends StatelessWidget {
       itemBuilder: (context, index) {
         final entry = entries[index];
         return EntryCardWidget(
-          key: ValueKey(entry.uuid),
+          key: ValueKey(entry.id),
           entry: entry,
           onTap: () => onNavigate(entry),
           onCopyPrimaryField: () => onCopyPrimaryField(entry),
@@ -443,7 +443,7 @@ class _EntrySliverList extends StatelessWidget {
           (context, index) {
             final entry = entries[index];
             return EntryCardWidget(
-              key: ValueKey(entry.uuid),
+              key: ValueKey(entry.id),
               entry: entry,
               onTap: () => onNavigate(entry),
               onCopyPrimaryField: () => onCopyPrimaryField(entry),
