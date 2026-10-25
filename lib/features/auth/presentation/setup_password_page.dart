@@ -179,53 +179,26 @@ class _SetupPasswordPageState extends ConsumerState<SetupPasswordPage> {
                   const SizedBox(height: AppTokens.spaceXXL),
 
                   // 创建按钮
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                      gradient: authState.isLoading
-                          ? null
-                          : AppTokens.primaryGradient,
-                      color: authState.isLoading
-                          ? Theme.of(context).colorScheme.surfaceContainerHighest
-                          : null,
-                      boxShadow: authState.isLoading
-                          ? null
-                          : [
-                              BoxShadow(
-                                color: const Color(0xFF6366F1).withAlpha(100),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: authState.isLoading ? null : _setupPassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppTokens.spaceM,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusM),
-                        ),
+                  FilledButton(
+                    onPressed: authState.isLoading ? null : _setupPassword,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppTokens.spaceM,
                       ),
-                      child: authState.isLoading
-                          ? SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(
-                              '创建保险库',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
                     ),
+                    child: authState.isLoading
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            '创建保险库',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ],
               ),

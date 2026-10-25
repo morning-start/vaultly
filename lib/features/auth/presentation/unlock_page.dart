@@ -262,57 +262,31 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
                       ),
 
                     // 解锁按钮
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                        gradient: (authState.isLoading || isAuthenticating)
-                            ? null
-                            : AppTokens.primaryGradient,
-                        color: (authState.isLoading || isAuthenticating)
-                            ? colorScheme.surfaceContainerHighest
-                            : null,
-                        boxShadow: (authState.isLoading || isAuthenticating)
-                            ? null
-                            : [
-                                BoxShadow(
-                                  color: const Color(0xFF6366F1).withAlpha(100),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed:
-                            (authState.isLoading || isAuthenticating) ? null : _unlock,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          disabledBackgroundColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: AppTokens.spaceM,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                          ),
+                    FilledButton(
+                      onPressed: (authState.isLoading || isAuthenticating)
+                          ? null
+                          : _unlock,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppTokens.spaceM,
                         ),
-                        child: authState.isLoading || isAuthenticating
-                            ? SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              )
-                            : const Text(
-                                '解锁',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
                       ),
+                      child: authState.isLoading || isAuthenticating
+                          ? SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            )
+                          : const Text(
+                              '解锁',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
 
                     // 生物识别
@@ -345,18 +319,11 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
                                 customBorder: const CircleBorder(),
                                 child: Container(
                                   padding: const EdgeInsets.all(AppTokens.spaceL),
-                                  decoration: BoxDecoration(
+                                  decoration: const BoxDecoration(
                                     shape: BoxShape.circle,
-                                    gradient: AppTokens.primaryGradient,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF6366F1).withAlpha(120),
-                                        blurRadius: 16,
-                                        offset: const Offset(0, 6),
-                                      ),
-                                    ],
+                                    color: Color(0xFF4F46E5),
                                   ),
-                                    child: Icon(
+                                  child: Icon(
                                     biometricIcon,
                                     size: 36,
                                     color: Colors.white,

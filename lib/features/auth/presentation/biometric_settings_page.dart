@@ -251,50 +251,19 @@ class _BiometricSettingsPageState
                   const SizedBox(height: AppTokens.spaceXL),
 
                   // 启用按钮
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                      gradient: authState.isLoading
-                          ? null
-                          : AppTokens.primaryGradient,
-                      color: authState.isLoading
-                          ? Theme.of(context).colorScheme.surfaceContainerHighest
-                          : null,
-                      boxShadow: authState.isLoading
-                          ? null
-                          : [
-                              BoxShadow(
-                                color:
-                                    const Color(0xFF6366F1).withAlpha(100),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                    ),
-                    child: ElevatedButton.icon(
-                      onPressed:
-                          authState.isLoading ? null : _enableBiometric,
-                      icon: Icon(biometricIcon),
-                      label: authState.isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text('启用 $biometricTypeName'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        disabledBackgroundColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppTokens.spaceM,
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+                  FilledButton.icon(
+                    onPressed: authState.isLoading ? null : _enableBiometric,
+                    icon: Icon(biometricIcon),
+                    label: authState.isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text('启用 $biometricTypeName'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppTokens.spaceM,
                       ),
                     ),
                   ),
@@ -417,16 +386,9 @@ class _BiometricSettingsPageState
         Container(
           width: 28,
           height: 28,
-          decoration: BoxDecoration(
-            gradient: AppTokens.primaryGradient,
+          decoration: const BoxDecoration(
+            color: Color(0xFF4F46E5),
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withAlpha(60),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
           ),
           alignment: Alignment.center,
           child: Text(
