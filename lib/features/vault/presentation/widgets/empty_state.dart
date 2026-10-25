@@ -81,24 +81,13 @@ class EmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 图标容器（渐变背景）
+            // 图标容器（tint 圆底）
             Container(
               width: AppTokens.stateIconContainer,
               height: AppTokens.stateIconContainer,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    colorScheme.primaryContainer.withAlpha(isDark ? 180 : 140),
-                    colorScheme.primaryContainer.withAlpha(isDark ? 80 : 50),
-                  ],
-                ),
+                color: colorScheme.primaryContainer.withAlpha(isDark ? 180 : 120),
                 shape: BoxShape.circle,
-                boxShadow: AppTokens.cardShadow(
-                  colorScheme.primary,
-                  opacity: 0.08,
-                ),
               ),
               child: Icon(
                 icon,
@@ -129,35 +118,10 @@ class EmptyState extends StatelessWidget {
             if (actionLabel != null || customAction != null) ...[
               const SizedBox(height: AppTokens.spaceXL),
               customAction ??
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                      gradient: AppTokens.primaryGradient,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withAlpha(80),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: FilledButton.icon(
-                      onPressed: onActionPressed,
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(actionLabel!),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppTokens.spaceXL,
-                          vertical: AppTokens.spaceM,
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                  FilledButton.icon(
+                    onPressed: onActionPressed,
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text(actionLabel!),
                   ),
             ],
           ],

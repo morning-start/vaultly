@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import '../domain/vault_entry.dart';
 import 'vault_providers.dart';
-import '../../../features/tools/ocr_service.dart';
-import '../../../features/tools/password_generator.dart';
-import '../../../shared/widgets/secure_text_field.dart';
-import '../../../features/tools/presentation/password_strength_indicator.dart';
-import 'widgets/entry_type_helper.dart';
-import '../../../features/tools/presentation/password_generator_dialog.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/loading_button.dart';
+import '../../../features/tools/password_generator.dart';
+import 'widgets/entry_type_helper.dart';
 import 'widgets/type_picker.dart';
 import '../../../ui/theme/tokens.dart';
-// TODO: 移动 QR 扫描页面到正确位置
-// import '../../../ui/pages/qr_scanner_page.dart';
+import 'widgets/entry_forms/entry_form_controllers.dart';
+import 'widgets/entry_forms/login_form_section.dart';
+import 'widgets/entry_forms/bank_card_form_section.dart';
+import 'widgets/entry_forms/secure_note_form_section.dart';
+import 'widgets/entry_forms/identity_form_section.dart';
 
+/// 添加/编辑条目页（骨架）。
+///
+/// 页面只负责：类型选择、通用字段（标题/标签）、分区组装与保存流程；
+/// 各条目类型的专属字段渲染在 widgets/entry_forms/ 下的对应分区组件中，
+/// 表单控制器统一由 [EntryFormControllers] 管理生命周期。
 class AddEntryPage extends ConsumerStatefulWidget {
   final String? entryId;
   final EntryType? initialEntryType;
@@ -37,34 +40,10 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   bool _isEditing = false;
   VaultEntry? _originalEntry;
 
-  final _titleController = TextEditingController();
-  final _tagsController = TextEditingController();
-
-  final _usernameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _urlController = TextEditingController();
-  final _notesController = TextEditingController();
-  final _totpSecretController = TextEditingController();
-
-  final _cardNumberController = TextEditingController();
-  final _cardHolderController = TextEditingController();
-  final _cvvController = TextEditingController();
-  final _bankNameController = TextEditingController();
-  int? _expiryMonth;
-  int? _expiryYear;
-  CardType _cardType = CardType.other;
-
-  final _noteContentController = TextEditingController();
+  late final EntryFormControllers _c = EntryFormControllers();
+  final BankCardFormState _bankCardState = BankCardFormState();
+  final IdentityFormState _identityState = IdentityFormState();
   bool _isMarkdown = false;
-
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _middleNameController = TextEditingController();
-  final _idNumberController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
-  DateTime? _birthDate;
 
   int _passwordStrength = 0;
   bool _isSaving = false;
@@ -73,12 +52,20 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   void initState() {
     super.initState();
     _selectedType = widget.initialEntryType ?? EntryType.login;
-    _passwordController.addListener(_updatePasswordStrength);
+
+    _c.password.addListener(_updatePasswordStrength);
 
     if (widget.entryId != null) {
       _isEditing = true;
       _loadEntry();
     }
+  }
+
+  @override
+  void dispose() {
+    _c.password.removeListener(_updatePasswordStrength);
+    _c.dispose();
+    super.dispose();
   }
 
   Future<void> _loadEntry() async {
@@ -88,49 +75,27 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       setState(() {
         _originalEntry = entry;
         _selectedType = entry.type;
-        _titleController.text = entry.title;
-        _tagsController.text = entry.tags.join(', ');
+        _c.loadFrom(entry);
 
         switch (entry.type) {
-          case EntryType.login:
-            if (entry is LoginEntry) {
-              _usernameController.text = entry.username ?? '';
-              _emailController.text = entry.email ?? '';
-              _passwordController.text = entry.password ?? '';
-              _urlController.text = entry.url ?? '';
-              _notesController.text = entry.notes ?? '';
-              _totpSecretController.text = entry.totpSecret ?? '';
-            }
-            break;
           case EntryType.bankCard:
             if (entry is BankCardEntry) {
-              _cardNumberController.text = entry.cardNumber ?? '';
-              _cardHolderController.text = entry.cardHolderName ?? '';
-              _cvvController.text = entry.cvv ?? '';
-              _bankNameController.text = entry.bankName ?? '';
-              _expiryMonth = entry.expiryMonth;
-              _expiryYear = entry.expiryYear;
-              _cardType = entry.cardType ?? CardType.other;
+              _bankCardState.expiryMonth = entry.expiryMonth;
+              _bankCardState.expiryYear = entry.expiryYear;
+              _bankCardState.cardType = entry.cardType ?? CardType.other;
             }
             break;
           case EntryType.secureNote:
             if (entry is SecureNoteEntry) {
-              _noteContentController.text = entry.content ?? '';
               _isMarkdown = entry.isMarkdown;
             }
             break;
           case EntryType.identity:
             if (entry is IdentityEntry) {
-              _firstNameController.text = entry.firstName ?? '';
-              _lastNameController.text = entry.lastName ?? '';
-              _middleNameController.text = entry.middleName ?? '';
-              _idNumberController.text = entry.idNumber ?? '';
-              _phoneController.text = entry.phone ?? '';
-              _emailController.text = entry.email ?? '';
-              _addressController.text = entry.address ?? '';
-              _birthDate = entry.birthDate;
+              _identityState.birthDate = entry.birthDate;
             }
             break;
+          case EntryType.login:
           case EntryType.custom:
             break;
         }
@@ -138,199 +103,18 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _tagsController.dispose();
-    _usernameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _urlController.dispose();
-    _notesController.dispose();
-    _totpSecretController.dispose();
-    _cardNumberController.dispose();
-    _cardHolderController.dispose();
-    _cvvController.dispose();
-    _bankNameController.dispose();
-    _noteContentController.dispose();
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _middleNameController.dispose();
-    _idNumberController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    super.dispose();
-  }
-
   void _updatePasswordStrength() {
     setState(() {
-      _passwordStrength = PasswordGenerator.calculateStrength(_passwordController.text);
+      _passwordStrength =
+          PasswordGenerator.calculateStrength(_c.password.text);
     });
   }
 
-  Future<void> _showPasswordGenerator() async {
-    final password = await showDialog<String>(
-      context: context,
-      builder: (context) => PasswordGeneratorDialog(
-        initialPassword: _passwordController.text.isNotEmpty ? _passwordController.text : null,
-      ),
-    );
-
-    if (password != null) {
-      _passwordController.text = password;
-    }
-  }
-
-  // TODO: 移动 QR 扫描页面到正确位置后取消注释
-  // Future<void> _scanTotpQrCode() async {
-  //   final result = await Navigator.push<TotpScanResult>(
-  //     context,
-  //     MaterialPageRoute(builder: (context) => const QrScannerPage()),
-  //   );
-  //
-  //   if (result != null && mounted) {
-  //     setState(() {
-  //       _totpSecretController.text = result.secret;
-  //     });
-  //
-  //     if (_titleController.text.isEmpty && result.label.isNotEmpty) {
-  //       setState(() {
-  //         _titleController.text = result.label;
-  //       });
-  //     }
-  //
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('已扫描: ${result.issuer.isNotEmpty ? result.issuer : result.label}')),
-  //     );
-  //   }
-  // }
-
-  Future<void> _scanBankCard() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('拍照识别'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('从图库选择'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (source == null || !mounted) return;
-
-    final ocrService = OcrService();
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('正在识别银行卡信息...'),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      final OcrResult result = source == ImageSource.camera
-          ? await ocrService.scanFromCamera()
-          : await ocrService.scanFromGallery();
-
-      if (!mounted) return;
-      Navigator.of(context).pop(); // 关闭加载提示
-
-      if (result.hasAnyData) {
-        setState(() {
-          if (result.cardNumber != null) {
-            // 格式化卡号：每4位一组显示
-            final digits = result.cardNumber!.replaceAll(RegExp(r'\s'), '');
-            final buffer = StringBuffer();
-            for (int i = 0; i < digits.length; i++) {
-              if (i > 0 && i % 4 == 0) buffer.write(' ');
-              buffer.write(digits[i]);
-            }
-            _cardNumberController.text = buffer.toString();
-          }
-          if (result.cardHolderName != null) {
-            _cardHolderController.text = result.cardHolderName!;
-          }
-          if (result.expiryMonth != null && result.expiryYear != null) {
-            _expiryMonth = result.expiryMonth;
-            _expiryYear = result.expiryYear;
-          }
-        });
-
-        final detected = <String>[];
-        if (result.cardNumber != null) detected.add('卡号');
-        if (result.cardHolderName != null) detected.add('持卡人');
-        if (result.expiryMonth != null) detected.add('有效期');
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                detected.isNotEmpty
-                    ? '已识别: ${detected.join('、')}'
-                    : '未识别到银行卡信息，请尝试更清晰的图片',
-              ),
-            ),
-          );
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('未识别到银行卡信息，请尝试更清晰的图片')),
-          );
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop(); // 关闭加载提示
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('识别失败: $e')),
-      );
-    } finally {
-      ocrService.dispose();
-    }
-  }
-
-  Future<void> _saveEntry() async {
-    if (_isSaving) return;
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
-    try {
-      await _persistEntry();
-    } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
-    }
-  }
-
-  /// 构建条目并写入保险库（由 _saveEntry 包裹，负责 loading 状态）
+  /// 构建条目并写入保险库（由 _saveEntry 包裹，负责 loading 状态）。
   Future<void> _persistEntry() async {
     final vaultNotifier = ref.read(vaultNotifierProvider.notifier);
 
-    final tags = _tagsController.text
+    final tags = _c.tags.text
         .split(',')
         .map((t) => t.trim())
         .where((t) => t.isNotEmpty)
@@ -340,6 +124,9 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     final id = _isEditing && _originalEntry != null
         ? _originalEntry!.id
         : DateTime.now().millisecondsSinceEpoch.toString();
+    final createdAt = _isEditing && _originalEntry != null
+        ? _originalEntry!.createdAt
+        : now;
 
     VaultEntry entry;
 
@@ -347,77 +134,71 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       case EntryType.login:
         entry = LoginEntry(
           id: id,
-          title: _titleController.text,
-          createdAt: _isEditing && _originalEntry != null
-              ? _originalEntry!.createdAt
-              : now,
+          title: _c.title.text,
+          createdAt: createdAt,
           updatedAt: now,
           tags: tags,
-          username: _usernameController.text.isNotEmpty ? _usernameController.text : null,
-          email: _emailController.text.isNotEmpty ? _emailController.text : null,
-          password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
-          url: _urlController.text.isNotEmpty ? _urlController.text : null,
-          notes: _notesController.text.isNotEmpty ? _notesController.text : null,
-          totpSecret: _totpSecretController.text.isNotEmpty ? _totpSecretController.text : null,
+          username: _c.username.text.isNotEmpty ? _c.username.text : null,
+          email: _c.email.text.isNotEmpty ? _c.email.text : null,
+          password: _c.password.text.isNotEmpty ? _c.password.text : null,
+          url: _c.url.text.isNotEmpty ? _c.url.text : null,
+          notes: _c.notes.text.isNotEmpty ? _c.notes.text : null,
+          totpSecret:
+              _c.totpSecret.text.isNotEmpty ? _c.totpSecret.text : null,
         );
         break;
       case EntryType.bankCard:
         entry = BankCardEntry(
           id: id,
-          title: _titleController.text,
-          createdAt: _isEditing && _originalEntry != null
-              ? _originalEntry!.createdAt
-              : now,
+          title: _c.title.text,
+          createdAt: createdAt,
           updatedAt: now,
           tags: tags,
-          cardNumber: _cardNumberController.text.isNotEmpty ? _cardNumberController.text : null,
-          cardHolderName: _cardHolderController.text.isNotEmpty ? _cardHolderController.text : null,
-          cvv: _cvvController.text.isNotEmpty ? _cvvController.text : null,
-          bankName: _bankNameController.text.isNotEmpty ? _bankNameController.text : null,
-          expiryMonth: _expiryMonth,
-          expiryYear: _expiryYear,
-          cardType: _cardType,
+          cardNumber: _c.cardNumber.text.isNotEmpty ? _c.cardNumber.text : null,
+          cardHolderName:
+              _c.cardHolder.text.isNotEmpty ? _c.cardHolder.text : null,
+          cvv: _c.cvv.text.isNotEmpty ? _c.cvv.text : null,
+          bankName: _c.bankName.text.isNotEmpty ? _c.bankName.text : null,
+          expiryMonth: _bankCardState.expiryMonth,
+          expiryYear: _bankCardState.expiryYear,
+          cardType: _bankCardState.cardType,
         );
         break;
       case EntryType.secureNote:
         entry = SecureNoteEntry(
           id: id,
-          title: _titleController.text,
-          createdAt: _isEditing && _originalEntry != null
-              ? _originalEntry!.createdAt
-              : now,
+          title: _c.title.text,
+          createdAt: createdAt,
           updatedAt: now,
           tags: tags,
-          content: _noteContentController.text.isNotEmpty ? _noteContentController.text : null,
+          content:
+              _c.noteContent.text.isNotEmpty ? _c.noteContent.text : null,
           isMarkdown: _isMarkdown,
         );
         break;
       case EntryType.identity:
         entry = IdentityEntry(
           id: id,
-          title: _titleController.text,
-          createdAt: _isEditing && _originalEntry != null
-              ? _originalEntry!.createdAt
-              : now,
+          title: _c.title.text,
+          createdAt: createdAt,
           updatedAt: now,
           tags: tags,
-          firstName: _firstNameController.text.isNotEmpty ? _firstNameController.text : null,
-          lastName: _lastNameController.text.isNotEmpty ? _lastNameController.text : null,
-          middleName: _middleNameController.text.isNotEmpty ? _middleNameController.text : null,
-          idNumber: _idNumberController.text.isNotEmpty ? _idNumberController.text : null,
-          phone: _phoneController.text.isNotEmpty ? _phoneController.text : null,
-          email: _emailController.text.isNotEmpty ? _emailController.text : null,
-          address: _addressController.text.isNotEmpty ? _addressController.text : null,
-          birthDate: _birthDate,
+          firstName: _c.firstName.text.isNotEmpty ? _c.firstName.text : null,
+          lastName: _c.lastName.text.isNotEmpty ? _c.lastName.text : null,
+          middleName:
+              _c.middleName.text.isNotEmpty ? _c.middleName.text : null,
+          idNumber: _c.idNumber.text.isNotEmpty ? _c.idNumber.text : null,
+          phone: _c.phone.text.isNotEmpty ? _c.phone.text : null,
+          email: _c.email.text.isNotEmpty ? _c.email.text : null,
+          address: _c.address.text.isNotEmpty ? _c.address.text : null,
+          birthDate: _identityState.birthDate,
         );
         break;
       case EntryType.custom:
         entry = VaultEntry(
           id: id,
-          title: _titleController.text,
-          createdAt: _isEditing && _originalEntry != null
-              ? _originalEntry!.createdAt
-              : now,
+          title: _c.title.text,
+          createdAt: createdAt,
           updatedAt: now,
           type: EntryType.custom,
           tags: tags,
@@ -439,40 +220,24 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
       context.pop();
     } else if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}')),
+        SnackBar(
+            content:
+                Text('保存失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}')),
       );
     }
   }
 
-  Future<void> _selectExpiryDate() async {
-    final now = DateTime.now();
-    final result = await showDialog<Map<String, int>>(
-      context: context,
-      builder: (context) => _ExpiryDatePicker(
-        initialMonth: _expiryMonth ?? now.month,
-        initialYear: _expiryYear ?? now.year + 3,
-      ),
-    );
+  Future<void> _saveEntry() async {
+    if (_isSaving) return;
+    if (!_formKey.currentState!.validate()) return;
 
-    if (result != null) {
-      setState(() {
-        _expiryMonth = result['month'];
-        _expiryYear = result['year'];
-      });
-    }
-  }
-
-  Future<void> _selectBirthDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _birthDate ?? DateTime(now.year - 25),
-      firstDate: DateTime(1900),
-      lastDate: now,
-    );
-
-    if (picked != null) {
-      setState(() => _birthDate = picked);
+    setState(() => _isSaving = true);
+    try {
+      await _persistEntry();
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -508,7 +273,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
               icon: Icons.info_outline,
               children: [
                 TextFormField(
-                  controller: _titleController,
+                  controller: _c.title,
                   decoration: const InputDecoration(
                     labelText: '标题 *',
                     hintText: '例如：Google 账号',
@@ -523,7 +288,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
                 ),
                 const SizedBox(height: AppTokens.spaceL),
                 TextFormField(
-                  controller: _tagsController,
+                  controller: _c.tags,
                   decoration: const InputDecoration(
                     labelText: '标签',
                     hintText: '用逗号分隔多个标签',
@@ -566,373 +331,31 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
   List<Widget> _buildTypeSpecificFields() {
     switch (_selectedType) {
       case EntryType.login:
-        return _buildLoginFields();
+        return [
+          LoginFormSection(
+            controllers: _c,
+            passwordStrength: _passwordStrength,
+            onPasswordChanged: () {},
+          ),
+        ];
       case EntryType.bankCard:
-        return _buildBankCardFields();
+        return [
+          BankCardFormSection(controllers: _c, state: _bankCardState),
+        ];
       case EntryType.secureNote:
-        return _buildSecureNoteFields();
+        return [
+          SecureNoteFormSection(
+            controllers: _c,
+            isMarkdown: _isMarkdown,
+            onMarkdownChanged: (value) => setState(() => _isMarkdown = value),
+          ),
+        ];
       case EntryType.identity:
-        return _buildIdentityFields();
+        return [
+          IdentityFormSection(controllers: _c, state: _identityState),
+        ];
       case EntryType.custom:
-        return [];
+        return const [];
     }
-  }
-
-  List<Widget> _buildLoginFields() {
-    return [
-      TextFormField(
-        controller: _usernameController,
-        decoration: const InputDecoration(
-          labelText: '用户名',
-          hintText: '用户名或账号',
-          prefixIcon: Icon(Icons.person),
-        ),
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _emailController,
-        decoration: const InputDecoration(
-          labelText: '邮箱',
-          prefixIcon: Icon(Icons.email),
-        ),
-        keyboardType: TextInputType.emailAddress,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      SecureTextField(
-        controller: _passwordController,
-        labelText: '密码',
-        prefixIcon: Icons.lock,
-      ),
-      const SizedBox(height: AppTokens.spaceS),
-      Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            onPressed: _showPasswordGenerator,
-            tooltip: '生成密码',
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '生成密码',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-      PasswordStrengthIndicator(strength: _passwordStrength),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _urlController,
-        decoration: const InputDecoration(
-          labelText: '网站 URL',
-          hintText: 'https://example.com',
-          prefixIcon: Icon(Icons.link),
-        ),
-        keyboardType: TextInputType.url,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _totpSecretController,
-        decoration: InputDecoration(
-          labelText: 'TOTP 密钥',
-          hintText: '用于双因素认证',
-          prefixIcon: const Icon(Icons.timer),
-          // TODO: 移动 QR 扫描页面到正确位置后取消注释
-          // suffixIcon: IconButton(
-          //   icon: const Icon(Icons.qr_code_scanner),
-          //   onPressed: _scanTotpQrCode,
-          //   tooltip: '扫描二维码',
-          // ),
-        ),
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _notesController,
-        maxLines: 3,
-        decoration: const InputDecoration(
-          labelText: '备注',
-          prefixIcon: Icon(Icons.note),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _buildBankCardFields() {
-    return [
-      SecureTextField(
-        controller: _cardNumberController,
-        labelText: '卡号 *',
-        prefixIcon: Icons.credit_card,
-        suffixIcon: IconButton(
-          icon: const Icon(Icons.document_scanner),
-          onPressed: _scanBankCard,
-          tooltip: '扫描银行卡',
-        ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return '请输入卡号';
-          }
-          return null;
-        },
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      InputDecorator(
-        decoration: const InputDecoration(
-          labelText: '卡类型',
-          prefixIcon: Icon(Icons.payment),
-        ),
-        child: DropdownButton<CardType>(
-          value: _cardType,
-          isExpanded: true,
-          underline: const SizedBox.shrink(),
-          items: CardType.values.map((type) {
-            return DropdownMenuItem(
-              value: type,
-              child: Text(EntryTypeHelper.getCardTypeName(type)),
-            );
-          }).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              setState(() => _cardType = value);
-            }
-          },
-        ),
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _cardHolderController,
-        decoration: const InputDecoration(
-          labelText: '持卡人姓名',
-          prefixIcon: Icon(Icons.person),
-        ),
-        textCapitalization: TextCapitalization.words,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      ListTile(
-        leading: const Icon(Icons.calendar_today),
-        title: const Text('有效期'),
-        subtitle: Text(_expiryMonth != null && _expiryYear != null
-            ? '${_expiryMonth.toString().padLeft(2, '0')}/$_expiryYear'
-            : '未设置'),
-        trailing: TextButton(
-          onPressed: _selectExpiryDate,
-          child: const Text('选择'),
-        ),
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      SecureTextField(
-        controller: _cvvController,
-        labelText: 'CVV',
-        prefixIcon: Icons.security,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _bankNameController,
-        decoration: const InputDecoration(
-          labelText: '银行名称',
-          prefixIcon: Icon(Icons.account_balance),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _buildSecureNoteFields() {
-    return [
-      SwitchListTile(
-        title: const Text('Markdown 格式'),
-        subtitle: const Text('启用 Markdown 语法支持'),
-        value: _isMarkdown,
-        onChanged: (value) => setState(() => _isMarkdown = value),
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _noteContentController,
-        maxLines: 10,
-        decoration: const InputDecoration(
-          labelText: '笔记内容 *',
-          hintText: '在此输入您的安全笔记...',
-          prefixIcon: Icon(Icons.note),
-          alignLabelWithHint: true,
-        ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return '请输入笔记内容';
-          }
-          return null;
-        },
-      ),
-    ];
-  }
-
-  List<Widget> _buildIdentityFields() {
-    return [
-      Row(
-        children: [
-          Expanded(
-            child: TextFormField(
-              controller: _firstNameController,
-              decoration: const InputDecoration(
-                labelText: '名',
-                prefixIcon: Icon(Icons.person_outline),
-              ),
-              textCapitalization: TextCapitalization.words,
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceL),
-          Expanded(
-            child: TextFormField(
-              controller: _lastNameController,
-              decoration: const InputDecoration(
-                labelText: '姓',
-                prefixIcon: Icon(Icons.person),
-              ),
-              textCapitalization: TextCapitalization.words,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _middleNameController,
-        decoration: const InputDecoration(
-          labelText: '中间名',
-          prefixIcon: Icon(Icons.person_outline),
-        ),
-        textCapitalization: TextCapitalization.words,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      ListTile(
-        leading: const Icon(Icons.cake),
-        title: const Text('出生日期'),
-        subtitle: Text(_birthDate != null
-            ? '${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}'
-            : '未设置'),
-        trailing: TextButton(
-          onPressed: _selectBirthDate,
-          child: const Text('选择'),
-        ),
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      SecureTextField(
-        controller: _idNumberController,
-        labelText: '证件号码',
-        prefixIcon: Icons.badge,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _phoneController,
-        decoration: const InputDecoration(
-          labelText: '电话号码',
-          prefixIcon: Icon(Icons.phone),
-        ),
-        keyboardType: TextInputType.phone,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _emailController,
-        decoration: const InputDecoration(
-          labelText: '邮箱',
-          prefixIcon: Icon(Icons.email),
-        ),
-        keyboardType: TextInputType.emailAddress,
-      ),
-      const SizedBox(height: AppTokens.spaceL),
-      TextFormField(
-        controller: _addressController,
-        maxLines: 2,
-        decoration: const InputDecoration(
-          labelText: '地址',
-          prefixIcon: Icon(Icons.location_on),
-          alignLabelWithHint: true,
-        ),
-      ),
-    ];
-  }
-}
-
-class _ExpiryDatePicker extends StatefulWidget {
-  final int initialMonth;
-  final int initialYear;
-
-  const _ExpiryDatePicker({
-    required this.initialMonth,
-    required this.initialYear,
-  });
-
-  @override
-  State<_ExpiryDatePicker> createState() => _ExpiryDatePickerState();
-}
-
-class _ExpiryDatePickerState extends State<_ExpiryDatePicker> {
-  late int _month;
-  late int _year;
-
-  @override
-  void initState() {
-    super.initState();
-    _month = widget.initialMonth;
-    _year = widget.initialYear;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final years = List.generate(20, (i) => now.year + i);
-
-    return AlertDialog(
-      title: const Text('选择有效期'),
-      content: Row(
-        children: [
-          Expanded(
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: '月'),
-              child: DropdownButton<int>(
-                value: _month,
-                isExpanded: true,
-                underline: const SizedBox.shrink(),
-                items: List.generate(12, (i) => i + 1).map((m) {
-                  return DropdownMenuItem(
-                    value: m,
-                    child: Text(m.toString().padLeft(2, '0')),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _month = value);
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceL),
-          Expanded(
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: '年'),
-              child: DropdownButton<int>(
-                value: _year,
-                isExpanded: true,
-                underline: const SizedBox.shrink(),
-                items: years.map((y) {
-                  return DropdownMenuItem(
-                    value: y,
-                    child: Text(y.toString()),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _year = value);
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, {'month': _month, 'year': _year}),
-          child: const Text('确定'),
-        ),
-      ],
-    );
   }
 }

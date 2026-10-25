@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import '../../domain/vault_entry.dart';
 import 'entry_type_helper.dart';
 import '../../../../ui/theme/tokens.dart';
+import '../../../../ui/theme/vaultly_colors.dart';
 
-/// 条目类型选择器（可视化网格）
+/// 条目类型选择器（可视化横排）
+///
+/// 选中态：类型色描边 + tint 底；去阴影。
 class EntryTypePicker extends StatelessWidget {
   final EntryType value;
   final ValueChanged<EntryType> onChanged;
@@ -30,49 +33,26 @@ class EntryTypePicker extends StatelessWidget {
     return Row(
       children: _types.map((type) {
         final selected = type == value;
-        final typeColor = EntryTypeHelper.getColor(type);
+        final typeColor = colorScheme.entryType(type);
         return Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTokens.spaceXS,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceXS),
             child: InkWell(
               borderRadius: BorderRadius.circular(AppTokens.radiusM),
               onTap: () => onChanged(type),
               child: AnimatedContainer(
                 duration: AppTokens.animFast,
                 curve: AppTokens.easeStandard,
-                padding: const EdgeInsets.symmetric(
-                  vertical: AppTokens.spaceM,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: AppTokens.spaceM),
                 decoration: BoxDecoration(
-                  gradient: selected
-                      ? LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            typeColor.withAlpha(50),
-                            typeColor.withAlpha(20),
-                          ],
-                        )
-                      : null,
-                  color: selected ? null : colorScheme.surface,
+                  color: selected ? typeColor.withAlpha(26) : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppTokens.radiusM),
                   border: Border.all(
                     color: selected
-                        ? typeColor.withAlpha(100)
-                        : colorScheme.outlineVariant.withAlpha(60),
+                        ? typeColor.withAlpha(120)
+                        : colorScheme.outlineVariant.withAlpha(76),
                     width: selected ? 1.5 : 1,
                   ),
-                  boxShadow: selected
-                      ? [
-                          BoxShadow(
-                            color: typeColor.withAlpha(40),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -97,8 +77,7 @@ class EntryTypePicker extends StatelessWidget {
                         color: selected
                             ? typeColor
                             : colorScheme.onSurfaceVariant,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       ),
                     ),
                   ],
