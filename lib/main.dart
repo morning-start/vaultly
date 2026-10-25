@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/routes/app_router.dart';
 import 'features/auth/presentation/auto_lock_providers.dart';
+import 'features/settings/settings_providers.dart';
 import 'ui/theme/app_theme.dart';
 
 /// 应用入口。
@@ -18,12 +19,16 @@ void main() {
 ///
 /// [AutoLockActivityListener] 包裹整个应用，监听全局用户活动与
 /// 生命周期事件，驱动闲置自动锁定。
+/// 主题模式由设置中心（[settingsProvider]）驱动并持久化。
 class VaultlyApp extends ConsumerWidget {
   const VaultlyApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
+    final themeMode = ref.watch(
+      settingsProvider.select((s) => s.themeMode),
+    );
 
     return AutoLockActivityListener(
       child: MaterialApp.router(
@@ -31,7 +36,7 @@ class VaultlyApp extends ConsumerWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
+        themeMode: themeMode,
         routerConfig: router,
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
