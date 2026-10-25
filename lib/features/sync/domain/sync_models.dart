@@ -122,9 +122,12 @@ class SyncConfig {
 }
 
 /// 同步模式
+///
+/// 注意（ADR-004）：auto/manual 当前实际语义均为上传备份，
+/// 字段级双向合并尚未实现。
 enum SyncMode {
-  auto,       // 自动双向同步
-  manual,     // 仅手动同步
+  auto,       // 自动上传（暂不支持双向合并）
+  manual,     // 手动触发（上传备份）
   uploadOnly, // 仅上传（备份模式）
   downloadOnly, // 仅下载（恢复模式）
 }
