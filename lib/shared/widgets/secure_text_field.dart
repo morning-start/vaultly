@@ -68,8 +68,12 @@ class _SecureTextFieldState extends State<SecureTextField> {
   Color _getStrengthColor(int strength, ColorScheme colorScheme) {
     final isDark = colorScheme.brightness == Brightness.dark;
     if (strength < 40) return colorScheme.error;
-    if (strength < 70) return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
-    if (strength < 90) return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    if (strength < 70) {
+      return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+    }
+    if (strength < 90) {
+      return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    }
     return isDark ? Colors.green.shade300 : Colors.green.shade700;
   }
 
@@ -97,12 +101,15 @@ class _SecureTextFieldState extends State<SecureTextField> {
             hintText: widget.hintText,
             helperText: widget.helperText,
             errorText: widget.errorText,
-            prefixIcon: widget.prefixIcon != null ? Icon(widget.prefixIcon) : const Icon(Icons.lock_outline),
+            prefixIcon: widget.prefixIcon != null
+                ? Icon(widget.prefixIcon)
+                : const Icon(Icons.lock_outline),
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.suffixIcon != null) widget.suffixIcon!,
-                if (widget.showCopyButton && widget.controller?.text.isNotEmpty == true)
+                if (widget.showCopyButton &&
+                    widget.controller?.text.isNotEmpty == true)
                   IconButton(
                     icon: const Icon(Icons.copy_outlined),
                     onPressed: () {
@@ -138,32 +145,10 @@ class _SecureTextFieldState extends State<SecureTextField> {
                 ),
               ],
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              borderSide: BorderSide(color: colorScheme.outline),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              borderSide: BorderSide(color: colorScheme.outline),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              borderSide: BorderSide(color: colorScheme.primary, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              borderSide: BorderSide(color: colorScheme.error),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              borderSide: BorderSide(color: colorScheme.error, width: 2),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              borderSide: BorderSide(color: colorScheme.outline.withAlpha(128)),
-            ),
-            filled: !widget.enabled,
-            fillColor: widget.enabled ? null : colorScheme.surfaceContainerHighest.withAlpha(128),
+            filled: true,
+            fillColor: widget.enabled
+                ? null
+                : colorScheme.surfaceContainerHighest.withAlpha(128),
           ),
           textInputAction: widget.textInputAction,
           obscureText: _obscureText,
@@ -174,12 +159,15 @@ class _SecureTextFieldState extends State<SecureTextField> {
           onChanged: widget.onChanged,
           onFieldSubmitted: widget.onSubmitted,
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: widget.enabled ? colorScheme.onSurface : colorScheme.onSurface.withAlpha(128),
+            color: widget.enabled
+                ? colorScheme.onSurface
+                : colorScheme.onSurface.withAlpha(128),
             fontFamily: 'monospace',
             letterSpacing: _obscureText ? 2 : 0,
           ),
         ),
-        if (widget.showStrengthIndicator && widget.passwordStrength != null) ...[
+        if (widget.showStrengthIndicator &&
+            widget.passwordStrength != null) ...[
           const SizedBox(height: 8),
           Row(
             children: [
@@ -200,7 +188,10 @@ class _SecureTextFieldState extends State<SecureTextField> {
               Text(
                 '强度: ${_getStrengthText(widget.passwordStrength!)}',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: _getStrengthColor(widget.passwordStrength!, colorScheme),
+                  color: _getStrengthColor(
+                    widget.passwordStrength!,
+                    colorScheme,
+                  ),
                   fontWeight: FontWeight.w500,
                 ),
               ),
