@@ -1,6 +1,11 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../ui/theme/tokens.dart';
+import '../../ui/theme/vaultly_colors.dart';
 import '../../features/auth/presentation/splash_page.dart';
 import '../../features/auth/presentation/setup_password_page.dart';
 import '../../features/auth/presentation/unlock_page.dart';
@@ -48,7 +53,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
         case AuthStatusUnlocked():
           // 已解锁时，将认证页面重定向到保险库
-          if (location == '/' || location == '/setup' || location == '/unlock') {
+          if (location == '/' ||
+              location == '/setup' ||
+              location == '/unlock') {
             return '/vault';
           }
           return null;
@@ -64,10 +71,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // 启动页
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const SplashPage(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const SplashPage()),
 
       // 设置主密码页
       GoRoute(
@@ -91,8 +95,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/vault',
-                pageBuilder: (context, state) =>
-                    _fadePage(const VaultPage()),
+                pageBuilder: (context, state) => _fadePage(const VaultPage()),
               ),
             ],
           ),
@@ -109,8 +112,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/tools',
-                pageBuilder: (context, state) =>
-                    _fadePage(const ToolsPage()),
+                pageBuilder: (context, state) => _fadePage(const ToolsPage()),
               ),
             ],
           ),
@@ -121,8 +123,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'biometric',
-                    builder: (context, state) =>
-                        const BiometricSettingsPage(),
+                    builder: (context, state) => const BiometricSettingsPage(),
                   ),
                 ],
                 pageBuilder: (context, state) =>
@@ -187,10 +188,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           children: [
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            Text(
-              '页面未找到',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('页面未找到', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(state.error?.toString() ?? '未知错误'),
             const SizedBox(height: 24),
@@ -205,7 +203,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// 主界面外壳：底部导航 + 各 Tab 内容
+/// 主界面外壳：毛玻璃底部标签栏 + 各 Tab 内容
 class _HomeShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
@@ -213,43 +211,146 @@ class _HomeShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
+      extendBody: true,
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) {
-          navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          );
-        },
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.shield_outlined),
-            selectedIcon: Icon(
-              Icons.shield_rounded,
-              color: colorScheme.primary,
+      bottomNavigationBar: _GlassTabBar(
+        currentIndex: navigationShell.currentIndex,
+        onSelected: (index) => navigationShell.goBranch(
+          index,
+          initialLocation: index == navigationShell.currentIndex,
+        ),
+      ),
+    );
+  }
+}
+
+/// 底部标签定义（图标沿用 Material 线性 / 面性双档）
+class _TabSpec {
+  const _TabSpec({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+}
+
+/// 毛玻璃底部标签栏
+///
+/// 对齐原型 tabbar：总高 83（含 home indicator 安全区）、blur 24 背景、
+/// 顶部 1px 描边、图标 24 + 文字 12，选中主色加粗。
+class _GlassTabBar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onSelected;
+
+  const _GlassTabBar({required this.currentIndex, required this.onSelected});
+
+  static const List<_TabSpec> _tabs = [
+    _TabSpec(
+      label: '保险库',
+      icon: Icons.shield_outlined,
+      activeIcon: Icons.shield_rounded,
+    ),
+    _TabSpec(
+      label: '收藏',
+      icon: Icons.star_border_rounded,
+      activeIcon: Icons.star_rounded,
+    ),
+    _TabSpec(
+      label: '工具',
+      icon: Icons.tune_rounded,
+      activeIcon: Icons.tune_rounded,
+    ),
+    _TabSpec(
+      label: '设置',
+      icon: Icons.settings_outlined,
+      activeIcon: Icons.settings_rounded,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          height: 74 + safeBottom,
+          padding: EdgeInsets.only(top: 9, bottom: safeBottom),
+          decoration: BoxDecoration(
+            color: colorScheme.tabBar.withAlpha(224),
+            border: Border(top: BorderSide(color: colorScheme.hairline)),
+          ),
+          child: Row(
+            children: [
+              for (var i = 0; i < _tabs.length; i++)
+                Expanded(
+                  child: _TabButton(
+                    spec: _tabs[i],
+                    selected: i == currentIndex,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      onSelected(i);
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 单个标签：图标 + 文字，选中态主色加粗
+class _TabButton extends StatelessWidget {
+  final _TabSpec spec;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TabButton({
+    required this.spec,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = selected ? colorScheme.primary : colorScheme.textMuted;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: spec.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? spec.activeIcon : spec.icon,
+              size: 24,
+              color: color,
             ),
-            label: '保险库',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.star_border_rounded),
-            selectedIcon: Icon(Icons.star_rounded),
-            label: '收藏',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.construction_outlined),
-            selectedIcon: Icon(Icons.construction_rounded),
-            label: '工具',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: '设置',
-          ),
-        ],
+            const SizedBox(height: 3),
+            AnimatedDefaultTextStyle(
+              duration: AppTokens.animFast,
+              style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                color: color,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
+              child: Text(spec.label),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -257,30 +358,30 @@ class _HomeShell extends StatelessWidget {
 
 /// 页面淡入过渡
 Page<void> _fadePage(Widget child) => CustomTransitionPage<void>(
-      child: child,
-      transitionDuration: const Duration(milliseconds: 240),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-          FadeTransition(opacity: animation, child: child),
-    );
+  child: child,
+  transitionDuration: const Duration(milliseconds: 240),
+  transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+      FadeTransition(opacity: animation, child: child),
+);
 
 /// 底部上滑过渡（创建流页面）
 Page<void> _slideUpPage(Widget child) => CustomTransitionPage<void>(
-      child: child,
-      transitionDuration: const Duration(milliseconds: 280),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.08),
-            end: Offset.zero,
-          ).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
+  child: child,
+  transitionDuration: const Duration(milliseconds: 280),
+  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
     );
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 0.08),
+        end: Offset.zero,
+      ).animate(curved),
+      child: FadeTransition(opacity: curved, child: child),
+    );
+  },
+);
 
 /// 路由扩展方法
 extension GoRouterExtension on BuildContext {
