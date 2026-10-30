@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="dsh-design" content="app">
+<title>条目详情</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  .hero {
+    display: flex; align-items: center; gap: 14px;
+    padding: 4px 4px 18px;
+  }
+  .hero .name { font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+  .hero .meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--color-muted); }
+  .type-tag {
+    display: inline-flex; align-items: center;
+    height: 22px; padding: 0 9px;
+    border-radius: var(--radius-full);
+    font-size: 12px; font-weight: 600;
+  }
+
+  /* 字段行 */
+  .field-card .row { min-height: 60px; }
+  .field-value { font-size: var(--text-md); font-weight: 500; word-break: break-all; }
+  .field-value.masked { letter-spacing: 0.18em; font-family: var(--font-mono); }
+  .field-name { font-size: 12px; color: var(--color-muted); margin-bottom: 2px; }
+
+  /* TOTP 主卡片 —— 记忆点 */
+  .totp-card {
+    position: relative;
+    background: linear-gradient(160deg, var(--color-primary-soft), transparent 60%), var(--color-surface);
+    border: 1px solid color-mix(in oklab, var(--color-primary) 32%, transparent);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    display: flex; align-items: center; gap: 16px;
+    overflow: hidden;
+  }
+  .totp-code {
+    font-family: var(--font-mono);
+    font-size: var(--text-display); font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .totp-code span { color: var(--color-faint); }  /* 分隔空格 */
+  .ring-wrap { position: relative; width: 46px; height: 46px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .ring-wrap svg.ring { position: absolute; inset: 0; }
+  .ring-wrap svg.ring .drain { animation: ring-drain 30s linear infinite; }
+  .ring-num { font-size: 11px; font-weight: 600; color: var(--color-primary); font-variant-numeric: tabular-nums; }
+  .totp-copy {
+    margin-left: auto;
+    width: 44px; height: 44px; flex: none;
+    border-radius: 12px;
+    border: 1px solid color-mix(in oklab, var(--color-primary) 32%, transparent);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+    display: flex; align-items: center; justify-content: center;
+    transition: filter var(--dur) var(--ease), transform var(--dur) var(--ease);
+  }
+  .totp-copy:active { transform: scale(0.94); }
+
+  .chips-line { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mini-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 28px; padding: 0 11px;
+    border-radius: var(--radius-full);
+    background: var(--color-surface-2);
+    color: var(--color-muted); font-size: var(--text-xs);
+  }
+</style>
+</head>
+<body>
+
+  <header class="statusbar">
+    <span>9:41</span>
+    <span class="status-icons">
+      <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7.5" width="3" height="4.5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1" opacity="0.35"/></svg>
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 4.5a10.5 10.5 0 0 1 14 0"/><path d="M4 7.3a7 7 0 0 1 9 0"/><path d="M6.6 10a3.4 3.4 0 0 1 3.8 0"/></svg>
+      <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" fill="none" stroke="currentColor" opacity="0.4"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2.2 2.2 0 0 0 0-4z" fill="currentColor" opacity="0.4"/></svg>
+    </span>
+  </header>
+
+  <!-- 顶栏：返回 / 标题 / 收藏与更多 -->
+  <div class="navbar" style="position:relative">
+    <div class="nav-side">
+      <a class="nav-btn" href="vault.html" aria-label="返回">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </a>
+    </div>
+    <span class="nav-title">条目详情</span>
+    <div class="nav-side right">
+      <button class="nav-btn" aria-label="取消收藏" aria-pressed="true">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="var(--color-warning)"><path d="M11.53 2.3a.53.53 0 0 1 .94 0l2.31 4.67a2.12 2.12 0 0 0 1.6 1.16l5.16.76a.53.53 0 0 1 .3.9l-3.74 3.64a2.12 2.12 0 0 0-.61 1.88l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a2.12 2.12 0 0 0-1.97 0l-4.62 2.43a.53.53 0 0 1-.77-.56l.88-5.14a2.12 2.12 0 0 0-.61-1.88L2.16 9.8a.53.53 0 0 1 .3-.91l5.16-.75a2.12 2.12 0 0 0 1.6-1.16z"/></svg>
+      </button>
+      <button class="nav-btn" aria-label="更多操作">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <main class="page" style="padding-bottom:120px">
+
+    <!-- 条目头 -->
+    <div class="hero">
+      <span class="icon-badge lg t-login">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      </span>
+      <div>
+        <div class="name">GitHub</div>
+        <div class="meta">
+          <span class="type-tag t-login" style="height:22px;padding:0 9px;border-radius:999px;font-size:12px">登录凭证</span>
+          <span>开发</span>·<span>3 天前更新</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOTP 验证码：本屏焦点 -->
+    <div class="totp-card">
+      <div class="ring-wrap">
+        <svg class="ring" width="46" height="46" viewBox="0 0 46 46" fill="none">
+          <circle cx="23" cy="23" r="19" stroke="var(--color-surface-3)" stroke-width="4"/>
+          <circle class="drain" cx="23" cy="23" r="19" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round" stroke-dasharray="80 120" transform="rotate(-90 23 23)"/>
+        </svg>
+        <span class="ring-num">18</span>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--color-muted);margin-bottom:2px">两步验证码 · 每 30 秒刷新</div>
+        <div class="totp-code">382<span> </span>914</div>
+      </div>
+      <button class="totp-copy" aria-label="复制验证码" data-toast="验证码已复制">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </button>
+    </div>
+
+    <div class="section-label">凭证</div>
+    <div class="card field-card">
+      <div class="row">
+        <div class="row-main">
+          <div class="field-name">用户名</div>
+          <div class="field-value">hanes.dev@gmail.com</div>
+        </div>
+        <button class="icon-btn" aria-label="复制用户名" data-toast="用户名已复制">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        </button>
+      </div>
+      <div class="row">
+        <div class="row-main">
+          <div class="field-name">密码</div>
+          <div class="field-value masked" id="pw-value">••••••••••••••</div>
+          <div class="strength" style="margin-top:6px;max-width:200px">
+            <span class="bar"><i style="width:76%"></i></span>
+            <span class="txt">强</span>
+          </div>
+        </div>
+        <span style="display:flex;gap:2px">
+          <button class="icon-btn" id="pw-eye" aria-label="显示密码">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button class="icon-btn" aria-label="复制密码" data-toast="密码已复制，30 秒后自动清理">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+        </span>
+      </div>
+      <div class="row">
+        <div class="row-main">
+          <div class="field-name">网址</div>
+          <div class="field-value">github.com/login</div>
+        </div>
+        <button class="icon-btn" aria-label="打开网址">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="section-label">整理</div>
+    <div class="card">
+      <div class="row">
+        <span class="icon-badge t-primary" style="width:36px;height:36px;border-radius:10px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+        </span>
+        <span class="row-main">
+          <span class="row-title" style="font-size:var(--text-sm);font-weight:500">文件夹</span>
+          <span class="row-sub">开发</span>
+        </span>
+        <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+      <div class="row">
+        <span class="icon-badge t-primary" style="width:36px;height:36px;border-radius:10px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="0.5" fill="currentColor"/></svg>
+        </span>
+        <span class="row-main">
+          <span class="row-title" style="font-size:var(--text-sm);font-weight:500">标签</span>
+          <span class="chips-line" style="margin-top:8px">
+            <span class="mini-chip">代码</span>
+            <span class="mini-chip">常用</span>
+          </span>
+        </span>
+      </div>
+    </div>
+
+    <div class="section-label">备注</div>
+    <div class="card">
+      <div class="row" style="align-items:flex-start;padding-top:14px;padding-bottom:14px">
+        <div class="row-main">
+          <div class="row-sub" style="white-space:normal;line-height:1.65">工作主账号，已开启两步验证。恢复码存放在「恢复密钥备份」条目中。</div>
+        </div>
+        <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <p class="footer-note" style="margin:20px 0 0">创建于 2026-03-14 · 最近使用 昨天 21:07</p>
+
+  </main>
+
+  <!-- 底部操作 -->
+  <div class="action-bar">
+    <a class="btn btn-danger-ghost" href="vault.html" style="width:52px;flex:none" aria-label="删除条目">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+    </a>
+    <a class="btn btn-primary" href="add-entry.html" style="flex:1">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+      编辑条目
+    </a>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <span>已复制</span>
+  </div>
+  <script>
+    const toast = document.getElementById('toast');
+    const toastMsg = toast.querySelector('span');
+    let hideTimer;
+    function showToast(text) {
+      toastMsg.textContent = text;
+      toast.classList.add('show');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+    document.querySelectorAll('[data-toast]').forEach(btn =>
+      btn.addEventListener('click', () => showToast(btn.dataset.toast)));
+    const eye = document.getElementById('pw-eye');
+    const pwValue = document.getElementById('pw-value');
+    let pwShown = false;
+    eye.addEventListener('click', () => {
+      pwShown = !pwShown;
+      pwValue.textContent = pwShown ? 'HXqSugSY;K31}9%_' : '••••••••••••••';
+      pwValue.classList.toggle('masked', !pwShown);
+      eye.setAttribute('aria-label', pwShown ? '隐藏密码' : '显示密码');
+    });
+  </script>
+
+</body>
+</html>
