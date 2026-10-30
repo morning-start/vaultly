@@ -19,8 +19,8 @@ class SyncOrchestrator {
   SyncOrchestrator({
     WebDAVClient? client,
     SyncConfigRepository? configRepository,
-  })  : _client = client ?? WebDAVClient(),
-        _configRepository = configRepository ?? SyncConfigRepository();
+  }) : _client = client ?? WebDAVClient(),
+       _configRepository = configRepository ?? SyncConfigRepository();
 
   /// 状态流
   Stream<SyncState> get syncStateStream => _syncStateController.stream;
@@ -118,11 +118,13 @@ class SyncOrchestrator {
 
     _client.initClient(config);
 
-    _updateState(SyncState(
-      status: SyncStatus.syncing,
-      message: '正在同步...',
-      startTime: DateTime.now(),
-    ));
+    _updateState(
+      SyncState(
+        status: SyncStatus.syncing,
+        message: '正在同步...',
+        startTime: DateTime.now(),
+      ),
+    );
 
     try {
       SyncResult result;
@@ -155,24 +157,28 @@ class SyncOrchestrator {
       await _saveSyncHistory(result);
 
       // 更新状态
-      _updateState(SyncState(
-        status: result.success ? SyncStatus.success : SyncStatus.failed,
-        message: result.success ? '同步成功' : result.errorMessage,
-        endTime: DateTime.now(),
-        added: result.added,
-        updated: result.updated,
-        deleted: result.deleted,
-        conflicts: result.conflicts,
-      ));
+      _updateState(
+        SyncState(
+          status: result.success ? SyncStatus.success : SyncStatus.failed,
+          message: result.success ? '同步成功' : result.errorMessage,
+          endTime: DateTime.now(),
+          added: result.added,
+          updated: result.updated,
+          deleted: result.deleted,
+          conflicts: result.conflicts,
+        ),
+      );
 
       return result;
     } catch (e) {
       final errorResult = SyncResult.failure('同步失败: $e');
-      _updateState(SyncState(
-        status: SyncStatus.failed,
-        message: '同步失败: $e',
-        endTime: DateTime.now(),
-      ));
+      _updateState(
+        SyncState(
+          status: SyncStatus.failed,
+          message: '同步失败: $e',
+          endTime: DateTime.now(),
+        ),
+      );
       return errorResult;
     }
   }
@@ -285,6 +291,14 @@ class SyncOrchestrator {
     await _configRepository.updateLastSyncTime(DateTime.now());
 
     return result;
+  }
+
+  /// 列出远程备份格式（加密 / 明文），供下载前选择
+  Future<RemoteBackupFormats> listRemoteBackups() async {
+    final config = await _configRepository.getConfig();
+    if (config == null) return const RemoteBackupFormats();
+    _client.initClient(config);
+    return _client.listRemoteBackups();
   }
 
   /// 获取同步历史

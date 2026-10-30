@@ -5,13 +5,43 @@ import '../../../features/vault/presentation/vault_providers.dart';
 import 'sync_providers.dart';
 import '../../../features/auth/presentation/auth_providers.dart';
 import '../../../features/vault/domain/vault_entry.dart';
+import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../ui/theme/tokens.dart';
 import '../../../ui/theme/vaultly_colors.dart';
+import '../data/webdav_client.dart' show RemoteBackupFormats;
+import '../domain/vault_merge.dart';
+
+/// 每次操作的执行方式
+enum SyncApplyMode {
+  /// 兼容模式：与云端/本地合并，按更新时间取较新者
+  merge,
+
+  /// 覆盖模式：完全覆盖目标端数据
+  overwrite,
+}
+
+/// 备份文件格式（上传时选择写哪种文件；下载时选择读哪种文件）
+enum SyncPayloadFormat { encrypted, plain, auto }
+
+/// 一次操作的选择结果
+class _SyncPlan {
+  const _SyncPlan({
+    required this.mode,
+    required this.format,
+    required this.compress,
+  });
+
+  final SyncApplyMode mode;
+  final SyncPayloadFormat format;
+  final bool compress;
+}
 
 /// WebDAV 同步页（原型 sync.html）
 ///
-/// 状态卡（立即同步）→ 服务器 / 同步操作 / 数据安全 分组卡片
-/// → 加密说明页脚。上传、下载与加密逻辑保持不变。
+/// 上传与下载是两个独立动作；每次操作前弹出面板选择：
+/// - 处理模式：兼容（合并） / 覆盖
+/// - 数据格式：加密 / 明文（下载可自动检测）
+/// - 是否压缩
 class WebDAVSyncPage extends ConsumerStatefulWidget {
   const WebDAVSyncPage({super.key});
 
@@ -28,7 +58,55 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     });
   }
 
-  Future<void> _upload() async {
+  // ==================== 操作入口 ====================
+
+  Future<void> _handleUpload() async {
+    final plan = await _showPlanSheet(isUpload: true);
+    if (plan == null || !mounted) return;
+
+    if (plan.mode == SyncApplyMode.overwrite) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => ConfirmDialog(
+          title: '覆盖云端备份？',
+          content:
+              '覆盖模式会用本地数据完全替换云端文件，'
+              '云端独有的条目将被删除。此操作不可撤销。',
+          confirmLabel: '继续上传',
+          isDangerous: true,
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    await _upload(plan);
+  }
+
+  Future<void> _handleDownload() async {
+    final plan = await _showPlanSheet(isUpload: false);
+    if (plan == null || !mounted) return;
+
+    if (plan.mode == SyncApplyMode.overwrite) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => ConfirmDialog(
+          title: '覆盖本地数据？',
+          content:
+              '覆盖模式会用云端数据完全替换本地保险库，'
+              '尚未上传的本地条目将丢失。此操作不可撤销。',
+          confirmLabel: '继续恢复',
+          isDangerous: true,
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    await _download(plan);
+  }
+
+  // ==================== 上传 ====================
+
+  Future<void> _upload(_SyncPlan plan) async {
     final webDAVService = ref.read(webDAVServiceProvider);
     final syncNotifier = ref.read(syncOperationProvider.notifier);
     final configNotifier = ref.read(webDAVConfigProvider.notifier);
@@ -36,32 +114,52 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
     final encryptionKey = authNotifier.encryptionKey;
     if (encryptionKey == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('错误：未找到加密密钥')));
+      _toast('未找到主密钥，请重新解锁');
       return;
     }
 
-    final config = await webDAVService.getConfig();
-    final enableEncryption = config?.enableEncryption ?? true;
-    final enableCompression = config?.enableCompression ?? true;
+    final useEncryption = plan.format == SyncPayloadFormat.encrypted;
+    var entries = ref.read(vaultNotifierProvider).entries;
+    VaultMergeResult? mergeResult;
 
-    syncNotifier.startSync(enableEncryption ? '正在加密上传...' : '正在上传...');
+    syncNotifier.startSync(useEncryption ? '正在合并并加密上传...' : '正在合并并上传...');
 
     try {
-      final entries = ref.read(vaultNotifierProvider).entries;
-      final vaultData = {
-        'version': 1,
-        'exportTime': DateTime.now().toIso8601String(),
-        'entries': entries.map((e) => e.toJson()).toList(),
-      };
+      if (plan.mode == SyncApplyMode.merge) {
+        // 兼容模式：先拉取云端，合并后再整体上传，并同步回本地
+        try {
+          final remoteData = await webDAVService.download(
+            encryptionKey: encryptionKey,
+            enableEncryption: useEncryption,
+            enableCompression: plan.compress,
+          );
+          final remoteEntries = _parseEntries(remoteData);
+          if (remoteEntries != null && remoteEntries.isNotEmpty) {
+            mergeResult = mergeVaultEntries(
+              local: entries,
+              remote: remoteEntries,
+            );
+            entries = mergeResult.entries;
+          }
+        } catch (e) {
+          // 云端还没有该格式的备份：按首次上传处理
+          debugPrint('WebDAV merge skipped: $e');
+        }
+      }
 
       await webDAVService.upload(
-        vaultData: vaultData,
+        vaultData: _vaultData(entries),
         encryptionKey: encryptionKey,
-        enableEncryption: enableEncryption,
-        enableCompression: enableCompression,
+        enableEncryption: useEncryption,
+        enableCompression: plan.compress,
       );
+
+      // 合并结果回写本地，保持两端一致
+      if (mergeResult != null && mergeResult.hasRemoteChanges) {
+        await ref
+            .read(vaultNotifierProvider.notifier)
+            .replaceAllEntries(entries);
+      }
 
       if (!mounted) return;
 
@@ -69,92 +167,81 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       configNotifier.updateRemoteBackupStatus(true);
       syncNotifier.completeSync('上传成功');
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('数据已上传到 WebDAV')));
+      final detail = mergeResult == null
+          ? '${entries.length} 条'
+          : mergeResult.summary;
+      _toast('已上传到云端 · $detail');
     } catch (e) {
       if (!mounted) return;
       syncNotifier.setError('上传失败: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('上传失败: $e')));
+      _toast('上传失败: $e');
     }
   }
 
-  Future<void> _download() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认下载'),
-        content: const Text('下载将覆盖本地数据，建议先上传备份当前数据。\n\n确定要继续吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('继续下载'),
-          ),
-        ],
-      ),
-    );
+  // ==================== 下载 ====================
 
-    if (confirmed != true) return;
-
+  Future<void> _download(_SyncPlan plan) async {
     final webDAVService = ref.read(webDAVServiceProvider);
     final syncNotifier = ref.read(syncOperationProvider.notifier);
     final configNotifier = ref.read(webDAVConfigProvider.notifier);
-
     final authNotifier = ref.read(authNotifierProvider.notifier);
 
     final encryptionKey = authNotifier.encryptionKey;
     if (encryptionKey == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('错误：未找到加密密钥')));
-      }
+      _toast('未找到主密钥，请重新解锁');
       return;
     }
 
-    final config = await webDAVService.getConfig();
-    final enableEncryption = config?.enableEncryption ?? true;
-    final enableCompression = config?.enableCompression ?? true;
+    final formats = await webDAVService.listRemoteBackups();
+    if (!mounted) return;
 
-    syncNotifier.startSync(enableEncryption ? '正在下载解密...' : '正在下载...');
+    final useEncryption = switch (plan.format) {
+      SyncPayloadFormat.encrypted => true,
+      SyncPayloadFormat.plain => false,
+      SyncPayloadFormat.auto => formats.hasEncrypted,
+    };
+
+    if (useEncryption && !formats.hasEncrypted) {
+      _toast('云端没有加密备份');
+      return;
+    }
+    if (!useEncryption && !formats.hasPlain) {
+      _toast('云端没有明文备份');
+      return;
+    }
+
+    syncNotifier.startSync(useEncryption ? '正在下载并解密...' : '正在下载...');
 
     try {
       final data = await webDAVService.download(
         encryptionKey: encryptionKey,
-        enableEncryption: enableEncryption,
-        enableCompression: enableCompression,
+        enableEncryption: useEncryption,
+        enableCompression: plan.compress,
       );
 
-      if (data == null) {
-        throw Exception('下载的数据为空');
+      final remoteEntries = _parseEntries(data);
+      if (remoteEntries == null) {
+        throw Exception('下载的数据为空或格式不正确');
       }
 
-      // 原子替换：解析全部条目后一次性替换并持久化。
-      final entriesJson = data['entries'] as List<dynamic>?;
-      final importedEntries = <VaultEntry>[];
-      if (entriesJson != null) {
-        for (final entryJson in entriesJson) {
-          try {
-            final entry = _parseEntryFromJson(
-              entryJson as Map<String, dynamic>,
-            );
-            if (entry != null) {
-              importedEntries.add(entry);
-            }
-          } catch (e) {
-            // 跳过损坏条目，继续导入其他条目
-          }
-        }
-      }
-
+      final localEntries = ref.read(vaultNotifierProvider).entries;
       final vaultNotifier = ref.read(vaultNotifierProvider.notifier);
-      final success = await vaultNotifier.replaceAllEntries(importedEntries);
+
+      String message;
+      List<VaultEntry> target;
+      if (plan.mode == SyncApplyMode.merge) {
+        final merged = mergeVaultEntries(
+          local: localEntries,
+          remote: remoteEntries,
+        );
+        target = merged.entries;
+        message = '合并完成 · ${merged.summary}';
+      } else {
+        target = remoteEntries;
+        message = '已恢复 ${remoteEntries.length} 条记录';
+      }
+
+      final success = await vaultNotifier.replaceAllEntries(target);
       if (!success) {
         throw Exception(
           '恢复失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}',
@@ -165,57 +252,236 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
       configNotifier.updateSyncTime(DateTime.now());
       syncNotifier.completeSync('下载成功');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('数据已从 WebDAV 恢复，导入 ${importedEntries.length} 条记录'),
-        ),
-      );
+      _toast(message);
     } catch (e) {
       if (!mounted) return;
       syncNotifier.setError('下载失败: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('下载失败: $e'), backgroundColor: Colors.red),
-      );
+      _toast('下载失败: $e');
     }
   }
 
-  String _formatDateTime(DateTime? dateTime) {
-    if (dateTime == null) return '从未同步';
-    final now = DateTime.now();
-    final sameDay =
-        dateTime.year == now.year &&
-        dateTime.month == now.month &&
-        dateTime.day == now.day;
-    final time =
-        '${dateTime.hour.toString().padLeft(2, '0')}:'
-        '${dateTime.minute.toString().padLeft(2, '0')}';
-    return sameDay ? '今天 $time' : '${dateTime.month}/${dateTime.day} $time';
-  }
+  // ==================== 操作面板 ====================
 
-  /// 根据类型解析条目 JSON
-  VaultEntry? _parseEntryFromJson(Map<String, dynamic> json) {
-    final typeStr = json['type'] as String?;
-    if (typeStr == null) return null;
+  Future<_SyncPlan?> _showPlanSheet({required bool isUpload}) async {
+    RemoteBackupFormats formats = const RemoteBackupFormats();
+    if (!isUpload) {
+      formats = await ref.read(webDAVServiceProvider).listRemoteBackups();
+      if (!mounted) return null;
+      if (!formats.hasAny) {
+        _toast('云端还没有可恢复的备份');
+        return null;
+      }
+    }
 
-    final type = EntryType.values.firstWhere(
-      (e) => e.name == typeStr,
-      orElse: () => EntryType.custom,
+    var mode = SyncApplyMode.merge;
+    var format = isUpload
+        ? SyncPayloadFormat.encrypted
+        : (formats.hasEncrypted
+              ? SyncPayloadFormat.encrypted
+              : SyncPayloadFormat.plain);
+    var compress = true;
+
+    final result = await showModalBottomSheet<_SyncPlan>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final colorScheme = Theme.of(context).colorScheme;
+
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  0,
+                  20,
+                  20 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      isUpload ? '上传到云端' : '从云端恢复',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isUpload ? '云端文件会被本次上传结果替换或合并' : '本地保险库会被本次恢复结果覆盖或合并',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _sheetLabel('处理模式', colorScheme),
+                    _ModeOption(
+                      icon: Icons.merge_rounded,
+                      title: '兼容（合并）',
+                      subtitle: isUpload
+                          ? '先合并云端较新的条目，再整体上传'
+                          : '保留本地条目，云端较新的条目覆盖同一条目',
+                      selected: mode == SyncApplyMode.merge,
+                      onTap: () =>
+                          setSheetState(() => mode = SyncApplyMode.merge),
+                    ),
+                    const SizedBox(height: 10),
+                    _ModeOption(
+                      icon: Icons.swap_vert_rounded,
+                      title: '覆盖',
+                      subtitle: isUpload ? '云端数据被本地完全替换' : '本地数据被云端完全替换',
+                      selected: mode == SyncApplyMode.overwrite,
+                      danger: true,
+                      onTap: () =>
+                          setSheetState(() => mode = SyncApplyMode.overwrite),
+                    ),
+                    const SizedBox(height: 20),
+                    _sheetLabel('数据格式', colorScheme),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (isUpload) ...[
+                          _FormatChip(
+                            label: '加密（AES-256-GCM）',
+                            selected: format == SyncPayloadFormat.encrypted,
+                            onTap: () => setSheetState(
+                              () => format = SyncPayloadFormat.encrypted,
+                            ),
+                          ),
+                          _FormatChip(
+                            label: '明文 JSON',
+                            selected: format == SyncPayloadFormat.plain,
+                            onTap: () => setSheetState(
+                              () => format = SyncPayloadFormat.plain,
+                            ),
+                          ),
+                        ] else ...[
+                          if (formats.hasEncrypted && formats.hasPlain)
+                            _FormatChip(
+                              label: '自动检测',
+                              selected: format == SyncPayloadFormat.auto,
+                              onTap: () => setSheetState(
+                                () => format = SyncPayloadFormat.auto,
+                              ),
+                            ),
+                          if (formats.hasEncrypted)
+                            _FormatChip(
+                              label: '加密文件',
+                              selected: format == SyncPayloadFormat.encrypted,
+                              onTap: () => setSheetState(
+                                () => format = SyncPayloadFormat.encrypted,
+                              ),
+                            ),
+                          if (formats.hasPlain)
+                            _FormatChip(
+                              label: '明文文件',
+                              selected: format == SyncPayloadFormat.plain,
+                              onTap: () => setSheetState(
+                                () => format = SyncPayloadFormat.plain,
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _sheetLabel('传输选项', colorScheme),
+                    Container(
+                      constraints: const BoxConstraints(minHeight: 52),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'GZIP 压缩',
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '减小传输体积，不影响数据内容',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: compress,
+                            onChanged: (v) => setSheetState(() => compress = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(
+                        sheetContext,
+                        _SyncPlan(
+                          mode: mode,
+                          format: format,
+                          compress: compress,
+                        ),
+                      ),
+                      style: mode == SyncApplyMode.overwrite
+                          ? FilledButton.styleFrom(
+                              backgroundColor: colorScheme.dangerSoft,
+                              foregroundColor: colorScheme.error,
+                            )
+                          : null,
+                      child: Text(
+                        isUpload
+                            ? (mode == SyncApplyMode.overwrite
+                                  ? '覆盖云端'
+                                  : '合并并上传')
+                            : (mode == SyncApplyMode.overwrite
+                                  ? '覆盖本地'
+                                  : '合并到本地'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '每次操作都可单独选择模式与格式，配置页只保存服务器连接信息。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.6,
+                        color: colorScheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
 
-    switch (type) {
-      case EntryType.login:
-        return LoginEntry.fromJson(json);
-      case EntryType.bankCard:
-        return BankCardEntry.fromJson(json);
-      case EntryType.secureNote:
-        return SecureNoteEntry.fromJson(json);
-      case EntryType.identity:
-        return IdentityEntry.fromJson(json);
-      case EntryType.custom:
-        return VaultEntry.fromJson(json);
-    }
+    return result;
   }
+
+  Widget _sheetLabel(String text, ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+          color: colorScheme.textMuted,
+        ),
+      ),
+    );
+  }
+
+  // ==================== 页面 ====================
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +497,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           IconButton(
             onPressed: () => context.push('/webdav/config'),
             icon: const Icon(Icons.settings_outlined, size: 22),
-            tooltip: '配置',
+            tooltip: '连接配置',
           ),
         ],
       ),
@@ -298,30 +564,35 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           _svRow('最后同步', _formatDateTime(configState.lastSyncTime)),
           _svRow('应用密码', '已存入系统安全区'),
         ]),
-        _sectionLabel('同步操作'),
+        _sectionLabel('手动操作'),
         _card(colorScheme, [
-          _actionRow(colorScheme, '上传到云端', onTap: _upload),
+          _actionRow(
+            colorScheme,
+            '上传到云端',
+            trailingText: '模式与格式可选',
+            onTap: _handleUpload,
+          ),
           _actionRow(
             colorScheme,
             '从云端恢复',
-            trailingText: configState.hasRemoteBackup ? null : '无备份',
-            onTap: configState.hasRemoteBackup ? _download : null,
+            trailingText: configState.hasRemoteBackup ? '模式与格式可选' : '无备份',
+            onTap: configState.hasRemoteBackup ? _handleDownload : null,
           ),
         ]),
         _sectionLabel('数据安全'),
         _card(colorScheme, [
           _svRow(
-            '端到端加密',
-            'AES-256-GCM',
+            '加密算法',
+            'AES-256-GCM（可选）',
             mono: true,
             valueColor: colorScheme.accent,
           ),
           _svRow('完整性校验', 'SHA-256', mono: true),
-          _svRow('冲突处理', '保留较新版本'),
+          _svRow('合并策略', '按更新时间取较新'),
         ]),
         const SizedBox(height: AppTokens.spaceL),
         Text(
-          '服务器上始终只保存加密后的数据，\n主密钥不会离开这台设备。',
+          '服务器上始终只保存你选择格式的数据，\n主密钥不会离开这台设备。',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 12,
@@ -364,10 +635,13 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('自动同步已开启', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'WebDAV 已连接',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 2),
                 Text(
-                  '${configState.hasRemoteBackup ? '云端备份存在' : '等待首次备份'} · '
+                  '${configState.hasRemoteBackup ? '云端备份存在' : '等待首次上传'} · '
                   '${_formatDateTime(configState.lastSyncTime)}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -382,7 +656,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           ),
           const SizedBox(width: AppTokens.spaceS),
           FilledButton(
-            onPressed: _upload,
+            onPressed: _handleUpload,
             style: FilledButton.styleFrom(
               minimumSize: const Size(0, 40),
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -394,12 +668,82 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text('立即同步'),
+            child: const Text('上传'),
           ),
         ],
       ),
     );
   }
+
+  // ==================== 数据转换 ====================
+
+  Map<String, dynamic> _vaultData(List<VaultEntry> entries) => {
+    'version': 1,
+    'exportTime': DateTime.now().toIso8601String(),
+    'entries': entries.map((e) => e.toJson()).toList(),
+  };
+
+  List<VaultEntry>? _parseEntries(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final list = data['entries'] as List<dynamic>?;
+    if (list == null) return null;
+
+    final entries = <VaultEntry>[];
+    for (final json in list) {
+      try {
+        final entry = _parseEntryFromJson(json as Map<String, dynamic>);
+        if (entry != null) entries.add(entry);
+      } catch (e) {
+        // 跳过损坏条目，继续解析其他条目
+      }
+    }
+    return entries;
+  }
+
+  VaultEntry? _parseEntryFromJson(Map<String, dynamic> json) {
+    final typeStr = json['type'] as String?;
+    if (typeStr == null) return null;
+
+    final type = EntryType.values.firstWhere(
+      (e) => e.name == typeStr,
+      orElse: () => EntryType.custom,
+    );
+
+    switch (type) {
+      case EntryType.login:
+        return LoginEntry.fromJson(json);
+      case EntryType.bankCard:
+        return BankCardEntry.fromJson(json);
+      case EntryType.secureNote:
+        return SecureNoteEntry.fromJson(json);
+      case EntryType.identity:
+        return IdentityEntry.fromJson(json);
+      case EntryType.custom:
+        return VaultEntry.fromJson(json);
+    }
+  }
+
+  String _formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return '从未同步';
+    final now = DateTime.now();
+    final sameDay =
+        dateTime.year == now.year &&
+        dateTime.month == now.month &&
+        dateTime.day == now.day;
+    final time =
+        '${dateTime.hour.toString().padLeft(2, '0')}:'
+        '${dateTime.minute.toString().padLeft(2, '0')}';
+    return sameDay ? '今天 $time' : '${dateTime.month}/${dateTime.day} $time';
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // ==================== 小组件 ====================
 
   Widget _sectionLabel(String text) {
     return Padding(
@@ -500,7 +844,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           if (trailingText != null)
             Text(
               trailingText,
-              style: TextStyle(fontSize: 13, color: colorScheme.textMuted),
+              style: TextStyle(fontSize: 12, color: colorScheme.textMuted),
             ),
           if (onTap != null) ...[
             const SizedBox(width: AppTokens.spaceXS),
@@ -516,5 +860,134 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
     if (onTap == null) return row;
     return InkWell(onTap: onTap, child: row);
+  }
+}
+
+/// 操作面板中的模式选项
+class _ModeOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final bool danger;
+  final VoidCallback onTap;
+
+  const _ModeOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final accent = danger ? colorScheme.error : colorScheme.primary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTokens.radiusM),
+      child: AnimatedContainer(
+        duration: AppTokens.animFast,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected ? accent.withAlpha(36) : colorScheme.surfaceAlt,
+          borderRadius: BorderRadius.circular(AppTokens.radiusM),
+          border: Border.all(
+            color: selected ? accent.withAlpha(120) : colorScheme.hairline,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: selected ? accent : colorScheme.textMuted,
+            ),
+            const SizedBox(width: AppTokens.spaceM),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? accent : colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: colorScheme.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppTokens.spaceS),
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 20,
+              color: selected ? accent : colorScheme.textFaint,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 操作面板中的格式胶囊
+class _FormatChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FormatChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: AppTokens.animFast,
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? colorScheme.primarySoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTokens.radiusStadium),
+          border: Border.all(
+            color: selected ? Colors.transparent : colorScheme.hairlineStrong,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            color: selected ? colorScheme.primary : colorScheme.textMuted,
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -38,7 +38,9 @@ class WebDAVClient {
 
     try {
       final files = await _client!.readDir('/');
-      final folderExists = files.any((f) => f.name == _vaultFolderName && f.isDir == true);
+      final folderExists = files.any(
+        (f) => f.name == _vaultFolderName && f.isDir == true,
+      );
 
       if (!folderExists) {
         await _client!.mkdir('/$_vaultFolderName');
@@ -152,7 +154,9 @@ class WebDAVClient {
       }
 
       // 根据是否加密选择文件名
-      final fileName = enableEncryption ? _vaultFileNameEncrypted : _vaultFileNamePlain;
+      final fileName = enableEncryption
+          ? _vaultFileNameEncrypted
+          : _vaultFileNamePlain;
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = io.File('${tempDir.path}/$fileName');
@@ -222,7 +226,9 @@ class WebDAVClient {
       await _ensureVaultFolder();
 
       // 根据是否加密选择文件名
-      final fileName = enableEncryption ? _vaultFileNameEncrypted : _vaultFileNamePlain;
+      final fileName = enableEncryption
+          ? _vaultFileNameEncrypted
+          : _vaultFileNamePlain;
 
       final files = await _client!.readDir('/$_vaultFolderName');
       final hasBackup = files.any((f) => f.name == fileName);
@@ -256,7 +262,7 @@ class WebDAVClient {
       if (enableEncryption) {
         final encryptedJson = utf8.decode(dataBytes);
         final encryptedData = EncryptedData.fromJson(
-          jsonDecode(encryptedJson) as Map<String, dynamic>
+          jsonDecode(encryptedJson) as Map<String, dynamic>,
         );
         jsonData = CryptoService.decrypt(encryptedData, encryptionKey);
         debugPrint('WebDAV: 解密成功');
@@ -289,7 +295,9 @@ class WebDAVClient {
 
       await _ensureVaultFolder();
 
-      final fileName = enableEncryption ? _vaultFileNameEncrypted : _vaultFileNamePlain;
+      final fileName = enableEncryption
+          ? _vaultFileNameEncrypted
+          : _vaultFileNamePlain;
 
       final files = await _client!.readDir('/$_vaultFolderName');
       final hasBackup = files.any((f) => f.name == fileName);
@@ -331,19 +339,43 @@ class WebDAVClient {
       if (_client == null) return false;
 
       final rootFiles = await _client!.readDir('/');
-      final folderExists = rootFiles.any((f) => f.name == _vaultFolderName && f.isDir == true);
+      final folderExists = rootFiles.any(
+        (f) => f.name == _vaultFolderName && f.isDir == true,
+      );
       if (!folderExists) {
         return false;
       }
 
       final files = await _client!.readDir('/$_vaultFolderName');
       // 检查加密或非加密备份文件
-      return files.any((f) =>
-        f.name == _vaultFileNameEncrypted ||
-        f.name == _vaultFileNamePlain
+      return files.any(
+        (f) =>
+            f.name == _vaultFileNameEncrypted || f.name == _vaultFileNamePlain,
       );
     } catch (e) {
       return false;
+    }
+  }
+
+  /// 列出远程备份格式（加密 / 明文）
+  Future<RemoteBackupFormats> listRemoteBackups() async {
+    try {
+      if (_client == null) return const RemoteBackupFormats();
+
+      final rootFiles = await _client!.readDir('/');
+      final folderExists = rootFiles.any(
+        (f) => f.name == _vaultFolderName && f.isDir == true,
+      );
+      if (!folderExists) return const RemoteBackupFormats();
+
+      final files = await _client!.readDir('/$_vaultFolderName');
+      return RemoteBackupFormats(
+        hasEncrypted: files.any((f) => f.name == _vaultFileNameEncrypted),
+        hasPlain: files.any((f) => f.name == _vaultFileNamePlain),
+      );
+    } catch (e) {
+      debugPrint('WebDAV listRemoteBackups failed: $e');
+      return const RemoteBackupFormats();
     }
   }
 
@@ -362,6 +394,16 @@ class WebDAVClient {
     final decompressed = io.gzip.decode(data);
     return Uint8List.fromList(decompressed);
   }
+}
+
+/// 远程备份格式信息
+class RemoteBackupFormats {
+  final bool hasEncrypted;
+  final bool hasPlain;
+
+  const RemoteBackupFormats({this.hasEncrypted = false, this.hasPlain = false});
+
+  bool get hasAny => hasEncrypted || hasPlain;
 }
 
 /// WebDAV 异常
