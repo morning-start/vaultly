@@ -25,10 +25,7 @@ class ErrorState extends StatelessWidget {
   });
 
   /// 创建网络错误状态
-  factory ErrorState.network({
-    String? message,
-    VoidCallback? onRetryPressed,
-  }) {
+  factory ErrorState.network({String? message, VoidCallback? onRetryPressed}) {
     return ErrorState(
       title: '网络错误',
       message: message ?? '无法连接到服务器，请检查网络连接',
@@ -39,10 +36,7 @@ class ErrorState extends StatelessWidget {
   }
 
   /// 创建加载错误状态
-  factory ErrorState.load({
-    String? message,
-    VoidCallback? onRetryPressed,
-  }) {
+  factory ErrorState.load({String? message, VoidCallback? onRetryPressed}) {
     return ErrorState(
       title: '加载失败',
       message: message ?? '无法加载数据，请稍后重试',
@@ -53,10 +47,7 @@ class ErrorState extends StatelessWidget {
   }
 
   /// 创建认证错误状态
-  factory ErrorState.auth({
-    String? message,
-    VoidCallback? onLoginPressed,
-  }) {
+  factory ErrorState.auth({String? message, VoidCallback? onLoginPressed}) {
     return ErrorState(
       title: '认证失败',
       message: message ?? '登录已过期，请重新登录',
@@ -67,10 +58,7 @@ class ErrorState extends StatelessWidget {
   }
 
   /// 创建解密错误状态
-  factory ErrorState.decrypt({
-    String? message,
-    VoidCallback? onRetryPressed,
-  }) {
+  factory ErrorState.decrypt({String? message, VoidCallback? onRetryPressed}) {
     return ErrorState(
       title: '解密失败',
       message: message ?? '无法解密数据，密码可能不正确',
@@ -81,10 +69,7 @@ class ErrorState extends StatelessWidget {
   }
 
   /// 创建同步错误状态
-  factory ErrorState.sync({
-    String? message,
-    VoidCallback? onRetryPressed,
-  }) {
+  factory ErrorState.sync({String? message, VoidCallback? onRetryPressed}) {
     return ErrorState(
       title: '同步失败',
       message: message ?? '无法同步数据，请检查同步配置',
@@ -110,12 +95,12 @@ class ErrorState extends StatelessWidget {
               width: AppTokens.stateIconContainer,
               height: AppTokens.stateIconContainer,
               decoration: BoxDecoration(
-                color: colorScheme.errorContainer.withAlpha(76),
-                shape: BoxShape.circle,
+                color: colorScheme.error.withAlpha(36),
+                borderRadius: BorderRadius.circular(AppTokens.radiusXL),
               ),
               child: Icon(
                 icon,
-                size: AppTokens.stateIconSize,
+                size: AppTokens.stateIconSize - 8,
                 color: colorScheme.error,
               ),
             ),
@@ -177,14 +162,14 @@ class ErrorBanner extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.all(AppTokens.spaceL),
-      padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL, vertical: AppTokens.spaceM),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceL,
+        vertical: AppTokens.spaceM,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(AppTokens.radiusM),
-        border: Border.all(
-          color: colorScheme.error.withAlpha(128),
-          width: 1,
-        ),
+        border: Border.all(color: colorScheme.error.withAlpha(128), width: 1),
       ),
       child: Row(
         children: [
