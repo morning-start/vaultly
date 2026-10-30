@@ -5,6 +5,7 @@ import 'package:webdav_client/webdav_client.dart';
 import 'package:path_provider/path_provider.dart';
 import '../domain/sync_models.dart';
 import '../../../features/auth/data/crypto_service.dart';
+import '../../../core/exceptions/app_exception.dart';
 
 /// WebDAV 纯网络客户端
 ///
@@ -174,9 +175,21 @@ class WebDAVClient {
 
       debugPrint('WebDAV: 上传成功 (${enableEncryption ? '加密' : '未加密'})');
 
+      // 加密上传成功后，清理历史遗留的明文备份，避免明文永久留在服务器
+      if (enableEncryption) {
+        try {
+          await _client!.remove('/$_vaultFolderName/$_vaultFileNamePlain');
+        } catch (_) {
+          // 明文文件可能本就不存在，忽略清理失败
+        }
+      }
+
       return true;
     } catch (e) {
       debugPrint('WebDAV upload failed: $e');
+      if (e is CryptoException) {
+        throw WebDAVException('上传失败：本地数据加密失败，请重试');
+      }
       throw WebDAVException('上传失败: $e');
     }
   }
@@ -278,6 +291,12 @@ class WebDAVClient {
       return data;
     } catch (e) {
       debugPrint('WebDAV download failed: $e');
+      if (e is CryptoException) {
+        // 解密失败 = 当前主密码派生的密钥解不开云端备份
+        throw WebDAVException(
+          '下载失败：云端备份与当前主密码不一致，请核对主密码，或确认本地数据无误后重新上传覆盖',
+        );
+      }
       throw WebDAVException('下载失败: $e');
     }
   }

@@ -339,15 +339,15 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
           _noteRow(
             colorScheme,
             Icons.shield_outlined,
-            '数据格式',
-            '每次可选择加密（AES-256-GCM）或明文 JSON',
+            '传输加密',
+            '固定使用 AES-256-GCM 加密，服务器只保存密文',
           ),
           const SizedBox(height: 12),
           _noteRow(
             colorScheme,
             Icons.compress_rounded,
             '传输压缩',
-            '每次可选择是否启用 GZIP 压缩',
+            '固定启用 GZIP 压缩，减小传输体积',
           ),
         ],
       ),

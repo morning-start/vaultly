@@ -17,8 +17,6 @@ class SyncConfig {
   final bool isEnabled;
   final DateTime? lastSyncAt;
   final SyncStatus lastSyncStatus;
-  final bool enableEncryption;
-  final bool enableCompression;
 
   SyncConfig({
     required this.id,
@@ -34,8 +32,6 @@ class SyncConfig {
     this.isEnabled = true,
     this.lastSyncAt,
     this.lastSyncStatus = SyncStatus.idle,
-    this.enableEncryption = true,
-    this.enableCompression = true,
   });
 
   SyncConfig copyWith({
@@ -52,8 +48,6 @@ class SyncConfig {
     bool? isEnabled,
     DateTime? lastSyncAt,
     SyncStatus? lastSyncStatus,
-    bool? enableEncryption,
-    bool? enableCompression,
   }) {
     return SyncConfig(
       id: id ?? this.id,
@@ -69,8 +63,6 @@ class SyncConfig {
       isEnabled: isEnabled ?? this.isEnabled,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
       lastSyncStatus: lastSyncStatus ?? this.lastSyncStatus,
-      enableEncryption: enableEncryption ?? this.enableEncryption,
-      enableCompression: enableCompression ?? this.enableCompression,
     );
   }
 
@@ -97,8 +89,6 @@ class SyncConfig {
         (e) => e.name == json['lastSyncStatus'],
         orElse: () => SyncStatus.idle,
       ),
-      enableEncryption: json['enableEncryption'] as bool? ?? true,
-      enableCompression: json['enableCompression'] as bool? ?? true,
     );
   }
 
@@ -116,8 +106,6 @@ class SyncConfig {
     'isEnabled': isEnabled,
     'lastSyncAt': lastSyncAt?.toIso8601String(),
     'lastSyncStatus': lastSyncStatus.name,
-    'enableEncryption': enableEncryption,
-    'enableCompression': enableCompression,
   };
 }
 

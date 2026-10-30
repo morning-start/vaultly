@@ -98,23 +98,16 @@ class SyncOrchestrator {
   ///
   /// 流程：
   /// 1. 根据同步模式路由（当前全部为上传）
-  /// 2. 根据配置决定是否加密
-  /// 3. 根据配置决定是否压缩
+  /// 2. 传输固定启用 AES-256-GCM 加密与 GZIP 压缩
   Future<SyncResult> sync({
     required Map<String, dynamic> localVaultData,
     required Uint8List encryptionKey,
-    bool? enableEncryption,
-    bool? enableCompression,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
     if (config == null) {
       return SyncResult.failure('同步未配置');
     }
-
-    // 使用配置中的设置，或传入的参数
-    final encrypt = enableEncryption ?? config.enableEncryption;
-    final compress = enableCompression ?? config.enableCompression;
 
     _client.initClient(config);
 
@@ -138,16 +131,12 @@ class SyncOrchestrator {
           result = await syncUpload(
             vaultData: localVaultData,
             encryptionKey: encryptionKey,
-            enableEncryption: encrypt,
-            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
         case SyncMode.downloadOnly:
           result = await syncDownload(
             encryptionKey: encryptionKey,
-            enableEncryption: encrypt,
-            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
@@ -208,7 +197,10 @@ class SyncOrchestrator {
         return SyncResult.failure('上传失败');
       }
     } catch (e) {
-      return SyncResult.failure('上传失败: $e');
+      // WebDAVException 已带上下文，避免出现「上传失败: 上传失败: …」的重复前缀
+      return SyncResult.failure(
+        e is WebDAVException ? e.message : '上传失败: $e',
+      );
     }
   }
 
@@ -233,7 +225,10 @@ class SyncOrchestrator {
         return SyncResult.failure('下载失败：无数据');
       }
     } catch (e) {
-      return SyncResult.failure('下载失败: $e');
+      // WebDAVException 已带上下文，避免出现「下载失败: 下载失败: …」的重复前缀
+      return SyncResult.failure(
+        e is WebDAVException ? e.message : '下载失败: $e',
+      );
     }
   }
 
