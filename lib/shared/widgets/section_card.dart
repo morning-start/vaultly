@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../ui/theme/tokens.dart';
+import '../../ui/theme/vaultly_colors.dart';
 
-/// 表单分区卡片
+/// 表单分区
 ///
-/// 将相关联的表单字段分组展示，带标题与图标，视觉上对齐设计令牌。
+/// 对齐原型：分区标题为 12/500 muted 的小标签（上 24 / 下 10），
+/// 内容包裹在 surface 卡片内（line 描边 + 圆角 18）。
 class SectionCard extends StatelessWidget {
   final String title;
   final IconData? icon;
@@ -21,38 +23,44 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppTokens.spaceL),
-      child: Padding(
-        padding: padding ?? const EdgeInsets.all(AppTokens.spaceL),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 20, color: colorScheme.primary),
-                  const SizedBox(width: AppTokens.spaceS),
-                ],
-                Expanded(
-                  child: Text(
-                    title,
-                    style: textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.primary,
-                    ),
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 24, bottom: 10),
+          child: Row(
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.2,
+                  color: colorScheme.textMuted,
                 ),
-              ],
-            ),
-            const SizedBox(height: AppTokens.spaceL),
-            ...children,
-          ],
+              ),
+              const Spacer(),
+              if (icon != null)
+                Icon(icon, size: 14, color: colorScheme.textFaint),
+            ],
+          ),
         ),
-      ),
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: padding ?? const EdgeInsets.all(AppTokens.spaceL),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceCard,
+            borderRadius: BorderRadius.circular(AppTokens.radiusL),
+            border: Border.all(color: colorScheme.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: children,
+          ),
+        ),
+      ],
     );
   }
 }

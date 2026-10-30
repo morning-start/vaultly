@@ -5,6 +5,7 @@ import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/key_derivators/api.dart';
 import 'package:pointycastle/key_derivators/argon2.dart';
+import '../../../core/exceptions/app_exception.dart';
 
 class CryptoService {
   static const int _keyLength = 32; // 256 bits
@@ -68,7 +69,15 @@ class CryptoService {
       encrypt_lib.AES(encrypt_lib.Key(key), mode: encrypt_lib.AESMode.gcm),
     );
 
-    return encrypter.decrypt(encrypted, iv: encrypt_lib.IV(iv));
+    try {
+      return encrypter.decrypt(encrypted, iv: encrypt_lib.IV(iv));
+    } catch (e) {
+      // GCM 认证标签校验失败（密钥不匹配）或密文损坏时，pointycastle 抛出的
+      // InvalidCipherTextException 没有 toString，直接上抛会变成
+      // "Instance of 'InvalidCipherTextException'" 泄漏到 UI。
+      // 这里统一映射为业务异常，保留原始错误便于诊断。
+      throw CryptoException.decryptionFailed(e);
+    }
   }
 
   @Deprecated('使用 deriveKeyWithArgon2id 替代')

@@ -1,0 +1,94 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vaultly/features/sync/domain/vault_merge.dart';
+import 'package:vaultly/features/vault/domain/vault_entry.dart';
+
+void main() {
+  final base = DateTime(2026, 1, 1, 10);
+
+  VaultEntry entry(String id, String title, DateTime updated) =>
+      VaultEntry(id: id, title: title, createdAt: base, updatedAt: updated);
+
+  group('mergeVaultEntries 兼容合并', () {
+    test('本地独有保留、云端独有加入', () {
+      final result = mergeVaultEntries(
+        local: [entry('a', '本地A', base)],
+        remote: [entry('b', '云端B', base)],
+      );
+
+      expect(result.entries.map((e) => e.id), containsAll(['a', 'b']));
+      expect(result.remoteAdded, 1);
+      expect(result.remoteUpdated, 0);
+      expect(result.localKept, 0);
+      expect(result.hasRemoteChanges, isTrue);
+    });
+
+    test('同 ID 云端较新时覆盖本地', () {
+      final result = mergeVaultEntries(
+        local: [entry('a', '旧标题', base)],
+        remote: [entry('a', '新标题', base.add(const Duration(hours: 1)))],
+      );
+
+      expect(result.entries.single.title, '新标题');
+      expect(result.remoteUpdated, 1);
+      expect(result.localKept, 0);
+    });
+
+    test('同 ID 本地较新时保留本地', () {
+      final result = mergeVaultEntries(
+        local: [entry('a', '本地较新', base.add(const Duration(hours: 2)))],
+        remote: [entry('a', '云端较旧', base)],
+      );
+
+      expect(result.entries.single.title, '本地较新');
+      expect(result.remoteUpdated, 0);
+      expect(result.localKept, 1);
+      expect(result.hasRemoteChanges, isFalse);
+    });
+
+    test('更新时间相同时保留本地', () {
+      final result = mergeVaultEntries(
+        local: [entry('a', '本地', base)],
+        remote: [entry('a', '云端', base)],
+      );
+
+      expect(result.entries.single.title, '本地');
+      expect(result.localKept, 1);
+    });
+
+    test('云端为空时返回本地全部条目', () {
+      final local = [entry('a', 'A', base), entry('b', 'B', base)];
+      final result = mergeVaultEntries(local: local, remote: const []);
+
+      expect(result.entries.length, 2);
+      expect(result.remoteAdded + result.remoteUpdated, 0);
+    });
+
+    test('合并结果按更新时间倒序', () {
+      final result = mergeVaultEntries(
+        local: [
+          entry('a', 'A', base),
+          entry('b', 'B', base.add(const Duration(days: 2))),
+        ],
+        remote: [entry('c', 'C', base.add(const Duration(days: 1)))],
+      );
+
+      expect(result.entries.map((e) => e.id).toList(), ['b', 'c', 'a']);
+    });
+
+    test('summary 汇总新增/更新/保留数量', () {
+      final result = mergeVaultEntries(
+        local: [entry('a', 'A', base), entry('b', 'B', base)],
+        remote: [
+          entry('a', 'A2', base.add(const Duration(hours: 1))),
+          entry('c', 'C', base),
+          entry('b', 'B2', base),
+        ],
+      );
+
+      expect(result.remoteAdded, 1);
+      expect(result.remoteUpdated, 1);
+      expect(result.localKept, 1);
+      expect(result.summary, '云端新增 1 · 云端更新 1 · 保留本地 1');
+    });
+  });
+}

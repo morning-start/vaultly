@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../sync/presentation/sync_providers.dart';
 import '../domain/vault_entry.dart';
 import '../domain/vault_notifier.dart';
 import 'vault_providers.dart';
@@ -13,13 +14,13 @@ import 'widgets/entry_card_widget.dart';
 import 'widgets/empty_state.dart';
 import 'widgets/error_state.dart';
 
-/// 保险库主页
+/// 保险库主页（原型 vault.html）
 ///
 /// 纯响应式：列表来自 [vaultNotifierProvider]（同步快照），
 /// 写操作由 VaultNotifier 统一处理，页面无需手动刷新。
-/// 结构：搜索栏 → 类型筛选 chips（含计数）→ 分组列表
-/// （收藏置顶组 + 类型分组；搜索时扁平化按更新时间排序）。
-/// AppBar 仅保留标题与锁定入口。
+///
+/// 结构：大标题头部（条目数 + 同步状态 + 同步/锁定入口）
+/// → 搜索框 → 类型筛选 chips → 分组卡片列表（收藏置顶 + 类型分组）。
 class VaultPage extends ConsumerStatefulWidget {
   const VaultPage({super.key});
 
@@ -80,12 +81,14 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     return filtered;
   }
 
-  void _navigateToAddEntry() {
-    context.push('/add');
-  }
+  void _navigateToAddEntry() => context.push('/add');
 
-  void _navigateToEntryDetail(VaultEntry entry) {
-    context.push('/entry/${entry.id}');
+  void _navigateToEntryDetail(VaultEntry entry) =>
+      context.push('/entry/${entry.id}');
+
+  void _lock() {
+    ref.read(authNotifierProvider.notifier).lock();
+    context.go('/unlock');
   }
 
   Future<void> _copyPrimaryField(VaultEntry entry) async {
@@ -113,43 +116,73 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   @override
   Widget build(BuildContext context) {
     final vaultState = ref.watch(vaultNotifierProvider);
+    final syncState = ref.watch(webDAVConfigProvider);
     final entries = _getFilteredEntries(vaultState.entries);
     final isSearching = _searchQuery.isNotEmpty;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: AppTokens.navBarHeight,
-        title: Text('Vaultly', style: Theme.of(context).textTheme.titleLarge),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.lock_outline_rounded),
-            onPressed: () {
-              ref.read(authNotifierProvider.notifier).lock();
-              context.go('/unlock');
-            },
-            tooltip: '锁定',
-          ),
-          const SizedBox(width: AppTokens.spaceS),
-        ],
+      backgroundColor: colorScheme.bg,
+      body: SafeArea(
+        bottom: false,
+        child: _buildBody(vaultState, syncState, entries, isSearching),
       ),
-      body: _buildBody(vaultState, entries, isSearching),
-      floatingActionButton: AnimatedScale(
-        scale: _fabVisible ? 1 : 0,
-        duration: AppTokens.animNormal,
-        curve: AppTokens.easeOutBack,
-        alignment: Alignment.bottomRight,
-        child: FloatingActionButton.extended(
-          onPressed: _navigateToAddEntry,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('添加'),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: _buildFab(colorScheme),
+    );
+  }
+
+  Widget _buildFab(ColorScheme colorScheme) {
+    return AnimatedScale(
+      scale: _fabVisible ? 1 : 0,
+      duration: AppTokens.animNormal,
+      curve: AppTokens.easeOutBack,
+      alignment: Alignment.bottomRight,
+      child: Container(
+        width: AppTokens.fabSize,
+        height: AppTokens.fabSize,
+        decoration: BoxDecoration(
+          color: colorScheme.primary,
+          borderRadius: BorderRadius.circular(AppTokens.radiusL),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(115),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.black.withAlpha(90),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppTokens.radiusL),
+            onTap: _navigateToAddEntry,
+            child: Semantics(
+              button: true,
+              label: '添加条目',
+              child: Icon(
+                Icons.add_rounded,
+                size: 26,
+                color: colorScheme.onPrimary,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildBody(
-      VaultState vaultState, List<VaultEntry> entries, bool isSearching) {
-    // 加载中
+    VaultState vaultState,
+    WebDAVConfigState syncState,
+    List<VaultEntry> entries,
+    bool isSearching,
+  ) {
     if (!vaultState.isLoaded) {
       return const Center(
         child: Column(
@@ -163,110 +196,195 @@ class _VaultPageState extends ConsumerState<VaultPage> {
       );
     }
 
-    // 加载失败
     if (vaultState.error != null && vaultState.entries.isEmpty) {
       return ErrorState.load(
         message: '加载失败: ${vaultState.error}',
-        onRetryPressed: () =>
-            ref.read(vaultNotifierProvider.notifier).reload(),
+        onRetryPressed: () => ref.read(vaultNotifierProvider.notifier).reload(),
       );
     }
 
-    return Column(
-      children: [
-        // 搜索栏
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTokens.spaceL,
-            AppTokens.spaceS,
-            AppTokens.spaceL,
-            0,
-          ),
-          child: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: '搜索标题或标签...',
-              prefixIcon: const Icon(Icons.search_rounded, size: 22),
-              suffixIcon: isSearching
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                      },
-                    )
-                  : null,
-            ),
-            onChanged: (value) => setState(() => _searchQuery = value),
-          ),
-        ),
-        // 筛选 chips（含计数）
-        SizedBox(
-          height: 56,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTokens.spaceL,
-              vertical: AppTokens.spaceS,
-            ),
-            children: [
-              _buildFilterChip(
-                label: '全部',
-                count: vaultState.entries.length,
-                selected: _selectedFilter == null,
-                onTap: () => setState(() => _selectedFilter = null),
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeader(vaultState, syncState)),
+        SliverToBoxAdapter(child: _buildSearch()),
+        SliverToBoxAdapter(child: _buildFilterChips(vaultState)),
+        if (entries.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: isSearching
+                ? EmptyState.search(query: _searchQuery)
+                : EmptyState.vault(onAddPressed: _navigateToAddEntry),
+          )
+        else if (isSearching)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _EntryGroup(
+                entries: _sortForSearch(entries),
+                onNavigate: _navigateToEntryDetail,
+                onCopyPrimaryField: _copyPrimaryField,
+                onToggleFavorite: _toggleFavorite,
               ),
-              for (final type in EntryType.values)
-                if (type != EntryType.custom ||
-                    vaultState.entries.any((e) => e.type == type))
-                  _buildFilterChip(
-                    label: _typeName(type),
-                    count: vaultState.entries
-                        .where((e) => e.type == type)
-                        .length,
-                    icon: _typeIcon(type),
-                    iconColor:
-                        Theme.of(context).colorScheme.entryType(type),
-                    selected: _selectedFilter == type,
-                    onTap: () => setState(() => _selectedFilter = type),
-                  ),
-            ],
+            ),
+          )
+        else
+          ..._buildGroupedSections(entries),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 120 + MediaQuery.viewPaddingOf(context).bottom,
           ),
-        ),
-        const SizedBox(height: AppTokens.spaceS),
-        // 条目列表或空状态
-        Expanded(
-          child: entries.isEmpty
-              ? (isSearching
-                  ? EmptyState.search(query: _searchQuery)
-                  : EmptyState.vault(onAddPressed: _navigateToAddEntry))
-              : isSearching
-                  ? _buildFlatList(entries)
-                  : _buildGroupedList(entries),
         ),
       ],
     );
   }
 
-  /// 搜索结果：扁平化按更新时间排序
-  Widget _buildFlatList(List<VaultEntry> entries) {
-    final sorted = entries.toList()
-      ..sort((a, b) {
-        if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
-        return b.updatedAt.compareTo(a.updatedAt);
-      });
+  Widget _buildHeader(VaultState vaultState, WebDAVConfigState syncState) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final synced = syncState.isConfigured && syncState.lastSyncTime != null;
 
-    return _EntryListView(
-      entries: sorted,
-      scrollController: _scrollController,
-      onNavigate: _navigateToEntryDetail,
-      onCopyPrimaryField: _copyPrimaryField,
-      onToggleFavorite: _toggleFavorite,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 12, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('保险库', style: textTheme.displayLarge),
+                const SizedBox(height: 2),
+                Text(
+                  '${vaultState.entries.length} 个条目${_syncLabel(syncState)}',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _HeaderAction(
+            icon: Icons.cloud_done_outlined,
+            tooltip: '同步',
+            showDot: synced,
+            onTap: () => context.push('/webdav'),
+          ),
+          _HeaderAction(
+            icon: Icons.lock_outline_rounded,
+            tooltip: '立即锁定',
+            onTap: _lock,
+          ),
+        ],
+      ),
     );
   }
 
+  String _syncLabel(WebDAVConfigState syncState) {
+    if (!syncState.isConfigured) return '';
+    final last = syncState.lastSyncTime;
+    if (last == null) return ' · 待首次同步';
+    final now = DateTime.now();
+    final sameDay =
+        last.year == now.year && last.month == now.month && last.day == now.day;
+    final time =
+        '${last.hour.toString().padLeft(2, '0')}:'
+        '${last.minute.toString().padLeft(2, '0')}';
+    return sameDay
+        ? ' · 今天 $time 已同步'
+        : ' · ${last.month}/${last.day} $time 已同步';
+  }
+
+  Widget _buildSearch() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isSearching = _searchQuery.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: SizedBox(
+        height: AppTokens.searchHeight,
+        child: TextField(
+          controller: _searchController,
+          style: Theme.of(context).textTheme.bodyLarge,
+          textInputAction: TextInputAction.search,
+          cursorColor: colorScheme.primary,
+          decoration: InputDecoration(
+            hintText: '搜索名称、用户名或网址',
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              size: 20,
+              color: colorScheme.textFaint,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 42,
+              minHeight: 20,
+            ),
+            suffixIcon: isSearching
+                ? IconButton(
+                    icon: Icon(
+                      Icons.cancel_rounded,
+                      size: 18,
+                      color: colorScheme.textFaint,
+                    ),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  )
+                : null,
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 20,
+            ),
+          ),
+          onChanged: (value) => setState(() => _searchQuery = value),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChips(VaultState vaultState) {
+    final chips = <_ChipData>[
+      _ChipData('全部', vaultState.entries.length, null),
+      for (final type in EntryType.values)
+        if (type != EntryType.custom ||
+            vaultState.entries.any((e) => e.type == type))
+          _ChipData(
+            _typeName(type),
+            vaultState.entries.where((e) => e.type == type).length,
+            type,
+          ),
+    ];
+
+    return SizedBox(
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        itemCount: chips.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final chip = chips[index];
+          return _FilterChip(
+            label: chip.label,
+            count: chip.count,
+            selected: _selectedFilter == chip.type,
+            onTap: () => setState(() => _selectedFilter = chip.type),
+          );
+        },
+      ),
+    );
+  }
+
+  List<VaultEntry> _sortForSearch(List<VaultEntry> entries) {
+    return entries.toList()..sort((a, b) {
+      if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
+  }
+
   /// 默认视图：收藏置顶 + 类型分组
-  Widget _buildGroupedList(List<VaultEntry> entries) {
+  List<Widget> _buildGroupedSections(List<VaultEntry> entries) {
     final favorites = entries.where((e) => e.isFavorite).toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     final rest = entries.where((e) => !e.isFavorite).toList();
@@ -278,123 +396,210 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     for (final list in grouped.values) {
       list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     }
-    final typeOrder =
-        EntryType.values.where((t) => grouped.containsKey(t)).toList();
+    final typeOrder = EntryType.values
+        .where((t) => grouped.containsKey(t))
+        .toList();
     final colorScheme = Theme.of(context).colorScheme;
 
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        if (favorites.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: _GroupHeader(
-              icon: Icons.star_rounded,
-              color: colorScheme.favorite,
-              title: '收藏',
-              count: favorites.length,
-            ),
-          ),
-          _EntrySliverList(
-            entries: favorites,
-            onNavigate: _navigateToEntryDetail,
-            onCopyPrimaryField: _copyPrimaryField,
-            onToggleFavorite: _toggleFavorite,
-          ),
-        ],
-        for (final type in typeOrder) ...[
-          SliverToBoxAdapter(
-            child: _GroupHeader(
-              icon: _typeIcon(type),
-              color: colorScheme.entryType(type),
-              title: _typeName(type),
-              count: grouped[type]!.length,
-            ),
-          ),
-          _EntrySliverList(
-            entries: grouped[type]!,
-            onNavigate: _navigateToEntryDetail,
-            onCopyPrimaryField: _copyPrimaryField,
-            onToggleFavorite: _toggleFavorite,
-          ),
-        ],
-        const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
-      ],
-    );
+    return [
+      if (favorites.isNotEmpty)
+        _buildSection(
+          entries: favorites,
+          title: '收藏',
+          icon: Icons.star_rounded,
+          iconColor: colorScheme.favorite,
+        ),
+      for (final type in typeOrder)
+        _buildSection(entries: grouped[type]!, title: _typeName(type)),
+    ];
   }
 
-  static String _typeName(EntryType type) => switch (type) {
-        EntryType.login => '登录',
-        EntryType.bankCard => '银行卡',
-        EntryType.secureNote => '笔记',
-        EntryType.identity => '身份',
-        EntryType.custom => '自定义',
-      };
-
-  static IconData _typeIcon(EntryType type) => switch (type) {
-        EntryType.login => Icons.key_rounded,
-        EntryType.bankCard => Icons.credit_card_rounded,
-        EntryType.secureNote => Icons.sticky_note_2_rounded,
-        EntryType.identity => Icons.person_rounded,
-        EntryType.custom => Icons.folder_rounded,
-      };
-
-  Widget _buildFilterChip({
-    required String label,
-    required int count,
-    required bool selected,
-    required VoidCallback onTap,
+  Widget _buildSection({
+    required List<VaultEntry> entries,
+    required String title,
     IconData? icon,
     Color? iconColor,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.only(right: AppTokens.spaceS),
-      child: FilterChip(
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: 15, color: iconColor),
-              const SizedBox(width: 4),
-            ],
-            Text(count > 0 || label == '全部' ? '$label $count' : label),
+            Padding(
+              padding: const EdgeInsets.only(top: 24, bottom: 10),
+              child: Row(
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.2,
+                      color: colorScheme.textMuted,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (icon != null) Icon(icon, size: 14, color: iconColor),
+                ],
+              ),
+            ),
+            _EntryGroup(
+              entries: entries,
+              onNavigate: _navigateToEntryDetail,
+              onCopyPrimaryField: _copyPrimaryField,
+              onToggleFavorite: _toggleFavorite,
+            ),
+            const SizedBox(height: 8),
           ],
         ),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        selectedColor: colorScheme.primaryContainer,
-        checkmarkColor: colorScheme.primary,
-        labelStyle: TextStyle(
-          fontSize: 13,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
-        ),
-        shape: RoundedRectangleBorder(
+      ),
+    );
+  }
+
+  static String _typeName(EntryType type) => switch (type) {
+    EntryType.login => '登录',
+    EntryType.bankCard => '银行卡',
+    EntryType.secureNote => '笔记',
+    EntryType.identity => '身份',
+    EntryType.custom => '自定义',
+  };
+}
+
+/// 筛选 chip 数据
+class _ChipData {
+  const _ChipData(this.label, this.count, this.type);
+
+  final String label;
+  final int count;
+  final EntryType? type;
+}
+
+/// 胶囊筛选 chip（原型 `.chip`）
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foreground = selected ? colorScheme.primary : colorScheme.textMuted;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: AppTokens.animFast,
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: selected ? colorScheme.primarySoft : Colors.transparent,
           borderRadius: BorderRadius.circular(AppTokens.radiusStadium),
-          side: BorderSide(
-            color: selected
-                ? colorScheme.primary.withAlpha(70)
-                : colorScheme.outlineVariant.withAlpha(80),
+          border: Border.all(
+            color: selected ? Colors.transparent : colorScheme.hairlineStrong,
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: foreground,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: foreground.withAlpha(190),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// 列表视图（搜索态，普通 ListView）
-class _EntryListView extends StatelessWidget {
+/// 头部图标按钮（44x44，可带同步状态点）
+class _HeaderAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool showDot;
+  final VoidCallback onTap;
+
+  const _HeaderAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.showDot = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 22,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(icon, size: 22, color: colorScheme.onSurface),
+              if (showDot)
+                Positioned(
+                  right: 8,
+                  bottom: 10,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: colorScheme.accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colorScheme.bg, width: 2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 单个分组卡片：surface 底 + line 描边 + 行间分隔线
+class _EntryGroup extends StatelessWidget {
   final List<VaultEntry> entries;
-  final ScrollController? scrollController;
   final void Function(VaultEntry) onNavigate;
   final void Function(VaultEntry) onCopyPrimaryField;
   final void Function(VaultEntry) onToggleFavorite;
 
-  const _EntryListView({
+  const _EntryGroup({
     required this.entries,
-    this.scrollController,
     required this.onNavigate,
     required this.onCopyPrimaryField,
     required this.onToggleFavorite,
@@ -402,106 +607,35 @@ class _EntryListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: scrollController,
-      itemCount: entries.length,
-      padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        return EntryCardWidget(
+    final colorScheme = Theme.of(context).colorScheme;
+    final children = <Widget>[];
+
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      if (i > 0) {
+        children.add(
+          Divider(height: 1, thickness: 1, color: colorScheme.hairline),
+        );
+      }
+      children.add(
+        EntryCardWidget(
           key: ValueKey(entry.id),
           entry: entry,
           onTap: () => onNavigate(entry),
           onCopyPrimaryField: () => onCopyPrimaryField(entry),
           onToggleFavorite: () => onToggleFavorite(entry),
-        );
-      },
-    );
-  }
-}
-
-/// 列表视图（分组态，Sliver）
-class _EntrySliverList extends StatelessWidget {
-  final List<VaultEntry> entries;
-  final void Function(VaultEntry) onNavigate;
-  final void Function(VaultEntry) onCopyPrimaryField;
-  final void Function(VaultEntry) onToggleFavorite;
-
-  const _EntrySliverList({
-    required this.entries,
-    required this.onNavigate,
-    required this.onCopyPrimaryField,
-    required this.onToggleFavorite,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceL),
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final entry = entries[index];
-            return EntryCardWidget(
-              key: ValueKey(entry.id),
-              entry: entry,
-              onTap: () => onNavigate(entry),
-              onCopyPrimaryField: () => onCopyPrimaryField(entry),
-              onToggleFavorite: () => onToggleFavorite(entry),
-            );
-          },
-          childCount: entries.length,
         ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTokens.radiusL),
+        border: Border.all(color: colorScheme.hairline),
       ),
-    );
-  }
-}
-
-/// 分组头
-class _GroupHeader extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String title;
-  final int count;
-
-  const _GroupHeader({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.count,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppTokens.spaceM + AppTokens.spaceL,
-        AppTokens.spaceL,
-        AppTokens.spaceS,
-        AppTokens.spaceM,
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: AppTokens.spaceS),
-          Text(
-            title,
-            style: textTheme.labelLarge?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceS),
-          Text(
-            '$count',
-            style: textTheme.labelMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant.withAlpha(150),
-            ),
-          ),
-        ],
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
     );
   }
 }

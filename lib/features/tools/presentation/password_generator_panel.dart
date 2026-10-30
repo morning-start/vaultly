@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import '../password_generator.dart';
+import '../password_policy.dart';
 import '../../../shared/widgets/app_toast.dart';
-import '../../../shared/widgets/mono_text.dart';
 import '../../../ui/theme/tokens.dart';
+import '../../../ui/theme/vaultly_colors.dart';
 import '../../../features/tools/clipboard_service.dart';
 
-/// 密码生成器面板（页面内嵌组件）
+/// 密码生成器面板（原型 tools.html `.gen-card`）
 ///
-/// 工具页主体；与 [PasswordGeneratorDialog] 复用同一生成核心，
-/// 此处为页面化布局：大号等宽结果 + 强度条 + 参数控件。
-class PasswordGeneratorPanel extends StatefulWidget {  const PasswordGeneratorPanel({super.key});
+/// 结果展示框（bg + line-strong 描边 + 等宽大号）→ 强度条 → 长度滑杆
+/// → 字符组成开关（大写/小写/数字/符号/易读），开关行之间 1px 分隔。
+class PasswordGeneratorPanel extends StatefulWidget {
+  const PasswordGeneratorPanel({super.key});
 
   @override
   State<PasswordGeneratorPanel> createState() => _PasswordGeneratorPanelState();
@@ -34,7 +36,9 @@ class _PasswordGeneratorPanelState extends State<PasswordGeneratorPanel> {
   void _generate() {
     setState(() {
       if (_readable) {
-        _generatedPassword = PasswordGenerator.generateReadable(length: _length);
+        _generatedPassword = PasswordGenerator.generateReadable(
+          length: _length,
+        );
       } else {
         _generatedPassword = PasswordGenerator.generate(
           length: _length,
@@ -48,175 +52,168 @@ class _PasswordGeneratorPanelState extends State<PasswordGeneratorPanel> {
   }
 
   Future<void> _copy() async {
-    await ClipboardService()
-        .copySensitive(_generatedPassword, label: 'generator');
+    await ClipboardService().copySensitive(
+      _generatedPassword,
+      label: 'generator',
+    );
     if (mounted) AppToast.show(context, '密码已复制（30 秒后自动清除）');
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
     final strength = PasswordGenerator.calculateStrength(_generatedPassword);
-    final (strengthColor, strengthLabel) = _strengthVisual(strength, colorScheme);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 标题
-        Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: colorScheme.primary.withAlpha(26),
-                borderRadius: BorderRadius.circular(AppTokens.radiusS),
-              ),
-              child: Icon(Icons.password_rounded,
-                  size: 20, color: colorScheme.primary),
-            ),
-            const SizedBox(width: AppTokens.spaceM),
-            Text('密码生成器', style: textTheme.titleMedium),
-          ],
-        ),
-        const SizedBox(height: AppTokens.spaceL),
-
-        // 结果展示
+        // 结果展示框
         Container(
-          padding: const EdgeInsets.all(AppTokens.spaceXL),
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
           decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(AppTokens.radiusL),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withAlpha(76),
-            ),
+            color: colorScheme.bg,
+            borderRadius: BorderRadius.circular(AppTokens.radiusM),
+            border: Border.all(color: colorScheme.hairlineStrong),
           ),
-          child: Column(
+          child: Row(
             children: [
-              MonoText(
-                _generatedPassword,
-                textAlign: TextAlign.center,
-                style: textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1,
-                  height: 1.4,
+              Expanded(
+                child: Text(
+                  _generatedPassword,
+                  style: TextStyle(
+                    fontFamily: AppTokens.monoFamily,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                    letterSpacing: 0.6,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const SizedBox(height: AppTokens.spaceL),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(AppTokens.radiusS),
-                      child: LinearProgressIndicator(
-                        value: strength / 100,
-                        minHeight: 5,
-                        backgroundColor: colorScheme.surfaceContainerHighest,
-                        valueColor: AlwaysStoppedAnimation(strengthColor),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppTokens.spaceM),
-                  Text(
-                    strengthLabel,
-                    style: textTheme.labelMedium
-                        ?.copyWith(color: strengthColor),
-                  ),
-                ],
+              _GenIconButton(
+                icon: Icons.refresh_rounded,
+                tooltip: '重新生成',
+                onTap: _generate,
+              ),
+              _GenIconButton(
+                icon: Icons.content_copy_rounded,
+                tooltip: '复制密码',
+                onTap: _copy,
               ),
             ],
           ),
         ),
-        const SizedBox(height: AppTokens.spaceM),
+        const SizedBox(height: AppTokens.spaceS),
 
-        // 复制 / 重新生成
+        // 强度条
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _generate,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('重新生成'),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: (strength / 100).clamp(0.0, 1.0),
+                  minHeight: 4,
+                  backgroundColor: colorScheme.surfaceTrack,
+                  color: _strengthColor(strength, colorScheme),
+                ),
               ),
             ),
-            const SizedBox(width: AppTokens.spaceM),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                onPressed: _copy,
-                icon: const Icon(Icons.copy_rounded, size: 18),
-                label: const Text('复制密码'),
+            const SizedBox(width: 10),
+            Text(
+              PasswordPolicy.getStrengthLabel(strength),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: _strengthColor(strength, colorScheme),
               ),
             ),
           ],
         ),
-        const SizedBox(height: AppTokens.spaceXL),
+        const SizedBox(height: AppTokens.spaceL),
 
-        // 参数区
-        _buildSectionLabel('长度 · $_length'),
-        Slider(
-          value: _length.toDouble(),
-          min: 8,
-          max: 32,
-          divisions: 24,
-          label: _length.toString(),
-          onChanged: (value) {
-            setState(() => _length = value.round());
+        // 长度
+        Row(
+          children: [
+            Text(
+              '长度',
+              style: TextStyle(fontSize: 14, color: colorScheme.textMuted),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Slider(
+                value: _length.toDouble(),
+                min: 8,
+                max: 64,
+                divisions: 56,
+                label: _length.toString(),
+                onChanged: (value) {
+                  setState(() => _length = value.round());
+                  _generate();
+                },
+              ),
+            ),
+            const SizedBox(width: 14),
+            SizedBox(
+              width: 36,
+              child: Text(
+                '$_length',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontFamily: AppTokens.monoFamily,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppTokens.spaceS),
+
+        // 字符组成
+        _ToggleRow(
+          title: '大写字母 (A–Z)',
+          value: _includeUppercase,
+          onChanged: (v) {
+            if (!v && !_canToggleAfter('upper')) return;
+            setState(() => _includeUppercase = v);
             _generate();
           },
         ),
-        const SizedBox(height: AppTokens.spaceM),
-
-        _buildSectionLabel('字符组成'),
-        if (_readable)
-          Padding(
-            padding: const EdgeInsets.only(top: AppTokens.spaceS),
-            child: Text(
-              '易读模式已排除容易混淆的字符',
-              style: textTheme.bodySmall
-                  ?.copyWith(color: colorScheme.onSurfaceVariant),
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(top: AppTokens.spaceS),
-            child: Wrap(
-              spacing: AppTokens.spaceS,
-              runSpacing: AppTokens.spaceS,
-              children: [
-                _buildCharChip('大写 A-Z', _includeUppercase, (v) {
-                  if (!v && !_canToggleAfter('upper')) return;
-                  setState(() => _includeUppercase = v);
-                  _generate();
-                }),
-                _buildCharChip('小写 a-z', _includeLowercase, (v) {
-                  if (!v && !_canToggleAfter('lower')) return;
-                  setState(() => _includeLowercase = v);
-                  _generate();
-                }),
-                _buildCharChip('数字 0-9', _includeNumbers, (v) {
-                  if (!v && !_canToggleAfter('number')) return;
-                  setState(() => _includeNumbers = v);
-                  _generate();
-                }),
-                _buildCharChip('符号 !@#', _includeSymbols, (v) {
-                  if (!v && !_canToggleAfter('symbol')) return;
-                  setState(() => _includeSymbols = v);
-                  _generate();
-                }),
-              ],
-            ),
-          ),
-        const SizedBox(height: AppTokens.spaceM),
-
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('易读模式'),
-          subtitle: const Text('排除容易混淆的字符（0/O、1/l/I）'),
+        _ToggleRow(
+          title: '小写字母 (a–z)',
+          value: _includeLowercase,
+          onChanged: (v) {
+            if (!v && !_canToggleAfter('lower')) return;
+            setState(() => _includeLowercase = v);
+            _generate();
+          },
+        ),
+        _ToggleRow(
+          title: '数字 (0–9)',
+          value: _includeNumbers,
+          onChanged: (v) {
+            if (!v && !_canToggleAfter('number')) return;
+            setState(() => _includeNumbers = v);
+            _generate();
+          },
+        ),
+        _ToggleRow(
+          title: '符号 (!@#…)',
+          value: _includeSymbols,
+          onChanged: (v) {
+            if (!v && !_canToggleAfter('symbol')) return;
+            setState(() => _includeSymbols = v);
+            _generate();
+          },
+        ),
+        _ToggleRow(
+          title: '易读模式',
+          subtitle: '排除 0/O、1/l 等易混淆字符',
           value: _readable,
-          onChanged: (value) {
-            setState(() => _readable = value);
+          onChanged: (v) {
+            setState(() => _readable = v);
             _generate();
           },
         ),
@@ -243,52 +240,95 @@ class _PasswordGeneratorPanelState extends State<PasswordGeneratorPanel> {
     return upper || lower || number || symbol;
   }
 
-  Widget _buildSectionLabel(String text) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Text(
-      text,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-    );
+  Color _strengthColor(int strength, ColorScheme colorScheme) {
+    if (strength < 40) return colorScheme.error;
+    if (strength < 70) {
+      return colorScheme.isDark
+          ? AppTokens.warningDark
+          : AppTokens.warningLight;
+    }
+    return colorScheme.accent;
   }
+}
 
-  Widget _buildCharChip(String label, bool selected, ValueChanged<bool> onSelected) {
+/// 生成器小图标按钮（36x36）
+class _GenIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _GenIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return FilterChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: onSelected,
-      selectedColor: colorScheme.primaryContainer,
-      checkmarkColor: colorScheme.primary,
-      labelStyle: TextStyle(
-        fontSize: 13,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-        color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(icon, size: 19, color: colorScheme.onSurface),
+        ),
       ),
     );
   }
+}
 
-  (Color, String) _strengthVisual(int strength, ColorScheme colorScheme) {
-    final isDark = colorScheme.brightness == Brightness.dark;
-    if (strength < 40) {
-      return (colorScheme.error, '弱');
-    }
-    if (strength < 70) {
-      return (
-        isDark ? const Color(0xFFFDBA74) : const Color(0xFFEA580C),
-        '一般'
-      );
-    }
-    if (strength < 90) {
-      return (
-        isDark ? const Color(0xFFFCD34D) : const Color(0xFFB45309),
-        '强'
-      );
-    }
-    return (
-      isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
-      '非常强'
+/// 开关行（原型 `.gen-row`，行间 1px 分隔）
+class _ToggleRow extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ToggleRow({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 50),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colorScheme.hairline)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: textTheme.bodyMedium),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Switch(value: value, onChanged: onChanged),
+        ],
+      ),
     );
   }
 }

@@ -4,9 +4,10 @@ import 'entry_type_helper.dart';
 import '../../../../ui/theme/tokens.dart';
 import '../../../../ui/theme/vaultly_colors.dart';
 
-/// 条目类型选择器（可视化横排）
+/// 条目类型选择器（原型 `.type-grid`）
 ///
-/// 选中态：类型色描边 + tint 底；去阴影。
+/// 四列网格：40 徽章（圆角 12）+ 12/500 文字。
+/// 选中态：primary-soft 底、主色 45% 描边、徽章与文字转主色。
 class EntryTypePicker extends StatelessWidget {
   final EntryType value;
   final ValueChanged<EntryType> onChanged;
@@ -27,66 +28,100 @@ class EntryTypePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 8.0;
+        const columns = 4;
+        final cellWidth =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
 
-    return Row(
-      children: _types.map((type) {
-        final selected = type == value;
-        final typeColor = colorScheme.entryType(type);
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceXS),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppTokens.radiusM),
-              onTap: () => onChanged(type),
-              child: AnimatedContainer(
-                duration: AppTokens.animFast,
-                curve: AppTokens.easeStandard,
-                padding: const EdgeInsets.symmetric(vertical: AppTokens.spaceM),
-                decoration: BoxDecoration(
-                  color: selected ? typeColor.withAlpha(26) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                  border: Border.all(
-                    color: selected
-                        ? typeColor.withAlpha(120)
-                        : colorScheme.outlineVariant.withAlpha(76),
-                    width: selected ? 1.5 : 1,
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedScale(
-                      scale: selected ? 1.15 : 1.0,
-                      duration: AppTokens.animFast,
-                      child: Icon(
-                        EntryTypeHelper.getIcon(type),
-                        size: 22,
-                        color: selected
-                            ? typeColor
-                            : colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: AppTokens.spaceXS),
-                    Text(
-                      EntryTypeHelper.getName(type),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.labelSmall?.copyWith(
-                        color: selected
-                            ? typeColor
-                            : colorScheme.onSurfaceVariant,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      ),
-                    ),
-                  ],
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final type in _types)
+              SizedBox(
+                width: cellWidth,
+                child: _TypeCell(
+                  type: type,
+                  selected: type == value,
+                  onTap: () => onChanged(type),
                 ),
               ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TypeCell extends StatelessWidget {
+  final EntryType type;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TypeCell({
+    required this.type,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final typeColor = colorScheme.entryType(type);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTokens.radiusM),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: AppTokens.animFast,
+          curve: AppTokens.easeStandard,
+          padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+          decoration: BoxDecoration(
+            color: selected ? colorScheme.primarySoft : colorScheme.surfaceCard,
+            borderRadius: BorderRadius.circular(AppTokens.radiusM),
+            border: Border.all(
+              color: selected
+                  ? colorScheme.primary.withAlpha(115)
+                  : colorScheme.hairline,
             ),
           ),
-        );
-      }).toList(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? colorScheme.primary.withAlpha(51)
+                      : typeColor.withAlpha(38),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusM - 2),
+                ),
+                child: Icon(
+                  EntryTypeHelper.getIcon(type),
+                  size: 20,
+                  color: selected ? colorScheme.primary : typeColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                EntryTypeHelper.getName(type),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: selected ? colorScheme.primary : colorScheme.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

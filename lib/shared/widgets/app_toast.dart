@@ -1,9 +1,12 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import '../../ui/theme/tokens.dart';
+import '../../ui/theme/vaultly_colors.dart';
 
-/// 轻量成功反馈
+/// 轻量成功反馈（原型 `.toast`）
 ///
-/// 取代复制类操作的 SnackBar：底部浮动、图标+文字、1.6s 自动消失、
+/// 底部胶囊、玻璃模糊底 + 强描边、accent 勾选图标，1.6s 自动消失，
 /// 不抢占焦点、不打断输入。错误/异步任务结果仍走 SnackBar。
 class AppToast {
   AppToast._();
@@ -20,7 +23,7 @@ class AppToast {
     _current = OverlayEntry(
       builder: (context) => _ToastWidget(
         message: message,
-        icon: icon ?? Icons.check_circle_rounded,
+        icon: icon ?? Icons.check_rounded,
         onDismissed: () => dismiss(),
       ),
     );
@@ -67,45 +70,52 @@ class _ToastWidgetState extends State<_ToastWidget> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 96),
-          child: AnimatedOpacity(
-            opacity: _visible ? 1 : 0,
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: 118 + bottomInset),
+        child: AnimatedOpacity(
+          opacity: _visible ? 1 : 0,
+          duration: AppTokens.animFast,
+          curve: AppTokens.easeStandard,
+          child: AnimatedSlide(
+            offset: _visible ? Offset.zero : const Offset(0, 0.3),
             duration: AppTokens.animFast,
             curve: AppTokens.easeStandard,
-            child: AnimatedSlide(
-              offset: _visible ? Offset.zero : const Offset(0, 0.3),
-              duration: AppTokens.animFast,
-              curve: AppTokens.easeStandard,
-              child: Material(
-                color: Colors.transparent,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppTokens.radiusStadium),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppTokens.spaceL,
-                    vertical: AppTokens.spaceM,
+                    horizontal: 18,
+                    vertical: 11,
                   ),
                   decoration: BoxDecoration(
-                    color: colorScheme.inverseSurface,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusStadium),
-                    boxShadow: AppTokens.cardShadow(Colors.black, opacity: 0.2),
+                    color: colorScheme.toastSurface.withAlpha(245),
+                    borderRadius: BorderRadius.circular(
+                      AppTokens.radiusStadium,
+                    ),
+                    border: Border.all(color: colorScheme.hairlineStrong),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(widget.icon,
-                          size: 18, color: colorScheme.onInverseSurface),
+                      Icon(widget.icon, size: 16, color: colorScheme.accent),
                       const SizedBox(width: AppTokens.spaceS),
-                      Text(
-                        widget.message,
-                        style: TextStyle(
-                          color: colorScheme.onInverseSurface,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 260),
+                        child: Text(
+                          widget.message,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],

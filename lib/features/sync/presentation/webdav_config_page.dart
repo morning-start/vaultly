@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/sync_models.dart';
 import 'sync_providers.dart';
-import '../../../../shared/widgets/secure_text_field.dart';
 import '../../../../shared/widgets/confirm_dialog.dart';
+import '../../../../shared/widgets/secure_text_field.dart';
+import '../../../../ui/theme/tokens.dart';
+import '../../../../ui/theme/vaultly_colors.dart';
 
+/// WebDAV 连接配置页
+///
+/// 只负责服务器连接信息（地址 / 账号 / 应用密码）与连接测试。
+/// 加密、压缩、合并或覆盖等运行期选项在每次上传/下载时单独选择，
+/// 不再固化在配置里。
 class WebDAVConfigPage extends ConsumerStatefulWidget {
   const WebDAVConfigPage({super.key});
 
@@ -19,9 +26,6 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  bool _enableEncryption = true;
-  bool _enableCompression = true;
-  SyncMode _syncMode = SyncMode.manual;
 
   @override
   void initState() {
@@ -40,15 +44,19 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
         _urlController.text = config.serverUrl;
         _usernameController.text = config.username;
         _passwordController.text = config.password ?? '';
-        _enableEncryption = config.enableEncryption;
-        _enableCompression = config.enableCompression;
-        _syncMode = config.syncMode;
       });
     }
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  SyncConfig _buildConfig() {
+    return SyncConfig(
+      id: 'webdav_default',
+      serverUrl: _urlController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text,
+    );
   }
 
   Future<void> _saveConfig() async {
@@ -56,105 +64,73 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
 
     setState(() => _isLoading = true);
 
-    final config = SyncConfig(
-      id: 'webdav_default',
-      serverUrl: _urlController.text.trim(),
-      username: _usernameController.text.trim(),
-      password: _passwordController.text,
-      enableEncryption: _enableEncryption,
-      enableCompression: _enableCompression,
-      syncMode: _syncMode,
-    );
-
     final webDAVService = ref.read(webDAVServiceProvider);
-
+    final config = _buildConfig();
     final result = await webDAVService.testConnection(config);
 
     if (!mounted) return;
 
     if (!result.success) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('连接失败: ${result.errorMessage ?? "请检查配置信息"}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _toast('连接失败：${result.errorMessage ?? '请检查配置信息'}');
       return;
     }
 
     await webDAVService.saveConfig(config);
-
     if (!mounted) return;
 
     await ref.read(webDAVConfigProvider.notifier).refresh();
-
     if (!mounted) return;
 
     setState(() => _isLoading = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('配置已保存')),
-    );
-  }
-
-  Future<void> _clearConfig() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => ConfirmDialog(
-        title: '确认清除',
-        content: '确定要清除 WebDAV 配置吗？',
-        confirmLabel: '清除',
-        isDangerous: true,
-      ),
-    );
-
-    if (confirmed == true) {
-      final webDAVService = ref.read(webDAVServiceProvider);
-      await webDAVService.clearConfig();
-
-      if (mounted) {
-        await ref.read(webDAVConfigProvider.notifier).refresh();
-
-        if (!mounted) return;
-
-        setState(() {
-          _urlController.clear();
-          _usernameController.clear();
-          _passwordController.clear();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('配置已清除')),
-        );
-      }
-    }
+    _toast('连接已保存');
   }
 
   Future<void> _testConnection() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
-    final config = SyncConfig(
-      id: 'webdav_default',
-      serverUrl: _urlController.text.trim(),
-      username: _usernameController.text.trim(),
-      password: _passwordController.text,
-    );
-
-    final webDAVService = ref.read(webDAVServiceProvider);
-    final result = await webDAVService.testConnection(config);
+    final result = await ref
+        .read(webDAVServiceProvider)
+        .testConnection(_buildConfig());
 
     if (!mounted) return;
-
     setState(() => _isLoading = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.success ? '连接成功' : '连接失败: ${result.errorMessage ?? ""}'),
-        backgroundColor: result.success ? Colors.green : Colors.red,
+    _toast(result.success ? '连接成功' : '连接失败：${result.errorMessage ?? '未知错误'}');
+  }
+
+  Future<void> _clearConfig() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => ConfirmDialog(
+        title: '清除连接配置',
+        content: '清除后需要重新填写服务器信息，云端已有的备份不会被删除。',
+        confirmLabel: '清除',
+        isDangerous: true,
       ),
     );
+    if (confirmed != true || !mounted) return;
+
+    await ref.read(webDAVServiceProvider).clearConfig();
+    if (!mounted) return;
+
+    await ref.read(webDAVConfigProvider.notifier).refresh();
+    if (!mounted) return;
+
+    setState(() {
+      _urlController.clear();
+      _usernameController.clear();
+      _passwordController.clear();
+    });
+    _toast('连接配置已清除');
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -168,273 +144,292 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
   @override
   Widget build(BuildContext context) {
     final configState = ref.watch(webDAVConfigProvider);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      backgroundColor: colorScheme.bg,
       appBar: AppBar(
-        title: const Text('WebDAV 同步'),
+        title: const Text('WebDAV 连接'),
         actions: [
           if (configState.isConfigured)
-            TextButton(
+            IconButton(
               onPressed: _clearConfig,
-              child: const Text('清除配置'),
+              icon: const Icon(Icons.link_off_rounded, size: 22),
+              tooltip: '清除连接',
             ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildStatusCard(configState.isConfigured),
-                    const SizedBox(height: 24),
-
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '服务器配置',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _urlController,
-                              decoration: const InputDecoration(
-                                labelText: '服务器地址 *',
-                                hintText: 'https://dav.example.com',
-                                prefixIcon: Icon(Icons.cloud),
-                              ),
-                              keyboardType: TextInputType.url,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return '请输入服务器地址';
-                                }
-                                if (!value.startsWith('http')) {
-                                  return '地址必须以 http:// 或 https:// 开头';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _usernameController,
-                              decoration: const InputDecoration(
-                                labelText: '用户名 *',
-                                prefixIcon: Icon(Icons.person),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return '请输入用户名';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            SecureTextField(
-                              controller: _passwordController,
-                              labelText: '密码 *',
-                              prefixIcon: Icons.lock,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return '请输入密码';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '同步设置',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 16),
-                            InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: '同步模式',
-                                prefixIcon: Icon(Icons.sync),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<SyncMode>(
-                                  value: _syncMode,
-                                  isExpanded: true,
-                                  items: const [
-                                    DropdownMenuItem(value: SyncMode.manual, child: Text('手动同步（上传备份）')),
-                                    DropdownMenuItem(value: SyncMode.uploadOnly, child: Text('仅上传（备份模式）')),
-                                    DropdownMenuItem(value: SyncMode.downloadOnly, child: Text('仅下载（恢复模式）')),
-                                    DropdownMenuItem(value: SyncMode.auto, child: Text('自动上传（暂不支持双向合并）')),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() => _syncMode = value);
-                                    }
-                                  },
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            SwitchListTile(
-                              title: const Text('启用端到端加密'),
-                              subtitle: const Text(
-                                '数据在传输前加密，服务器仅存储密文',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                              value: _enableEncryption,
-                              onChanged: (value) {
-                                setState(() => _enableEncryption = value);
-                              },
-                              secondary: Icon(
-                                _enableEncryption
-                                    ? Icons.lock
-                                    : Icons.lock_open,
-                                color: _enableEncryption
-                                    ? Colors.green
-                                    : Colors.orange,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SwitchListTile(
-                              title: const Text('启用 GZIP 压缩'),
-                              subtitle: const Text(
-                                '减少传输数据量，加快同步速度',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                              value: _enableCompression,
-                              onChanged: (value) {
-                                setState(() => _enableCompression = value);
-                              },
-                              secondary: const Icon(Icons.compress),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _testConnection,
-                            icon: const Icon(Icons.network_check),
-                            label: const Text('测试连接'),
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                children: [
+                  _buildStatusCard(configState.isConfigured, colorScheme),
+                  const _SectionLabel('服务器'),
+                  _buildConnectionCard(colorScheme),
+                  const _SectionLabel('运行期选项'),
+                  _buildRuntimeNoteCard(colorScheme),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _testConnection,
+                          icon: const Icon(
+                            Icons.network_check_rounded,
+                            size: 18,
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _saveConfig,
-                            icon: const Icon(Icons.save),
-                            label: const Text('保存配置'),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    Card(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '使用说明',
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _enableEncryption
-                                  ? '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
-                                    '2. 数据将以加密形式存储在服务器上（推荐）\n'
-                                    '3. 加密使用 AES-256-GCM，密钥由主密码派生'
-                                  : '1. 支持坚果云、Nextcloud、OwnCloud 等 WebDAV 服务\n'
-                                    '2. ⚠️ 数据将以明文形式存储在服务器上（不推荐）\n'
-                                    '3. 建议仅在可信的私有服务器上关闭加密',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
+                          label: const Text('测试连接'),
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton.icon(
+                          onPressed: _saveConfig,
+                          icon: const Icon(Icons.check_rounded, size: 18),
+                          label: const Text('保存连接'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '备份固定保存在 /vaultly/ 目录下，\n服务器上只保存你每次选择的格式。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.8,
+                      color: colorScheme.textMuted,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
     );
   }
 
-  Widget _buildStatusCard(bool isConfigured) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isConfigured
-                    ? Colors.green.withAlpha(26)
-                    : Colors.orange.withAlpha(26),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isConfigured ? Icons.cloud_done : Icons.cloud_off,
-                color: isConfigured ? Colors.green : Colors.orange,
-                size: 28,
-              ),
+  Widget _buildStatusCard(bool isConfigured, ColorScheme colorScheme) {
+    final color = isConfigured ? colorScheme.accent : colorScheme.textMuted;
+
+    return Container(
+      padding: const EdgeInsets.all(AppTokens.spaceL),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTokens.radiusL),
+        border: Border.all(color: colorScheme.hairline),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isConfigured ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+            size: 22,
+            color: color,
+          ),
+          const SizedBox(width: AppTokens.spaceM),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isConfigured ? '连接已保存' : '尚未连接',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isConfigured ? '可以前往同步页上传或恢复备份' : '填写服务器信息并保存后即可同步',
+                  style: TextStyle(fontSize: 12, color: colorScheme.textMuted),
+                ),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isConfigured ? '已配置' : '未配置',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isConfigured
-                        ? 'WebDAV 同步已启用'
-                        : '请配置 WebDAV 服务器信息',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
+          ),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionCard(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.all(AppTokens.spaceL),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTokens.radiusL),
+        border: Border.all(color: colorScheme.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FieldLabel('服务器地址'),
+          TextFormField(
+            controller: _urlController,
+            decoration: const InputDecoration(
+              hintText: 'https://dav.example.com',
+              prefixIcon: Icon(Icons.cloud_outlined, size: 20),
             ),
-          ],
+            keyboardType: TextInputType.url,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return '请输入服务器地址';
+              }
+              final uri = Uri.tryParse(value.trim());
+              if (uri == null ||
+                  !(uri.scheme == 'http' || uri.scheme == 'https')) {
+                return '地址必须以 http:// 或 https:// 开头';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 6),
+          _FieldLabel('用户名'),
+          TextFormField(
+            controller: _usernameController,
+            decoration: const InputDecoration(
+              hintText: 'WebDAV 账号',
+              prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return '请输入用户名';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 6),
+          _FieldLabel('应用密码'),
+          SecureTextField(
+            controller: _passwordController,
+            hintText: 'WebDAV 应用密码 / 授权码',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return '请输入应用密码';
+              }
+              return null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuntimeNoteCard(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.all(AppTokens.spaceL),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTokens.radiusL),
+        border: Border.all(color: colorScheme.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _noteRow(
+            colorScheme,
+            Icons.merge_rounded,
+            '处理模式',
+            '每次上传 / 恢复时可选择兼容（合并）或覆盖',
+          ),
+          const SizedBox(height: 12),
+          _noteRow(
+            colorScheme,
+            Icons.shield_outlined,
+            '传输加密',
+            '固定使用 AES-256-GCM 加密，服务器只保存密文',
+          ),
+          const SizedBox(height: 12),
+          _noteRow(
+            colorScheme,
+            Icons.compress_rounded,
+            '传输压缩',
+            '固定启用 GZIP 压缩，减小传输体积',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _noteRow(
+    ColorScheme colorScheme,
+    IconData icon,
+    String title,
+    String description,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: colorScheme.primary),
+        const SizedBox(width: AppTokens.spaceM),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: colorScheme.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+
+  const _SectionLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 10),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+          color: Theme.of(context).colorScheme.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  final String label;
+
+  const _FieldLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Theme.of(context).colorScheme.textMuted,
         ),
       ),
     );

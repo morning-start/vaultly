@@ -2,18 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../features/tools/clipboard_service.dart';
 import '../../ui/theme/tokens.dart';
+import '../../ui/theme/vaultly_colors.dart';
 import 'app_toast.dart';
 import 'mono_text.dart';
 
-/// 详情页字段行
+/// 详情页字段行（原型 `.field-card .row`）
 ///
-/// `标签 + 值（敏感值遮罩）+ 眼睛切换 + 复制按钮`，
-/// 点按整行复制主字段并给予 ✓ 反馈 + 触觉反馈。
-/// 密码/卡号/CVV/证件号等机密值使用等宽字体。
+/// 行式布局：标签 12 muted + 值 16/500（敏感值遮罩、等宽渲染）+ 尾部操作
+/// （眼睛 / 自定义 / 复制）。行高不小于 60，背景与分隔线由外层分组卡片负责。
 class FieldRow extends StatefulWidget {
   final String label;
   final String value;
-  final IconData icon;
 
   /// 是否敏感（默认遮罩 + 眼睛切换 + 复制后自动清除剪贴板）
   final bool isSensitive;
@@ -30,16 +29,23 @@ class FieldRow extends StatefulWidget {
   /// 点按行为：null = 复制值
   final VoidCallback? onTap;
 
+  /// 值下方的附加内容（如密码强度条）
+  final Widget? footer;
+
+  /// 是否显示复制按钮
+  final bool copyable;
+
   const FieldRow({
     super.key,
     required this.label,
     required this.value,
-    required this.icon,
     this.isSensitive = false,
     this.mono = false,
     this.copyLabel,
     this.trailing,
     this.onTap,
+    this.footer,
+    this.copyable = true,
   });
 
   @override
@@ -72,98 +78,117 @@ class _FieldRowState extends State<FieldRow> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    final valueText = _showValue
-        ? widget.value
-        : '••••••••';
+    final valueText = _showValue ? widget.value : '••••••••••••';
+    final valueStyle = textTheme.bodyLarge?.copyWith(
+      fontWeight: FontWeight.w500,
+      letterSpacing: _showValue ? 0 : 1.5,
+    );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withAlpha(76),
-        ),
-      ),
-      child: InkWell(
-        onTap: widget.onTap ?? _copy,
-        borderRadius: BorderRadius.circular(AppTokens.radiusL),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTokens.spaceL,
-            vertical: AppTokens.spaceM,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.icon,
-                  size: 20, color: colorScheme.onSurfaceVariant),
-              const SizedBox(width: AppTokens.spaceM),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.label,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+    return InkWell(
+      onTap: widget.onTap ?? (widget.copyable ? _copy : null),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 60),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.label,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.textMuted,
                     ),
-                    const SizedBox(height: 2),
-                    if (widget.mono || widget.isSensitive)
-                      MonoText(
-                        valueText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: _showValue ? 0.5 : 2,
-                        ),
-                      )
-                    else
-                      Text(
-                        valueText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (widget.isSensitive)
-                IconButton(
-                  icon: Icon(
-                    _obscured
-                        ? Icons.visibility_rounded
-                        : Icons.visibility_off_rounded,
-                    size: 20,
                   ),
-                  onPressed: () => setState(() => _obscured = !_obscured),
-                  tooltip: _obscured ? '显示' : '隐藏',
-                ),
-              if (widget.trailing != null) widget.trailing!,
+                  const SizedBox(height: 2),
+                  if (widget.mono || widget.isSensitive)
+                    MonoText(
+                      valueText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: valueStyle,
+                    )
+                  else
+                    Text(
+                      valueText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: valueStyle,
+                    ),
+                  if (widget.footer != null) ...[
+                    const SizedBox(height: 6),
+                    widget.footer!,
+                  ],
+                ],
+              ),
+            ),
+            if (widget.isSensitive)
+              _TrailingButton(
+                icon: _obscured
+                    ? Icons.visibility_rounded
+                    : Icons.visibility_off_rounded,
+                tooltip: _obscured ? '显示' : '隐藏',
+                onTap: () => setState(() => _obscured = !_obscured),
+              ),
+            if (widget.trailing != null) widget.trailing!,
+            if (widget.copyable)
               AnimatedSwitcher(
                 duration: AppTokens.animFast,
-                transitionBuilder: (child, animation) => ScaleTransition(
-                  scale: animation,
-                  child: child,
-                ),
+                transitionBuilder: (child, animation) =>
+                    ScaleTransition(scale: animation, child: child),
                 child: _copied
-                    ? const Icon(
-                        Icons.check_circle_rounded,
+                    ? const _TrailingButton(
                         key: ValueKey('copied'),
-                        size: 20,
+                        icon: Icons.check_circle_rounded,
+                        tooltip: '已复制',
                         color: Color(0xFF059669),
                       )
-                    : IconButton(
+                    : _TrailingButton(
                         key: const ValueKey('copy'),
-                        icon: const Icon(Icons.copy_rounded, size: 20),
-                        onPressed: _copy,
+                        icon: Icons.copy_rounded,
                         tooltip: '复制',
+                        onTap: _copy,
                       ),
               ),
-            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 字段行尾部的小图标按钮（36x36，与行高对齐）
+class _TrailingButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final Color? color;
+
+  const _TrailingButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(
+            icon,
+            size: 20,
+            color: color ?? Theme.of(context).colorScheme.textMuted,
           ),
         ),
       ),

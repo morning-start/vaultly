@@ -1,0 +1,70 @@
+/* Vaultly 深色保险库 · 设计变量
+   性格：专业、冷静、可靠 —— 像一台精密的保险库设备。
+   主色：靛蓝（延续 Flutter 端 Indigo 400 #818CF8），深靛黑底。 */
+:root {
+  /* ---- 颜色：按角色 ---- */
+  --color-bg: oklch(16.5% 0.018 275);          /* 页面底：深靛黑 */
+  --color-bg-deep: oklch(13% 0.016 275);       /* 更深一层：解锁页 */
+  --color-surface: oklch(20.5% 0.02 275);      /* 卡片 */
+  --color-surface-2: oklch(25% 0.022 275);     /* 输入框、次级表面 */
+  --color-surface-3: oklch(29.5% 0.024 275);   /* 按压态、滑轨 */
+  --color-text: oklch(94% 0.008 275);          /* 正文 */
+  --color-muted: oklch(66% 0.018 275);         /* 次要文字（≥4.5:1） */
+  --color-faint: oklch(50% 0.016 275);         /* 极弱说明（仅限 ≥14px 辅助行） */
+  --color-line: oklch(28% 0.02 275);           /* 边框 */
+  --color-line-strong: oklch(34% 0.022 275);   /* 强边框 / 描边按钮 */
+
+  --color-primary: oklch(71% 0.125 277);       /* 靛蓝 400 ≈ #818CF8 */
+  --color-primary-ink: oklch(17% 0.03 277);    /* 主色按钮上的深字 */
+  --color-primary-soft: oklch(71% 0.125 277 / 0.14);  /* 主色浅底 */
+  --color-accent: oklch(80% 0.13 168);         /* 薄荷：已同步 / 成功 */
+  --color-danger: oklch(68% 0.19 25);
+  --color-danger-soft: oklch(68% 0.19 25 / 0.14);
+  --color-warning: oklch(82% 0.14 85);
+
+  /* ---- 条目类型色（与 Flutter 端 VaultlyColors 暗色档一致） ---- */
+  --type-login: oklch(77% 0.115 235);          /* 登录凭证 Sky 400 */
+  --type-card: oklch(79% 0.145 165);           /* 银行卡 Emerald 400 */
+  --type-note: oklch(82% 0.135 85);            /* 安全笔记 Amber 400 */
+  --type-identity: oklch(75% 0.11 300);        /* 身份信息 Violet 400 */
+
+  /* ---- 字体 ---- */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* ---- 字号（≤1.25 阶梯） ---- */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-display: 34px;
+
+  /* ---- 间距（4 / 8 倍数） ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* ---- 圆角 ---- */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  /* ---- 阴影（深色下克制，主要靠提亮表面分层） ---- */
+  --shadow-fab: 0 8px 24px oklch(0% 0 0 / 0.45), 0 2px 6px oklch(0% 0 0 / 0.35);
+  --shadow-sheet: 0 -12px 48px oklch(0% 0 0 / 0.55);
+
+  /* ---- 动效 ---- */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur: 0ms; }
+}

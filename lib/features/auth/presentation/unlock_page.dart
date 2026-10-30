@@ -5,8 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'auth_providers.dart';
 import '../../../shared/widgets/secure_text_field.dart';
+import '../../../shared/widgets/vault_dial.dart';
 import '../../../ui/theme/tokens.dart';
+import '../../../ui/theme/vaultly_colors.dart';
 
+/// 解锁页（原型 unlock.html）
+///
+/// 结构：保险库表盘徽记 → 欢迎标题与引导语 → 主密码输入（抖动反馈）
+/// → 解锁按钮 → 「或者」分隔 → 生物识别圆形入口。
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
 
@@ -60,8 +66,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
     if (!_formKey.currentState!.validate()) return;
 
     final password = _passwordController.text;
-    final success =
-        await ref.read(authNotifierProvider.notifier).unlock(password);
+    final success = await ref
+        .read(authNotifierProvider.notifier)
+        .unlock(password);
 
     if (!mounted) return;
 
@@ -69,15 +76,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
       context.go('/vault');
     } else {
       _shakeController.forward(from: 0);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('密码错误，请重试'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTokens.radiusM),
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('密码错误，请重试')));
       _passwordController.clear();
     }
   }
@@ -87,8 +88,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
 
     if (authState.isAuthenticatingWithBiometric) return;
 
-    final success =
-        await ref.read(authNotifierProvider.notifier).unlockWithBiometric();
+    final success = await ref
+        .read(authNotifierProvider.notifier)
+        .unlockWithBiometric();
 
     if (!mounted) return;
 
@@ -101,255 +103,231 @@ class _UnlockPageState extends ConsumerState<UnlockPage>
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final biometricAvailable = authState.biometricAvailable;
     final isAuthenticating = authState.isAuthenticatingWithBiometric;
     final biometricTypeName = authState.biometricTypeName ?? '生物识别';
     final biometricIcon = authState.biometricIcon ?? Icons.fingerprint;
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colorScheme.primary.withAlpha(30),
-              colorScheme.surface,
-              colorScheme.surface,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppTokens.spaceXL),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: AppTokens.spaceXXL),
-
-                    // Logo
-                    Center(
-                      child: AnimatedSwitcher(
-                        duration: AppTokens.animNormal,
-                        child: isAuthenticating
-                            ? Container(
-                                key: const ValueKey('authenticating'),
-                                width: 88,
-                                height: 88,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: colorScheme.primaryContainer,
-                                  border: Border.all(
-                                    color: colorScheme.primary.withAlpha(60),
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Icon(
-                                  biometricIcon,
-                                  size: 40,
-                                  color: colorScheme.primary,
-                                ),
-                              )
-                            : Container(
-                                key: const ValueKey('logo'),
-                                width: 88,
-                                height: 88,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: colorScheme.surface,
-                                  boxShadow: AppTokens.cardShadow(
-                                    colorScheme.primary,
-                                    opacity: 0.1,
-                                  ),
-                                  border: Border.all(
-                                    color: colorScheme.primary.withAlpha(25),
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(AppTokens.spaceL),
-                                  child: Image.asset('assets/logo.png'),
-                                ),
-                              ),
-                      ),
-                    ),
-
-                    const SizedBox(height: AppTokens.spaceXL),
-
-                    // 标题
-                    Text(
-                      '欢迎回来',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.8,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: AppTokens.spaceS),
-
-                    Text(
-                      isAuthenticating
-                          ? '正在验证$biometricTypeName...'
-                          : '请输入主密码来解锁您的保险库',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: AppTokens.spaceXXL),
-
-                    // 密码输入框（带抖动动画）
-                    AnimatedBuilder(
-                      animation: _shakeController,
-                      builder: (context, child) => Transform.translate(
-                        offset: Offset(_shakeOffset, 0),
-                        child: child,
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(AppTokens.radiusL),
-                          boxShadow: isAuthenticating
-                              ? null
-                              : AppTokens.cardShadow(
-                                  colorScheme.outline,
-                                  opacity: 0.05,
-                                ),
-                        ),
-                        child: SecureTextField(
-                          controller: _passwordController,
-                          labelText: '主密码',
-                          hintText: '请输入主密码',
-                          prefixIcon: Icons.lock_outline_rounded,
-                          autofocus: !isAuthenticating,
-                          enabled: !isAuthenticating,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return '请输入密码';
-                            }
-                            return null;
-                          },
-                          onSubmitted: (_) => _unlock(),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: AppTokens.spaceL),
-
-                    // 错误提示
-                    if (authState.error != null && !isAuthenticating)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: AppTokens.spaceM),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.error_outline_rounded,
-                              color: colorScheme.error,
-                              size: 20,
-                            ),
-                            const SizedBox(width: AppTokens.spaceS),
-                            Expanded(
-                              child: Text(
-                                authState.error!,
-                                style: TextStyle(color: colorScheme.errorContainer),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // 解锁按钮
-                    FilledButton(
-                      onPressed: (authState.isLoading || isAuthenticating)
-                          ? null
-                          : _unlock,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppTokens.spaceM,
-                        ),
-                      ),
-                      child: authState.isLoading || isAuthenticating
-                          ? SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            )
-                          : const Text(
-                              '解锁',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                    ),
-
-                    // 生物识别
-                    if (biometricAvailable) ...[
-                      const SizedBox(height: AppTokens.spaceXL),
-                      if (isAuthenticating)
-                        Center(
-                          child: Column(
-                            children: [
-                              const SizedBox(height: AppTokens.spaceS),
-                              Text(
-                                '正在验证$biometricTypeName...',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: colorScheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Center(
-                          child: Column(
-                            children: [
-                              const Divider(),
-                              const SizedBox(height: AppTokens.spaceL),
-                              InkWell(
-                                onTap: _biometricUnlock,
-                                customBorder: const CircleBorder(),
-                                child: Container(
-                                  padding: const EdgeInsets.all(AppTokens.spaceL),
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Color(0xFF4F46E5),
-                                  ),
-                                  child: Icon(
-                                    biometricIcon,
-                                    size: 36,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: AppTokens.spaceS),
-                              Text(
-                                '使用$biometricTypeName 解锁',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+      backgroundColor: colorScheme.bgDeep,
+      body: Stack(
+        children: [
+          // 主色径向光晕（原型 .dial-glow）
+          Positioned(
+            top: -160,
+            left: -100,
+            right: -100,
+            child: IgnorePointer(
+              child: Container(
+                height: 460,
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withAlpha(44),
+                      colorScheme.primary.withAlpha(0),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Center(child: VaultDial(size: 128)),
+                        const SizedBox(height: 28),
+                        Text(
+                          '欢迎回来',
+                          textAlign: TextAlign.center,
+                          style: textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isAuthenticating
+                              ? '正在验证$biometricTypeName…'
+                              : '输入主密码，打开你的保险库',
+                          textAlign: TextAlign.center,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        Text(
+                          '主密码',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                            color: colorScheme.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: AppTokens.spaceS),
+                        AnimatedBuilder(
+                          animation: _shakeController,
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(_shakeOffset, 0),
+                            child: child,
+                          ),
+                          child: SecureTextField(
+                            controller: _passwordController,
+                            hintText: '••••••••••••••',
+                            prefixIcon: Icons.lock_outline_rounded,
+                            autofocus: !isAuthenticating,
+                            enabled: !isAuthenticating,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return '请输入密码';
+                              }
+                              return null;
+                            },
+                            onSubmitted: (_) => _unlock(),
+                          ),
+                        ),
+                        if (authState.error != null && !isAuthenticating) ...[
+                          const SizedBox(height: AppTokens.spaceM),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline_rounded,
+                                color: colorScheme.error,
+                                size: 18,
+                              ),
+                              const SizedBox(width: AppTokens.spaceS),
+                              Expanded(
+                                child: Text(
+                                  authState.error!,
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.error,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: AppTokens.spaceM),
+                        FilledButton(
+                          onPressed: (authState.isLoading || isAuthenticating)
+                              ? null
+                              : _unlock,
+                          child: authState.isLoading || isAuthenticating
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.onPrimary,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('解锁保险库'),
+                                    SizedBox(width: AppTokens.spaceS),
+                                    Icon(Icons.arrow_forward_rounded, size: 18),
+                                  ],
+                                ),
+                        ),
+                        if (biometricAvailable) ...[
+                          const SizedBox(height: 24),
+                          _OrDivider(text: '或者', colorScheme: colorScheme),
+                          const SizedBox(height: 20),
+                          Center(
+                            child: Column(
+                              children: [
+                                Material(
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: isAuthenticating
+                                        ? null
+                                        : _biometricUnlock,
+                                    child: Container(
+                                      width: 64,
+                                      height: 64,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colorScheme.surfaceCard,
+                                        border: Border.all(
+                                          color: colorScheme.hairlineStrong,
+                                        ),
+                                      ),
+                                      child: isAuthenticating
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(18),
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Icon(
+                                              biometricIcon,
+                                              size: 30,
+                                              color: colorScheme.primary,
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  isAuthenticating
+                                      ? '正在验证$biometricTypeName…'
+                                      : '使用$biometricTypeName解锁',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+/// 「或者」分隔行
+class _OrDivider extends StatelessWidget {
+  final String text;
+  final ColorScheme colorScheme;
+
+  const _OrDivider({required this.text, required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: colorScheme.hairline)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 12, color: colorScheme.textMuted),
+          ),
+        ),
+        Expanded(child: Divider(color: colorScheme.hairline)),
+      ],
+    );
+  }
+}

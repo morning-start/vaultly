@@ -19,8 +19,8 @@ class SyncOrchestrator {
   SyncOrchestrator({
     WebDAVClient? client,
     SyncConfigRepository? configRepository,
-  })  : _client = client ?? WebDAVClient(),
-        _configRepository = configRepository ?? SyncConfigRepository();
+  }) : _client = client ?? WebDAVClient(),
+       _configRepository = configRepository ?? SyncConfigRepository();
 
   /// 状态流
   Stream<SyncState> get syncStateStream => _syncStateController.stream;
@@ -98,13 +98,10 @@ class SyncOrchestrator {
   ///
   /// 流程：
   /// 1. 根据同步模式路由（当前全部为上传）
-  /// 2. 根据配置决定是否加密
-  /// 3. 根据配置决定是否压缩
+  /// 2. 传输固定启用 AES-256-GCM 加密与 GZIP 压缩
   Future<SyncResult> sync({
     required Map<String, dynamic> localVaultData,
     required Uint8List encryptionKey,
-    bool? enableEncryption,
-    bool? enableCompression,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -112,17 +109,15 @@ class SyncOrchestrator {
       return SyncResult.failure('同步未配置');
     }
 
-    // 使用配置中的设置，或传入的参数
-    final encrypt = enableEncryption ?? config.enableEncryption;
-    final compress = enableCompression ?? config.enableCompression;
-
     _client.initClient(config);
 
-    _updateState(SyncState(
-      status: SyncStatus.syncing,
-      message: '正在同步...',
-      startTime: DateTime.now(),
-    ));
+    _updateState(
+      SyncState(
+        status: SyncStatus.syncing,
+        message: '正在同步...',
+        startTime: DateTime.now(),
+      ),
+    );
 
     try {
       SyncResult result;
@@ -136,16 +131,12 @@ class SyncOrchestrator {
           result = await syncUpload(
             vaultData: localVaultData,
             encryptionKey: encryptionKey,
-            enableEncryption: encrypt,
-            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
         case SyncMode.downloadOnly:
           result = await syncDownload(
             encryptionKey: encryptionKey,
-            enableEncryption: encrypt,
-            enableCompression: compress,
             onProgress: onProgress,
           );
           break;
@@ -155,24 +146,28 @@ class SyncOrchestrator {
       await _saveSyncHistory(result);
 
       // 更新状态
-      _updateState(SyncState(
-        status: result.success ? SyncStatus.success : SyncStatus.failed,
-        message: result.success ? '同步成功' : result.errorMessage,
-        endTime: DateTime.now(),
-        added: result.added,
-        updated: result.updated,
-        deleted: result.deleted,
-        conflicts: result.conflicts,
-      ));
+      _updateState(
+        SyncState(
+          status: result.success ? SyncStatus.success : SyncStatus.failed,
+          message: result.success ? '同步成功' : result.errorMessage,
+          endTime: DateTime.now(),
+          added: result.added,
+          updated: result.updated,
+          deleted: result.deleted,
+          conflicts: result.conflicts,
+        ),
+      );
 
       return result;
     } catch (e) {
       final errorResult = SyncResult.failure('同步失败: $e');
-      _updateState(SyncState(
-        status: SyncStatus.failed,
-        message: '同步失败: $e',
-        endTime: DateTime.now(),
-      ));
+      _updateState(
+        SyncState(
+          status: SyncStatus.failed,
+          message: '同步失败: $e',
+          endTime: DateTime.now(),
+        ),
+      );
       return errorResult;
     }
   }
@@ -202,7 +197,10 @@ class SyncOrchestrator {
         return SyncResult.failure('上传失败');
       }
     } catch (e) {
-      return SyncResult.failure('上传失败: $e');
+      // WebDAVException 已带上下文，避免出现「上传失败: 上传失败: …」的重复前缀
+      return SyncResult.failure(
+        e is WebDAVException ? e.message : '上传失败: $e',
+      );
     }
   }
 
@@ -227,7 +225,10 @@ class SyncOrchestrator {
         return SyncResult.failure('下载失败：无数据');
       }
     } catch (e) {
-      return SyncResult.failure('下载失败: $e');
+      // WebDAVException 已带上下文，避免出现「下载失败: 下载失败: …」的重复前缀
+      return SyncResult.failure(
+        e is WebDAVException ? e.message : '下载失败: $e',
+      );
     }
   }
 
@@ -285,6 +286,14 @@ class SyncOrchestrator {
     await _configRepository.updateLastSyncTime(DateTime.now());
 
     return result;
+  }
+
+  /// 列出远程备份格式（加密 / 明文），供下载前选择
+  Future<RemoteBackupFormats> listRemoteBackups() async {
+    final config = await _configRepository.getConfig();
+    if (config == null) return const RemoteBackupFormats();
+    _client.initClient(config);
+    return _client.listRemoteBackups();
   }
 
   /// 获取同步历史

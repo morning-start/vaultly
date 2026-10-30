@@ -72,7 +72,6 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = colorScheme.brightness == Brightness.dark;
 
     return Center(
       child: Padding(
@@ -81,37 +80,36 @@ class EmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 图标容器（tint 圆底）
+            // 图标容器（主色浅底、圆角 24）
             Container(
               width: AppTokens.stateIconContainer,
               height: AppTokens.stateIconContainer,
               decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withAlpha(isDark ? 180 : 120),
-                shape: BoxShape.circle,
+                color: colorScheme.primary.withAlpha(36),
+                borderRadius: BorderRadius.circular(AppTokens.radiusXL),
               ),
               child: Icon(
                 icon,
-                size: AppTokens.stateIconSize,
+                size: AppTokens.stateIconSize - 8,
                 color: colorScheme.primary,
               ),
             ),
             const SizedBox(height: AppTokens.spaceXL),
             Text(
               title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    color: colorScheme.onSurface,
-                  ),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: colorScheme.onSurface,
+              ),
               textAlign: TextAlign.center,
             ),
             if (subtitle != null) ...[
               const SizedBox(height: AppTokens.spaceS),
               Text(
                 subtitle!,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],

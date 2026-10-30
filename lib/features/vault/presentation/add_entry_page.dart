@@ -6,29 +6,28 @@ import 'vault_providers.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/loading_button.dart';
 import '../../../features/tools/password_generator.dart';
-import 'widgets/entry_type_helper.dart';
 import 'widgets/type_picker.dart';
 import '../../../ui/theme/tokens.dart';
+import '../../../ui/theme/vaultly_colors.dart';
 import 'widgets/entry_forms/entry_form_controllers.dart';
 import 'widgets/entry_forms/login_form_section.dart';
 import 'widgets/entry_forms/bank_card_form_section.dart';
 import 'widgets/entry_forms/secure_note_form_section.dart';
 import 'widgets/entry_forms/identity_form_section.dart';
 
-/// 添加/编辑条目页（骨架）。
+/// 添加/编辑条目页（原型 add-entry.html）
 ///
-/// 页面只负责：类型选择、通用字段（标题/标签）、分区组装与保存流程；
+/// 页面负责：类型选择、通用字段（标题/标签）、分区组装与保存流程；
 /// 各条目类型的专属字段渲染在 widgets/entry_forms/ 下的对应分区组件中，
 /// 表单控制器统一由 [EntryFormControllers] 管理生命周期。
+///
+/// 结构：52 顶栏（取消 / 标题 / 保存）→ 四列类型网格 → 基本信息 / 整理 /
+/// 类型字段分区 → 底部固定保存按钮。
 class AddEntryPage extends ConsumerStatefulWidget {
   final String? entryId;
   final EntryType? initialEntryType;
 
-  const AddEntryPage({
-    super.key,
-    this.entryId,
-    this.initialEntryType,
-  });
+  const AddEntryPage({super.key, this.entryId, this.initialEntryType});
 
   @override
   ConsumerState<AddEntryPage> createState() => _AddEntryPageState();
@@ -105,8 +104,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
   void _updatePasswordStrength() {
     setState(() {
-      _passwordStrength =
-          PasswordGenerator.calculateStrength(_c.password.text);
+      _passwordStrength = PasswordGenerator.calculateStrength(_c.password.text);
     });
   }
 
@@ -143,8 +141,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           password: _c.password.text.isNotEmpty ? _c.password.text : null,
           url: _c.url.text.isNotEmpty ? _c.url.text : null,
           notes: _c.notes.text.isNotEmpty ? _c.notes.text : null,
-          totpSecret:
-              _c.totpSecret.text.isNotEmpty ? _c.totpSecret.text : null,
+          totpSecret: _c.totpSecret.text.isNotEmpty ? _c.totpSecret.text : null,
         );
         break;
       case EntryType.bankCard:
@@ -155,8 +152,9 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           updatedAt: now,
           tags: tags,
           cardNumber: _c.cardNumber.text.isNotEmpty ? _c.cardNumber.text : null,
-          cardHolderName:
-              _c.cardHolder.text.isNotEmpty ? _c.cardHolder.text : null,
+          cardHolderName: _c.cardHolder.text.isNotEmpty
+              ? _c.cardHolder.text
+              : null,
           cvv: _c.cvv.text.isNotEmpty ? _c.cvv.text : null,
           bankName: _c.bankName.text.isNotEmpty ? _c.bankName.text : null,
           expiryMonth: _bankCardState.expiryMonth,
@@ -171,8 +169,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           createdAt: createdAt,
           updatedAt: now,
           tags: tags,
-          content:
-              _c.noteContent.text.isNotEmpty ? _c.noteContent.text : null,
+          content: _c.noteContent.text.isNotEmpty ? _c.noteContent.text : null,
           isMarkdown: _isMarkdown,
         );
         break;
@@ -185,8 +182,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           tags: tags,
           firstName: _c.firstName.text.isNotEmpty ? _c.firstName.text : null,
           lastName: _c.lastName.text.isNotEmpty ? _c.lastName.text : null,
-          middleName:
-              _c.middleName.text.isNotEmpty ? _c.middleName.text : null,
+          middleName: _c.middleName.text.isNotEmpty ? _c.middleName.text : null,
           idNumber: _c.idNumber.text.isNotEmpty ? _c.idNumber.text : null,
           phone: _c.phone.text.isNotEmpty ? _c.phone.text : null,
           email: _c.email.text.isNotEmpty ? _c.email.text : null,
@@ -214,15 +210,17 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     }
 
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_isEditing ? '条目更新成功' : '条目添加成功')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_isEditing ? '条目更新成功' : '条目添加成功')));
       context.pop();
     } else if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content:
-                Text('保存失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}')),
+          content: Text(
+            '保存失败: ${ref.read(vaultNotifierProvider).error ?? '未知错误'}',
+          ),
+        ),
       );
     }
   }
@@ -243,75 +241,131 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? '编辑条目' : '添加条目'),
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _saveEntry,
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(AppTokens.spaceL),
+      backgroundColor: colorScheme.bg,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
           children: [
-            if (!_isEditing) ...[
-              EntryTypePicker(
-                value: _selectedType,
-                onChanged: (value) {
-                  setState(() => _selectedType = value);
-                },
+            _buildNavBar(colorScheme, textTheme),
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                  children: [
+                    if (!_isEditing) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 10),
+                        child: Text(
+                          '条目类型',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                            color: colorScheme.textMuted,
+                          ),
+                        ),
+                      ),
+                      EntryTypePicker(
+                        value: _selectedType,
+                        onChanged: (value) {
+                          setState(() => _selectedType = value);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    SectionCard(
+                      title: '基本信息',
+                      children: [
+                        TextFormField(
+                          controller: _c.title,
+                          decoration: const InputDecoration(
+                            hintText: '例如：GitHub',
+                            prefixIcon: Icon(Icons.title, size: 20),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return '请输入标题';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
+                    SectionCard(
+                      title: '整理',
+                      children: [
+                        TextFormField(
+                          controller: _c.tags,
+                          decoration: const InputDecoration(
+                            hintText: '用逗号分隔多个标签，例如：代码, 常用',
+                            prefixIcon: Icon(Icons.tag, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SectionCard(
+                      title: _typeSectionTitle,
+                      children: _buildTypeSpecificFields(),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: AppTokens.spaceL),
-            ],
-
-            SectionCard(
-              title: '基本信息',
-              icon: Icons.info_outline,
-              children: [
-                TextFormField(
-                  controller: _c.title,
-                  decoration: const InputDecoration(
-                    labelText: '标题 *',
-                    hintText: '例如：Google 账号',
-                    prefixIcon: Icon(Icons.title),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return '请输入标题';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppTokens.spaceL),
-                TextFormField(
-                  controller: _c.tags,
-                  decoration: const InputDecoration(
-                    labelText: '标签',
-                    hintText: '用逗号分隔多个标签',
-                    prefixIcon: Icon(Icons.tag),
-                  ),
-                ),
-              ],
-            ),
-
-            SectionCard(
-              title: _typeSectionTitle,
-              icon: _typeSectionIcon,
-              children: _buildTypeSpecificFields(),
-            ),
-
-            LoadingButton.filled(
-              onPressed: _saveEntry,
-              icon: Icons.save,
-              label: _isEditing ? '更新条目' : '添加条目',
-              isLoading: _isSaving,
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: _buildActionBar(colorScheme),
+    );
+  }
+
+  Widget _buildNavBar(ColorScheme colorScheme, TextTheme textTheme) {
+    return SizedBox(
+      height: AppTokens.navBarHeight,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 8,
+            child: TextButton(
+              onPressed: _isSaving ? null : () => context.pop(),
+              child: Text('取消', style: TextStyle(color: colorScheme.textMuted)),
+            ),
+          ),
+          Text(_isEditing ? '编辑条目' : '添加条目', style: textTheme.titleMedium),
+          Positioned(
+            right: 8,
+            child: TextButton(
+              onPressed: _isSaving ? null : _saveEntry,
+              child: const Text('保存'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionBar(ColorScheme colorScheme) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 16 + bottomInset),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [colorScheme.bg, colorScheme.bg.withAlpha(0)],
+        ),
+      ),
+      child: LoadingButton.filled(
+        onPressed: _saveEntry,
+        icon: Icons.save_outlined,
+        label: _isEditing ? '保存修改' : '保存条目',
+        isLoading: _isSaving,
       ),
     );
   }
@@ -325,9 +379,6 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
     EntryType.custom => '自定义字段',
   };
 
-  /// 当前类型的分区图标
-  IconData get _typeSectionIcon => EntryTypeHelper.getIcon(_selectedType);
-
   List<Widget> _buildTypeSpecificFields() {
     switch (_selectedType) {
       case EntryType.login:
@@ -339,9 +390,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           ),
         ];
       case EntryType.bankCard:
-        return [
-          BankCardFormSection(controllers: _c, state: _bankCardState),
-        ];
+        return [BankCardFormSection(controllers: _c, state: _bankCardState)];
       case EntryType.secureNote:
         return [
           SecureNoteFormSection(
@@ -351,9 +400,7 @@ class _AddEntryPageState extends ConsumerState<AddEntryPage> {
           ),
         ];
       case EntryType.identity:
-        return [
-          IdentityFormSection(controllers: _c, state: _identityState),
-        ];
+        return [IdentityFormSection(controllers: _c, state: _identityState)];
       case EntryType.custom:
         return const [];
     }
