@@ -75,6 +75,7 @@ jobs:
               --no-pub
               --build-name=${{ github.ref_name }}
               --build-number=${{ github.run_number }}
+              --dart-define=APP_VERSION=${{ github.ref_name }}
             artifact-path: build/app/outputs/flutter-apk/vaultly-*.apk
             artifact-name: android-apk
           - target: aab
@@ -85,6 +86,7 @@ jobs:
               --no-pub
               --build-name=${{ github.ref_name }}
               --build-number=${{ github.run_number }}
+              --dart-define=APP_VERSION=${{ github.ref_name }}
             artifact-path: build/app/outputs/bundle/release/vaultly-*.aab
             artifact-name: android-aab
 

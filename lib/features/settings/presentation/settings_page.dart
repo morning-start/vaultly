@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/app_info.dart';
 import '../../../core/services/auto_lock_service.dart';
 import '../../../ui/theme/tokens.dart';
 import '../../../ui/theme/vaultly_colors.dart';
@@ -102,13 +103,13 @@ class SettingsPage extends ConsumerWidget {
             const _SectionLabel('关于'),
             _SettingsCard(
               children: [
-                const _SettingRow(title: '版本', value: '2.4.1'),
+                const _SettingRow(title: '版本', value: AppInfo.version),
                 _SettingRow(
                   title: '开源许可',
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'Vaultly',
-                    applicationVersion: '2.4.1',
+                    applicationVersion: AppInfo.version,
                   ),
                 ),
                 _SettingRow(
