@@ -72,7 +72,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 }
 
 /// 设置提供者
-final settingsProvider =
-    StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
-  return SettingsNotifier();
-});
+final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
+  (ref) {
+    return SettingsNotifier();
+  },
+);

@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:webdav_client/webdav_client.dart';
 import 'package:path_provider/path_provider.dart';
 import '../domain/sync_models.dart';
-import '../../../features/auth/data/crypto_service.dart';
-import '../../../core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 备份解密所需的密钥解析器
 ///
@@ -253,7 +252,11 @@ class WebDAVClient {
       }
 
       // 历史遗留的明文备份
-      return DownloadedBackup(data: decoded, legacyFormat: true, plaintext: true);
+      return DownloadedBackup(
+        data: decoded,
+        legacyFormat: true,
+        plaintext: true,
+      );
     } on WebDAVException {
       rethrow;
     } catch (e) {

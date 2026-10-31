@@ -80,9 +80,11 @@ class _IdentityFormSectionState extends State<IdentityFormSection> {
         ListTile(
           leading: const Icon(Icons.cake),
           title: const Text('出生日期'),
-          subtitle: Text(birthDate != null
-              ? '${birthDate.year}-${birthDate.month.toString().padLeft(2, '0')}-${birthDate.day.toString().padLeft(2, '0')}'
-              : '未设置'),
+          subtitle: Text(
+            birthDate != null
+                ? '${birthDate.year}-${birthDate.month.toString().padLeft(2, '0')}-${birthDate.day.toString().padLeft(2, '0')}'
+                : '未设置',
+          ),
           trailing: TextButton(
             onPressed: _selectBirthDate,
             child: const Text('选择'),

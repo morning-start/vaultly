@@ -3,7 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../../shared/widgets/secure_text_field.dart';
 import '../../../../../ui/theme/tokens.dart';
 import '../../../../tools/ocr_service.dart';
-import '../../../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../../widgets/entry_type_helper.dart';
 import 'entry_form_controllers.dart';
 
@@ -135,17 +135,17 @@ class _BankCardFormSectionState extends State<BankCardFormSection> {
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('未识别到银行卡信息，请尝试更清晰的图片')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('未识别到银行卡信息，请尝试更清晰的图片')));
         }
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop(); // 关闭加载提示
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('识别失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('识别失败: $e')));
     } finally {
       ocrService.dispose();
     }
@@ -207,10 +207,12 @@ class _BankCardFormSectionState extends State<BankCardFormSection> {
         ListTile(
           leading: const Icon(Icons.calendar_today),
           title: const Text('有效期'),
-          subtitle: Text(_s.expiryMonth != null && _s.expiryYear != null
-              ? '${_s.expiryMonth.toString().padLeft(2, '0')}/'
-                  '${_s.expiryYear}'
-              : '未设置'),
+          subtitle: Text(
+            _s.expiryMonth != null && _s.expiryYear != null
+                ? '${_s.expiryMonth.toString().padLeft(2, '0')}/'
+                      '${_s.expiryYear}'
+                : '未设置',
+          ),
           trailing: TextButton(
             onPressed: _selectExpiryDate,
             child: const Text('选择'),
@@ -296,10 +298,7 @@ class _ExpiryDatePickerState extends State<_ExpiryDatePicker> {
                 isExpanded: true,
                 underline: const SizedBox.shrink(),
                 items: years.map((y) {
-                  return DropdownMenuItem(
-                    value: y,
-                    child: Text(y.toString()),
-                  );
+                  return DropdownMenuItem(value: y, child: Text(y.toString()));
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) setState(() => _year = value);

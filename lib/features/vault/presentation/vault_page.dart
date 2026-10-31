@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../sync/presentation/sync_providers.dart';
-import '../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../domain/vault_notifier.dart';
 import 'vault_providers.dart';
 import '../../../shared/widgets/app_toast.dart';

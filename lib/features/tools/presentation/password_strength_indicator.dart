@@ -54,8 +54,12 @@ class PasswordStrengthIndicator extends StatelessWidget {
   Color _getStrengthColor(int strength, ColorScheme colorScheme) {
     final isDark = colorScheme.brightness == Brightness.dark;
     if (strength < 40) return colorScheme.error;
-    if (strength < 70) return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
-    if (strength < 90) return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    if (strength < 70) {
+      return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+    }
+    if (strength < 90) {
+      return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    }
     return isDark ? Colors.green.shade300 : Colors.green.shade700;
   }
 }

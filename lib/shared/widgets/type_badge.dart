@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../features/vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../../features/vault/presentation/widgets/entry_type_helper.dart';
 import '../../ui/theme/tokens.dart';
 import '../../ui/theme/vaultly_colors.dart';

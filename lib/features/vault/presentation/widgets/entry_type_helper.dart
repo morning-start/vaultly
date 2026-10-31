@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../ui/theme/vaultly_colors.dart';
-import '../../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 条目类型静态辅助：图标与名称
 ///

@@ -20,10 +20,7 @@ VaultEntry markEntryDeleted(VaultEntry entry, {DateTime? at}) {
 /// 从回收站恢复：清掉墓碑并刷新 `updatedAt`，
 /// 这样恢复动作同样能靠 LWW 盖过其他设备上可能存在的墓碑。
 VaultEntry clearEntryDeletion(VaultEntry entry, {DateTime? at}) =>
-    entry.copyWith(
-      clearDeletedAt: true,
-      updatedAt: at ?? DateTime.now(),
-    );
+    entry.copyWith(clearDeletedAt: true, updatedAt: at ?? DateTime.now());
 
 /// 是否为「已超过保留期」的墓碑（可以物理清除）
 bool isExpiredTombstone(VaultEntry entry, {DateTime? now}) {
@@ -38,19 +35,16 @@ bool isExpiredTombstone(VaultEntry entry, {DateTime? now}) {
 List<VaultEntry> pruneExpiredTombstones(
   List<VaultEntry> entries, {
   DateTime? now,
-}) =>
-    entries
-        .where((entry) => !isExpiredTombstone(entry, now: now))
-        .toList();
+}) => entries.where((entry) => !isExpiredTombstone(entry, now: now)).toList();
 
 /// 墓碑的剩余保留天数（向上取整，最小 0），供回收站展示
 int tombstoneRemainingDays(VaultEntry entry, {DateTime? now}) {
   final deletedAt = entry.deletedAt;
   if (deletedAt == null) return 0;
 
-  final left = deletedAt.add(kTombstoneRetention).difference(
-    now ?? DateTime.now(),
-  );
+  final left = deletedAt
+      .add(kTombstoneRetention)
+      .difference(now ?? DateTime.now());
   if (left.isNegative) return 0;
   return (left.inMinutes / (60 * 24)).ceil();
 }

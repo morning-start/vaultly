@@ -1,0 +1,21 @@
+name: vaultly_core
+description: >-
+  Vaultly 的核心领域层：加密原语、条目模型、字段级加密策略、合并与墓碑规则。
+  零 Flutter 依赖，可在纯 Dart VM 下运行（App、桌面宿主、CLI 共用）。
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  # AES-256-GCM
+  encrypt: ^5.0.3
+  # HKDF / SHA-256
+  crypto: ^3.0.6
+  # Argon2id
+  pointycastle: ^3.9.1
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

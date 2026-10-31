@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'vault_providers.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/loading_button.dart';

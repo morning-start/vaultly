@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'sync_models.dart';
 import '../data/webdav_client.dart';
 import '../data/sync_config_repository.dart';
-import '../../auth/data/crypto_service.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 同步编排器
 ///
@@ -205,9 +205,7 @@ class SyncOrchestrator {
       }
     } catch (e) {
       // WebDAVException 已带上下文，避免出现「上传失败: 上传失败: …」的重复前缀
-      return SyncResult.failure(
-        e is WebDAVException ? e.message : '上传失败: $e',
-      );
+      return SyncResult.failure(e is WebDAVException ? e.message : '上传失败: $e');
     }
   }
 
@@ -229,9 +227,7 @@ class SyncOrchestrator {
       }
     } catch (e) {
       // WebDAVException 已带上下文，避免出现「下载失败: 下载失败: …」的重复前缀
-      return SyncResult.failure(
-        e is WebDAVException ? e.message : '下载失败: $e',
-      );
+      return SyncResult.failure(e is WebDAVException ? e.message : '下载失败: $e');
     }
   }
 

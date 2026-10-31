@@ -140,27 +140,18 @@ class ConfirmDialog extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final effectiveIconColor = iconColor ??
-        (isDangerous ? colorScheme.error : colorScheme.primary);
+    final effectiveIconColor =
+        iconColor ?? (isDangerous ? colorScheme.error : colorScheme.primary);
 
     return AlertDialog(
       icon: icon != null
-          ? Icon(
-              icon,
-              color: effectiveIconColor,
-              size: 32,
-            )
+          ? Icon(icon, color: effectiveIconColor, size: 32)
           : null,
-      title: Text(
-        title,
-        textAlign: TextAlign.center,
-      ),
-      content: contentWidget ??
+      title: Text(title, textAlign: TextAlign.center),
+      content:
+          contentWidget ??
           (content != null
-              ? Text(
-                  content!,
-                  textAlign: TextAlign.center,
-                )
+              ? Text(content!, textAlign: TextAlign.center)
               : null),
       actionsAlignment: MainAxisAlignment.center,
       actions: [

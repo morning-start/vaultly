@@ -5,9 +5,8 @@ import 'package:local_auth/local_auth.dart';
 class BiometricService {
   final LocalAuthentication _localAuth;
 
-  BiometricService({
-    LocalAuthentication? localAuth,
-  }) : _localAuth = localAuth ?? LocalAuthentication();
+  BiometricService({LocalAuthentication? localAuth})
+    : _localAuth = localAuth ?? LocalAuthentication();
 
   Future<bool> isDeviceSupported() async {
     try {
@@ -67,7 +66,8 @@ class BiometricService {
       if (types.contains(BiometricType.fingerprint)) {
         return '指纹';
       }
-      if (types.contains(BiometricType.strong) || types.contains(BiometricType.weak)) {
+      if (types.contains(BiometricType.strong) ||
+          types.contains(BiometricType.weak)) {
         return '指纹';
       }
     }
@@ -98,9 +98,7 @@ class BiometricService {
     return Icons.fingerprint;
   }
 
-  Future<bool> authenticate({
-    String reason = '请验证身份以解锁保险库',
-  }) async {
+  Future<bool> authenticate({String reason = '请验证身份以解锁保险库'}) async {
     try {
       final isAuthenticated = await _localAuth.authenticate(
         localizedReason: reason,

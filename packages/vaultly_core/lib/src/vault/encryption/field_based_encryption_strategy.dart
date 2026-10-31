@@ -1,7 +1,7 @@
 import 'dart:typed_data';
-import '../../../auth/data/crypto_service.dart';
 import '../vault_entry.dart';
 import 'entry_encryption_strategy.dart';
+import '../../crypto/crypto_service.dart';
 
 /// 基于字段的加密策略基类
 ///
@@ -59,8 +59,9 @@ abstract class FieldBasedEncryptionStrategy implements EntryEncryptionStrategy {
       final encryptedField = fieldEntry.value;
 
       if (data[encryptedField] is Map) {
-        final encrypted =
-            EncryptedData.fromJson(data[encryptedField] as Map<String, dynamic>);
+        final encrypted = EncryptedData.fromJson(
+          data[encryptedField] as Map<String, dynamic>,
+        );
         // 以密文解出的值为准，覆盖可能残留的旧格式明文字段。
         data[originalField] = CryptoService.decrypt(encrypted, key);
       }

@@ -12,8 +12,7 @@ class BiometricSettingsPage extends ConsumerStatefulWidget {
       _BiometricSettingsPageState();
 }
 
-class _BiometricSettingsPageState
-    extends ConsumerState<BiometricSettingsPage> {
+class _BiometricSettingsPageState extends ConsumerState<BiometricSettingsPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
 
@@ -27,8 +26,9 @@ class _BiometricSettingsPageState
     if (!_formKey.currentState!.validate()) return;
 
     final password = _passwordController.text;
-    final success =
-        await ref.read(authNotifierProvider.notifier).enableBiometric(password);
+    final success = await ref
+        .read(authNotifierProvider.notifier)
+        .enableBiometric(password);
 
     if (!mounted) return;
 
@@ -95,9 +95,7 @@ class _BiometricSettingsPageState
     final biometricIcon = authState.biometricIcon ?? Icons.fingerprint;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('生物识别设置'),
-      ),
+      appBar: AppBar(title: const Text('生物识别设置')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppTokens.spaceXL),
@@ -131,15 +129,16 @@ class _BiometricSettingsPageState
                       border: Border.all(
                         color: biometricEnabled
                             ? const Color(0xFF6366F1).withAlpha(50)
-                            : Theme.of(context)
-                                .colorScheme
-                                .outlineVariant
-                                .withAlpha(80),
+                            : Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant.withAlpha(80),
                         width: 2,
                       ),
                       boxShadow: biometricEnabled
                           ? AppTokens.cardShadow(
-                              const Color(0xFF6366F1), opacity: 0.1)
+                              const Color(0xFF6366F1),
+                              opacity: 0.1,
+                            )
                           : null,
                     ),
                     child: Icon(
@@ -159,9 +158,9 @@ class _BiometricSettingsPageState
                       ? '$biometricTypeName 已启用'
                       : '启用 $biometricTypeName',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.8,
-                      ),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.8,
+                  ),
                   textAlign: TextAlign.center,
                 ),
 
@@ -172,8 +171,8 @@ class _BiometricSettingsPageState
                       ? '您可以使用$biometricTypeName快速解锁保险库'
                       : '使用您手机的$biometricTypeName快速解锁保险库，无需重新录入指纹',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 ),
 
@@ -187,10 +186,9 @@ class _BiometricSettingsPageState
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(AppTokens.radiusL),
                       border: Border.all(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .outlineVariant
-                            .withAlpha(60),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outlineVariant.withAlpha(60),
                       ),
                     ),
                     child: Column(
@@ -198,9 +196,7 @@ class _BiometricSettingsPageState
                       children: [
                         Text(
                           '启用流程',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: AppTokens.spaceL),
@@ -208,8 +204,7 @@ class _BiometricSettingsPageState
                           context,
                           number: 1,
                           title: '系统指纹认证',
-                          description:
-                              '调用系统指纹进行身份验证，使用您已注册的指纹信息',
+                          description: '调用系统指纹进行身份验证，使用您已注册的指纹信息',
                         ),
                         const SizedBox(height: AppTokens.spaceM),
                         _buildStep(
@@ -223,8 +218,7 @@ class _BiometricSettingsPageState
                           context,
                           number: 3,
                           title: '启用成功',
-                          description:
-                              '之后可使用$biometricTypeName快速解锁保险库',
+                          description: '之后可使用$biometricTypeName快速解锁保险库',
                         ),
                       ],
                     ),
@@ -323,7 +317,9 @@ class _BiometricSettingsPageState
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Theme.of(context).colorScheme.error,
                       side: BorderSide(
-                        color: Theme.of(context).colorScheme.error.withAlpha(120),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.error.withAlpha(120),
                       ),
                       padding: const EdgeInsets.symmetric(
                         vertical: AppTokens.spaceM,
@@ -342,7 +338,9 @@ class _BiometricSettingsPageState
                       color: Theme.of(context).colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(AppTokens.radiusL),
                       border: Border.all(
-                        color: Theme.of(context).colorScheme.error.withAlpha(40),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.error.withAlpha(40),
                       ),
                     ),
                     child: Row(
@@ -357,9 +355,9 @@ class _BiometricSettingsPageState
                           child: Text(
                             authState.error!,
                             style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onErrorContainer,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onErrorContainer,
                             ),
                           ),
                         ),
@@ -407,16 +405,16 @@ class _BiometricSettingsPageState
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: AppTokens.spaceXS),
               Text(
                 description,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),

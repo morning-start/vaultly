@@ -5,23 +5,33 @@ class TOTPService {
   static const int _defaultDigits = 6;
   static const int _defaultPeriod = 30;
 
-  String generateTOTP(String secret, {int digits = _defaultDigits, int period = _defaultPeriod}) {
+  String generateTOTP(
+    String secret, {
+    int digits = _defaultDigits,
+    int period = _defaultPeriod,
+  }) {
     final counter = _getTimeCounter(period);
     return _generateHOTP(secret, counter, digits);
   }
 
-  bool validateTOTP(String code, String secret, {int window = 1, int digits = _defaultDigits, int period = _defaultPeriod}) {
+  bool validateTOTP(
+    String code,
+    String secret, {
+    int window = 1,
+    int digits = _defaultDigits,
+    int period = _defaultPeriod,
+  }) {
     if (code.length != digits) return false;
-    
+
     final counter = _getTimeCounter(period);
-    
+
     for (int i = -window; i <= window; i++) {
       final expectedCode = _generateHOTP(secret, counter + i, digits);
       if (expectedCode == code) {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -94,17 +104,18 @@ class TOTPService {
   String _generateHOTP(String secret, int counter, int digits) {
     final key = _base32Decode(secret);
     final counterBytes = _intToBytes(counter);
-    
+
     final hmac = Hmac(sha1, key);
     final digest = hmac.convert(counterBytes);
     final hash = digest.bytes;
-    
+
     final offset = hash[hash.length - 1] & 0x0F;
-    final binary = ((hash[offset] & 0x7F) << 24) |
+    final binary =
+        ((hash[offset] & 0x7F) << 24) |
         ((hash[offset + 1] & 0xFF) << 16) |
         ((hash[offset + 2] & 0xFF) << 8) |
         (hash[offset + 3] & 0xFF);
-    
+
     final otp = binary % _pow10(digits);
     return otp.toString().padLeft(digits, '0');
   }
@@ -120,26 +131,29 @@ class TOTPService {
 
   Uint8List _base32Decode(String input) {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    final cleanInput = input.toUpperCase().replaceAll('=', '').replaceAll(' ', '');
-    
+    final cleanInput = input
+        .toUpperCase()
+        .replaceAll('=', '')
+        .replaceAll(' ', '');
+
     final output = <int>[];
     var buffer = 0;
     var bitsLeft = 0;
-    
+
     for (int i = 0; i < cleanInput.length; i++) {
       final char = cleanInput[i];
       final value = alphabet.indexOf(char);
       if (value < 0) continue;
-      
+
       buffer = (buffer << 5) | value;
       bitsLeft += 5;
-      
+
       if (bitsLeft >= 8) {
         output.add((buffer >> (bitsLeft - 8)) & 0xFF);
         bitsLeft -= 8;
       }
     }
-    
+
     return Uint8List.fromList(output);
   }
 
@@ -192,8 +206,4 @@ class TOTPConfig {
   });
 }
 
-enum Algorithm {
-  sha1,
-  sha256,
-  sha512,
-}
+enum Algorithm { sha1, sha256, sha512 }

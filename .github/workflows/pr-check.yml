@@ -16,6 +16,37 @@ env:
   JAVA_VERSION: '17'
 
 jobs:
+  # vaultly_core 是纯 Dart 包（ADR-006 R4）：不依赖 Flutter，用 Dart SDK
+  # 独立跑，作为「核心规则不被 App 侧改动破坏」的回归门。启动也更快。
+  core-test:
+    name: core 包分析与测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: 获取依赖
+        working-directory: packages/vaultly_core
+        run: dart pub get
+
+      - name: 检查代码格式
+        working-directory: packages/vaultly_core
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: 运行代码分析
+        working-directory: packages/vaultly_core
+        # core 是所有端共用的正确性内核，比 App 侧更严格：info 也算失败
+        run: dart analyze --fatal-infos
+
+      - name: 运行测试
+        working-directory: packages/vaultly_core
+        run: dart test
+
   # 代码检查和测试：合并到同一 Runner，共享缓存
   # 关键优化：原本三个独立 Runner 会重复下载 Flutter/Pub/Dart artifacts
   analyze-and-test:
@@ -43,11 +74,9 @@ jobs:
         run: flutter pub get
 
       - name: 检查代码格式
-        run: |
-          if ! flutter format --set-exit-if-changed --dry-run .; then
-            echo "❌ 代码格式检查失败，请运行 'flutter format .' 修复格式问题"
-            exit 1
-          fi
+        # flutter format 在 Flutter 3.38 已被移除，旧步骤实际早已失效。
+        # dart 3.7 起默认 tall style，全仓已按此风格统一（见 .git-blame-ignore-revs）。
+        run: dart format --output=none --set-exit-if-changed .
 
       - name: 运行代码分析
         # --no-fatal-infos：当前存在 4 条 use_super_parameters info（已知 lint 误报，
@@ -120,18 +149,20 @@ jobs:
   # PR 检查汇总
   pr-check-summary:
     name: PR 检查汇总
-    needs: [analyze-and-test, build-android-test]
+    needs: [core-test, analyze-and-test, build-android-test]
     runs-on: ubuntu-latest
     if: always()
 
     steps:
       - name: 检查所有任务状态
         run: |
+          echo "core 包分析/测试: ${{ needs.core-test.result }}"
           echo "代码分析/测试: ${{ needs.analyze-and-test.result }}"
           echo "Android 构建: ${{ needs.build-android-test.result }}"
 
       - name: 检查是否通过
         if: |
+          needs.core-test.result != 'success' ||
           needs.analyze-and-test.result != 'success' ||
           needs.build-android-test.result != 'success'
         run: |

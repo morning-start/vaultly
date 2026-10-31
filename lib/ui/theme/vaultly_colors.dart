@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../features/vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'tokens.dart';
 
 /// Vaultly 专属色彩扩展

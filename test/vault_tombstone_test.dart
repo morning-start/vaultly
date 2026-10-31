@@ -3,10 +3,8 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'package:vaultly/features/vault/data/vault_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
-import 'package:vaultly/features/vault/domain/vault_tombstone.dart';
 
 import 'helpers/mock_secure_storage.dart';
 
@@ -56,7 +54,8 @@ void main() {
       expect(service.trashedEntries.single.id, 'login-1');
 
       final json = persistedVaultJson(storage);
-      final persisted = (json['entries'] as List).single as Map<String, dynamic>;
+      final persisted =
+          (json['entries'] as List).single as Map<String, dynamic>;
       expect(persisted['deletedAt'], isNotNull);
     });
 
@@ -141,11 +140,15 @@ void main() {
       ]);
 
       expect(
-        await service.purgeExpiredTombstones(now: deletedAt.add(const Duration(days: 10))),
+        await service.purgeExpiredTombstones(
+          now: deletedAt.add(const Duration(days: 10)),
+        ),
         0,
       );
       expect(
-        await service.purgeExpiredTombstones(now: deletedAt.add(const Duration(days: 31))),
+        await service.purgeExpiredTombstones(
+          now: deletedAt.add(const Duration(days: 31)),
+        ),
         1,
       );
       expect(service.entries, isEmpty);
@@ -160,11 +163,17 @@ void main() {
         kTombstoneRetention.inDays,
       );
       expect(
-        tombstoneRemainingDays(tombstone, now: deletedAt.add(const Duration(days: 29, hours: 1))),
+        tombstoneRemainingDays(
+          tombstone,
+          now: deletedAt.add(const Duration(days: 29, hours: 1)),
+        ),
         1,
       );
       expect(
-        tombstoneRemainingDays(tombstone, now: deletedAt.add(const Duration(days: 31))),
+        tombstoneRemainingDays(
+          tombstone,
+          now: deletedAt.add(const Duration(days: 31)),
+        ),
         0,
       );
     });
@@ -228,8 +237,7 @@ void main() {
 
     test('被版本闸门拦住后，磁盘上的新数据保持原样', () async {
       await serviceWith([login()]);
-      final future = persistedVaultJson(storage)
-        ..['schemaVersion'] = 99;
+      final future = persistedVaultJson(storage)..['schemaVersion'] = 99;
       storage.store['vault_data'] = _encode(future);
       final before = storage.store['vault_data'];
 
@@ -245,10 +253,7 @@ void main() {
     });
 
     test('主数据损坏、写前备份也是更高版本时同样拒绝（不回退、不写回）', () async {
-      final future = _encode({
-        'schemaVersion': 77,
-        'entries': <dynamic>[],
-      });
+      final future = _encode({'schemaVersion': 77, 'entries': <dynamic>[]});
       storage.store['vault_data'] = 'not-a-json{{{';
       storage.store['vault_data.prev'] = future;
 

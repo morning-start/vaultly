@@ -86,9 +86,6 @@ void main() {
   testWidgets('底部说明应写明「任何设备用同一主密码都能解开」', (tester) async {
     await pumpPage(tester, stale: false);
 
-    expect(
-      find.textContaining('任何设备用同一个主密码都能解开'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('任何设备用同一个主密码都能解开'), findsOneWidget);
   });
 }

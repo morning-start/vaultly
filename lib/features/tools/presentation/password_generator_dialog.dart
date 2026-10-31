@@ -8,13 +8,11 @@ import '../../../ui/theme/tokens.dart';
 class PasswordGeneratorDialog extends StatefulWidget {
   final String? initialPassword;
 
-  const PasswordGeneratorDialog({
-    super.key,
-    this.initialPassword,
-  });
+  const PasswordGeneratorDialog({super.key, this.initialPassword});
 
   @override
-  State<PasswordGeneratorDialog> createState() => _PasswordGeneratorDialogState();
+  State<PasswordGeneratorDialog> createState() =>
+      _PasswordGeneratorDialogState();
 }
 
 class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
@@ -42,7 +40,9 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
   void _generatePassword() {
     setState(() {
       if (_readable) {
-        _generatedPassword = PasswordGenerator.generateReadable(length: _length);
+        _generatedPassword = PasswordGenerator.generateReadable(
+          length: _length,
+        );
       } else {
         _generatedPassword = PasswordGenerator.generate(
           length: _length,
@@ -60,8 +60,12 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
   Color _getStrengthColor(ColorScheme colorScheme) {
     final isDark = colorScheme.brightness == Brightness.dark;
     if (_strength < 40) return colorScheme.error;
-    if (_strength < 70) return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
-    if (_strength < 90) return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    if (_strength < 70) {
+      return isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+    }
+    if (_strength < 90) {
+      return isDark ? Colors.amber.shade200 : Colors.amber.shade800;
+    }
     return isDark ? Colors.green.shade300 : Colors.green.shade700;
   }
 
@@ -110,9 +114,9 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
                   const SizedBox(height: AppTokens.spaceXS),
                   Text(
                     '强度: ${_getStrengthText()} ($_strength/100)',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: strengthColor,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: strengthColor),
                   ),
                 ],
               ),
@@ -163,7 +167,13 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
                     label: const Text('大写 A-Z'),
                     selected: _includeUppercase,
                     onSelected: (value) {
-                      setState(() => _includeUppercase = value || _includeLowercase || _includeNumbers || _includeSymbols);
+                      setState(
+                        () => _includeUppercase =
+                            value ||
+                            _includeLowercase ||
+                            _includeNumbers ||
+                            _includeSymbols,
+                      );
                       _generatePassword();
                     },
                   ),
@@ -171,7 +181,13 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
                     label: const Text('小写 a-z'),
                     selected: _includeLowercase,
                     onSelected: (value) {
-                      setState(() => _includeLowercase = value || _includeUppercase || _includeNumbers || _includeSymbols);
+                      setState(
+                        () => _includeLowercase =
+                            value ||
+                            _includeUppercase ||
+                            _includeNumbers ||
+                            _includeSymbols,
+                      );
                       _generatePassword();
                     },
                   ),
@@ -179,7 +195,13 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
                     label: const Text('数字 0-9'),
                     selected: _includeNumbers,
                     onSelected: (value) {
-                      setState(() => _includeNumbers = value || _includeUppercase || _includeLowercase || _includeSymbols);
+                      setState(
+                        () => _includeNumbers =
+                            value ||
+                            _includeUppercase ||
+                            _includeLowercase ||
+                            _includeSymbols,
+                      );
                       _generatePassword();
                     },
                   ),
@@ -187,7 +209,13 @@ class _PasswordGeneratorDialogState extends State<PasswordGeneratorDialog> {
                     label: const Text('符号 !@#'),
                     selected: _includeSymbols,
                     onSelected: (value) {
-                      setState(() => _includeSymbols = value || _includeUppercase || _includeLowercase || _includeNumbers);
+                      setState(
+                        () => _includeSymbols =
+                            value ||
+                            _includeUppercase ||
+                            _includeLowercase ||
+                            _includeNumbers,
+                      );
                       _generatePassword();
                     },
                   ),

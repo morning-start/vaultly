@@ -26,9 +26,7 @@ class VaultlyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
-    final themeMode = ref.watch(
-      settingsProvider.select((s) => s.themeMode),
-    );
+    final themeMode = ref.watch(settingsProvider.select((s) => s.themeMode));
 
     return AutoLockActivityListener(
       child: MaterialApp.router(
@@ -43,10 +41,7 @@ class VaultlyApp extends ConsumerWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        supportedLocales: const [
-          Locale('zh', 'CN'),
-          Locale('en', 'US'),
-        ],
+        supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
       ),
     );
   }

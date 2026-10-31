@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 银行卡表单局部状态（有效期与卡类型）。
 class BankCardFormState {
@@ -15,10 +15,10 @@ class BankCardFormState {
 
   /// 从已有条目恢复。
   factory BankCardFormState.of(BankCardEntry? entry) => BankCardFormState(
-        expiryMonth: entry?.expiryMonth,
-        expiryYear: entry?.expiryYear,
-        cardType: entry?.cardType ?? CardType.other,
-      );
+    expiryMonth: entry?.expiryMonth,
+    expiryYear: entry?.expiryYear,
+    cardType: entry?.cardType ?? CardType.other,
+  );
 }
 
 /// 身份表单局部状态（出生日期）。
@@ -97,9 +97,25 @@ class EntryFormControllers {
 
   void dispose() {
     for (final c in [
-      title, tags, username, email, password, url, notes, totpSecret,
-      cardNumber, cardHolder, cvv, bankName, noteContent,
-      firstName, lastName, middleName, idNumber, phone, address,
+      title,
+      tags,
+      username,
+      email,
+      password,
+      url,
+      notes,
+      totpSecret,
+      cardNumber,
+      cardHolder,
+      cvv,
+      bankName,
+      noteContent,
+      firstName,
+      lastName,
+      middleName,
+      idNumber,
+      phone,
+      address,
     ]) {
       c.dispose();
     }

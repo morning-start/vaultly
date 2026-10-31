@@ -1,33 +1,11 @@
 /// 保险库条目类型。
 ///
 /// 这些类型用于驱动页面表单、列表展示和字段级加密逻辑。
-enum EntryType {
-  login,
-  bankCard,
-  secureNote,
-  identity,
-  custom,
-}
+enum EntryType { login, bankCard, secureNote, identity, custom }
 
-enum CardType {
-  visa,
-  mastercard,
-  amex,
-  discover,
-  jcb,
-  unionPay,
-  other,
-}
+enum CardType { visa, mastercard, amex, discover, jcb, unionPay, other }
 
-enum FieldType {
-  text,
-  hidden,
-  date,
-  url,
-  email,
-  phone,
-  number,
-}
+enum FieldType { text, hidden, date, url, email, phone, number }
 
 /// 自定义字段数据结构（不可变）。
 ///
@@ -118,7 +96,8 @@ class VaultBaseData {
       (e) => e.name == json['type'],
       orElse: () => EntryType.custom,
     ),
-    customFields: (json['customFields'] as List<dynamic>?)
+    customFields:
+        (json['customFields'] as List<dynamic>?)
             ?.map((e) => CustomField.fromJson(e as Map<String, dynamic>))
             .toList() ??
         const [],
@@ -151,18 +130,18 @@ class VaultEntry {
   final DateTime? deletedAt;
 
   VaultEntry.base(VaultBaseData b)
-      : this(
-          id: b.id,
-          title: b.title,
-          createdAt: b.createdAt,
-          updatedAt: b.updatedAt,
-          type: b.type,
-          customFields: b.customFields,
-          tags: b.tags,
-          isFavorite: b.isFavorite,
-          folderId: b.folderId,
-          deletedAt: b.deletedAt,
-        );
+    : this(
+        id: b.id,
+        title: b.title,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
+        type: b.type,
+        customFields: b.customFields,
+        tags: b.tags,
+        isFavorite: b.isFavorite,
+        folderId: b.folderId,
+        deletedAt: b.deletedAt,
+      );
 
   const VaultEntry({
     required this.id,
@@ -194,19 +173,18 @@ class VaultEntry {
     bool clearFolderId = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
-  }) =>
-      VaultEntry(
-        id: id,
-        title: title ?? this.title,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        type: type,
-        customFields: customFields ?? this.customFields,
-        tags: tags ?? this.tags,
-        isFavorite: isFavorite ?? this.isFavorite,
-        folderId: clearFolderId ? null : (folderId ?? this.folderId),
-        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-      );
+  }) => VaultEntry(
+    id: id,
+    title: title ?? this.title,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    type: type,
+    customFields: customFields ?? this.customFields,
+    tags: tags ?? this.tags,
+    isFavorite: isFavorite ?? this.isFavorite,
+    folderId: clearFolderId ? null : (folderId ?? this.folderId),
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+  );
 
   factory VaultEntry.fromJson(Map<String, dynamic> json) =>
       VaultEntry.base(VaultBaseData.fromJson(json));
@@ -311,25 +289,24 @@ class LoginEntry extends VaultEntry {
     bool clearTotpSecret = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
-  }) =>
-      LoginEntry(
-        id: id,
-        title: title ?? this.title,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        type: type,
-        customFields: customFields ?? this.customFields,
-        tags: tags ?? this.tags,
-        isFavorite: isFavorite ?? this.isFavorite,
-        folderId: clearFolderId ? null : (folderId ?? this.folderId),
-        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-        username: username ?? this.username,
-        email: email ?? this.email,
-        password: clearPassword ? null : (password ?? this.password),
-        url: url ?? this.url,
-        totpSecret: clearTotpSecret ? null : (totpSecret ?? this.totpSecret),
-        notes: notes ?? this.notes,
-      );
+  }) => LoginEntry(
+    id: id,
+    title: title ?? this.title,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    type: type,
+    customFields: customFields ?? this.customFields,
+    tags: tags ?? this.tags,
+    isFavorite: isFavorite ?? this.isFavorite,
+    folderId: clearFolderId ? null : (folderId ?? this.folderId),
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    username: username ?? this.username,
+    email: email ?? this.email,
+    password: clearPassword ? null : (password ?? this.password),
+    url: url ?? this.url,
+    totpSecret: clearTotpSecret ? null : (totpSecret ?? this.totpSecret),
+    notes: notes ?? this.notes,
+  );
 
   @override
   Map<String, dynamic> toJson() => {
@@ -356,9 +333,15 @@ class LoginEntry extends VaultEntry {
       other is LoginEntry && super == other && _fieldsEqual(other);
 
   @override
-  int get hashCode =>
-      Object.hash(super.hashCode, username, email, password, url, totpSecret,
-          notes);
+  int get hashCode => Object.hash(
+    super.hashCode,
+    username,
+    email,
+    password,
+    url,
+    totpSecret,
+    notes,
+  );
 }
 
 class BankCardEntry extends VaultEntry {
@@ -440,26 +423,25 @@ class BankCardEntry extends VaultEntry {
     bool clearCvv = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
-  }) =>
-      BankCardEntry(
-        id: id,
-        title: title ?? this.title,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        type: type,
-        customFields: customFields ?? this.customFields,
-        tags: tags ?? this.tags,
-        isFavorite: isFavorite ?? this.isFavorite,
-        folderId: clearFolderId ? null : (folderId ?? this.folderId),
-        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-        cardNumber: clearCardNumber ? null : (cardNumber ?? this.cardNumber),
-        cardHolderName: cardHolderName ?? this.cardHolderName,
-        expiryMonth: expiryMonth ?? this.expiryMonth,
-        expiryYear: expiryYear ?? this.expiryYear,
-        cvv: clearCvv ? null : (cvv ?? this.cvv),
-        bankName: bankName ?? this.bankName,
-        cardType: cardType ?? this.cardType,
-      );
+  }) => BankCardEntry(
+    id: id,
+    title: title ?? this.title,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    type: type,
+    customFields: customFields ?? this.customFields,
+    tags: tags ?? this.tags,
+    isFavorite: isFavorite ?? this.isFavorite,
+    folderId: clearFolderId ? null : (folderId ?? this.folderId),
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    cardNumber: clearCardNumber ? null : (cardNumber ?? this.cardNumber),
+    cardHolderName: cardHolderName ?? this.cardHolderName,
+    expiryMonth: expiryMonth ?? this.expiryMonth,
+    expiryYear: expiryYear ?? this.expiryYear,
+    cvv: clearCvv ? null : (cvv ?? this.cvv),
+    bankName: bankName ?? this.bankName,
+    cardType: cardType ?? this.cardType,
+  );
 
   @override
   Map<String, dynamic> toJson() => {
@@ -488,19 +470,24 @@ class BankCardEntry extends VaultEntry {
       other is BankCardEntry && super == other && _fieldsEqual(other);
 
   @override
-  int get hashCode => Object.hash(super.hashCode, cardNumber, cardHolderName,
-      expiryMonth, expiryYear, cvv, bankName, cardType);
+  int get hashCode => Object.hash(
+    super.hashCode,
+    cardNumber,
+    cardHolderName,
+    expiryMonth,
+    expiryYear,
+    cvv,
+    bankName,
+    cardType,
+  );
 }
 
 class SecureNoteEntry extends VaultEntry {
   final String? content;
   final bool isMarkdown;
 
-  SecureNoteEntry.base(
-    super.b, {
-    this.content,
-    this.isMarkdown = false,
-  }) : super.base();
+  SecureNoteEntry.base(super.b, {this.content, this.isMarkdown = false})
+    : super.base();
 
   const SecureNoteEntry({
     required super.id,
@@ -540,21 +527,20 @@ class SecureNoteEntry extends VaultEntry {
     bool clearContent = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
-  }) =>
-      SecureNoteEntry(
-        id: id,
-        title: title ?? this.title,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        type: type,
-        customFields: customFields ?? this.customFields,
-        tags: tags ?? this.tags,
-        isFavorite: isFavorite ?? this.isFavorite,
-        folderId: clearFolderId ? null : (folderId ?? this.folderId),
-        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-        content: clearContent ? null : (content ?? this.content),
-        isMarkdown: isMarkdown ?? this.isMarkdown,
-      );
+  }) => SecureNoteEntry(
+    id: id,
+    title: title ?? this.title,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    type: type,
+    customFields: customFields ?? this.customFields,
+    tags: tags ?? this.tags,
+    isFavorite: isFavorite ?? this.isFavorite,
+    folderId: clearFolderId ? null : (folderId ?? this.folderId),
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    content: clearContent ? null : (content ?? this.content),
+    isMarkdown: isMarkdown ?? this.isMarkdown,
+  );
 
   @override
   Map<String, dynamic> toJson() => {
@@ -655,27 +641,26 @@ class IdentityEntry extends VaultEntry {
     bool clearIdNumber = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
-  }) =>
-      IdentityEntry(
-        id: id,
-        title: title ?? this.title,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        type: type,
-        customFields: customFields ?? this.customFields,
-        tags: tags ?? this.tags,
-        isFavorite: isFavorite ?? this.isFavorite,
-        folderId: clearFolderId ? null : (folderId ?? this.folderId),
-        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-        firstName: firstName ?? this.firstName,
-        lastName: lastName ?? this.lastName,
-        middleName: middleName ?? this.middleName,
-        birthDate: birthDate ?? this.birthDate,
-        idNumber: clearIdNumber ? null : (idNumber ?? this.idNumber),
-        address: address ?? this.address,
-        phone: phone ?? this.phone,
-        email: email ?? this.email,
-      );
+  }) => IdentityEntry(
+    id: id,
+    title: title ?? this.title,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    type: type,
+    customFields: customFields ?? this.customFields,
+    tags: tags ?? this.tags,
+    isFavorite: isFavorite ?? this.isFavorite,
+    folderId: clearFolderId ? null : (folderId ?? this.folderId),
+    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    firstName: firstName ?? this.firstName,
+    lastName: lastName ?? this.lastName,
+    middleName: middleName ?? this.middleName,
+    birthDate: birthDate ?? this.birthDate,
+    idNumber: clearIdNumber ? null : (idNumber ?? this.idNumber),
+    address: address ?? this.address,
+    phone: phone ?? this.phone,
+    email: email ?? this.email,
+  );
 
   @override
   Map<String, dynamic> toJson() => {
@@ -706,6 +691,15 @@ class IdentityEntry extends VaultEntry {
       other is IdentityEntry && super == other && _fieldsEqual(other);
 
   @override
-  int get hashCode => Object.hash(super.hashCode, firstName, lastName,
-      middleName, birthDate, idNumber, address, phone, email);
+  int get hashCode => Object.hash(
+    super.hashCode,
+    firstName,
+    lastName,
+    middleName,
+    birthDate,
+    idNumber,
+    address,
+    phone,
+    email,
+  );
 }

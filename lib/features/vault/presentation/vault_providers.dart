@@ -1,9 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/vault_service.dart';
-import '../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../domain/vault_notifier.dart';
-import '../domain/search/entry_search_strategy.dart';
 import '../../auth/presentation/auth_providers.dart';
 
 /// Vault 服务提供者
@@ -19,8 +18,9 @@ final vaultServiceProvider = Provider<VaultService>((ref) {
 /// 创建时接线 [SessionKeyBridge]：
 /// - 密钥发布（解锁/改密）→ 加载保险库 / 重加密；
 /// - 密钥回收（锁定）→ 清空内存态。
-final vaultNotifierProvider =
-    StateNotifierProvider<VaultNotifier, VaultState>((ref) {
+final vaultNotifierProvider = StateNotifierProvider<VaultNotifier, VaultState>((
+  ref,
+) {
   final notifier = VaultNotifier(ref.watch(vaultServiceProvider));
   final bridge = ref.watch(sessionKeyBridgeProvider);
 
@@ -82,14 +82,20 @@ final vaultTrashedEntriesProvider = Provider<List<VaultEntry>>((ref) {
 });
 
 /// 按类型筛选的条目列表
-final vaultEntriesByTypeProvider =
-    Provider.family<List<VaultEntry>, EntryType>((ref, type) {
-  return ref.watch(vaultEntriesProvider).where((e) => e.type == type).toList();
-});
+final vaultEntriesByTypeProvider = Provider.family<List<VaultEntry>, EntryType>(
+  (ref, type) {
+    return ref
+        .watch(vaultEntriesProvider)
+        .where((e) => e.type == type)
+        .toList();
+  },
+);
 
 /// 搜索结果（空查询返回全部）
-final vaultSearchProvider =
-    Provider.family<List<VaultEntry>, String>((ref, query) {
+final vaultSearchProvider = Provider.family<List<VaultEntry>, String>((
+  ref,
+  query,
+) {
   if (query.isEmpty) return ref.watch(vaultEntriesProvider);
 
   final lowerQuery = query.toLowerCase();
@@ -97,10 +103,13 @@ final vaultSearchProvider =
 
   return ref
       .watch(vaultEntriesProvider)
-      .where((entry) =>
-          basicStrategy.matches(entry, lowerQuery) ||
-          SearchStrategyFactory.getStrategy(entry.type)
-              .matches(entry, lowerQuery))
+      .where(
+        (entry) =>
+            basicStrategy.matches(entry, lowerQuery) ||
+            SearchStrategyFactory.getStrategy(
+              entry.type,
+            ).matches(entry, lowerQuery),
+      )
       .toList();
 });
 
@@ -132,8 +141,7 @@ final vaultStatsProvider = Provider<Map<String, int>>((ref) {
 });
 
 /// 单个条目（路由参数驱动）
-final vaultEntryByIdProvider =
-    Provider.family<VaultEntry?, String>((ref, id) {
+final vaultEntryByIdProvider = Provider.family<VaultEntry?, String>((ref, id) {
   for (final entry in ref.watch(vaultEntriesProvider)) {
     if (entry.id == id) return entry;
   }

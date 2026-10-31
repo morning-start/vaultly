@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/core/exceptions/app_exception.dart';
-import 'package:vaultly/features/auth/data/crypto_service.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 备份信封（跨设备恢复）回归测试
 ///
@@ -16,12 +15,12 @@ import 'package:vaultly/features/auth/data/crypto_service.dart';
 void main() {
   /// 低强度参数：参数由文件头显式给出，测试里不需要 64MB 的开销
   KdfParams lightParams(Uint8List salt) => KdfParams(
-        salt: salt,
-        memoryPowerOf2: 10,
-        iterations: 1,
-        parallelism: 1,
-        keyLength: 32,
-      );
+    salt: salt,
+    memoryPowerOf2: 10,
+    iterations: 1,
+    parallelism: 1,
+    keyLength: 32,
+  );
 
   const password = 'correct horse battery staple';
   const payload = '{"version":1,"entries":[{"type":"login","title":"GitHub"}]}';
@@ -48,20 +47,14 @@ void main() {
       final params = lightParams(CryptoService.generateSalt()).toJson();
       params['memoryPowerOf2'] = 40;
 
-      expect(
-        () => KdfParams.fromJson(params),
-        throwsA(isA<FormatException>()),
-      );
+      expect(() => KdfParams.fromJson(params), throwsA(isA<FormatException>()));
     });
 
     test('盐值过短应拒绝', () {
       final params = lightParams(CryptoService.generateSalt()).toJson();
       params['salt'] = base64Encode(Uint8List(8));
 
-      expect(
-        () => KdfParams.fromJson(params),
-        throwsA(isA<FormatException>()),
-      );
+      expect(() => KdfParams.fromJson(params), throwsA(isA<FormatException>()));
     });
 
     test('字段缺失应拒绝', () {
@@ -113,8 +106,7 @@ void main() {
 
       // 设备 B：本机盐值完全不同（新手机设同一个主密码时随机生成）
       final kdfB = lightParams(CryptoService.generateSalt());
-      expect(kdfA.matches(kdfB), isFalse,
-          reason: '两台设备的盐值本来就应该不同');
+      expect(kdfA.matches(kdfB), isFalse, reason: '两台设备的盐值本来就应该不同');
 
       // 设备 B 用旧做法（只用本机盐派生）必然失败——这就是原始 bug
       final keyB = CryptoService.deriveKeyWithKdfParams(password, kdfB);
@@ -129,8 +121,15 @@ void main() {
         envelope.kdf,
       );
 
-      expect(recoveredKey, equals(keyA), reason: '同一个主密码 + 同一套 KDF 参数必须派生出同一把密钥');
-      expect(CryptoService.decryptEnvelope(envelope, recoveredKey), equals(payload));
+      expect(
+        recoveredKey,
+        equals(keyA),
+        reason: '同一个主密码 + 同一套 KDF 参数必须派生出同一把密钥',
+      );
+      expect(
+        CryptoService.decryptEnvelope(envelope, recoveredKey),
+        equals(payload),
+      );
     });
 
     test('主密码错误应抛出 CryptoException 而不是裸露的底层异常', () {

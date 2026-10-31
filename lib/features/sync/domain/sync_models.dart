@@ -78,7 +78,9 @@ class SyncConfig {
         (e) => e.name == json['syncMode'],
         orElse: () => SyncMode.manual,
       ),
-      autoSyncInterval: Duration(minutes: json['autoSyncIntervalMinutes'] as int? ?? 30),
+      autoSyncInterval: Duration(
+        minutes: json['autoSyncIntervalMinutes'] as int? ?? 30,
+      ),
       syncOnChange: json['syncOnChange'] as bool? ?? false,
       syncOnStartup: json['syncOnStartup'] as bool? ?? false,
       isEnabled: json['isEnabled'] as bool? ?? true,
@@ -114,19 +116,19 @@ class SyncConfig {
 /// 注意（ADR-004）：auto/manual 当前实际语义均为上传备份，
 /// 字段级双向合并尚未实现。
 enum SyncMode {
-  auto,       // 自动上传（暂不支持双向合并）
-  manual,     // 手动触发（上传备份）
+  auto, // 自动上传（暂不支持双向合并）
+  manual, // 手动触发（上传备份）
   uploadOnly, // 仅上传（备份模式）
   downloadOnly, // 仅下载（恢复模式）
 }
 
 /// 同步状态
 enum SyncStatus {
-  idle,       // 空闲
-  syncing,    // 同步中
-  success,    // 同步成功
-  failed,     // 同步失败
-  conflict,   // 存在冲突
+  idle, // 空闲
+  syncing, // 同步中
+  success, // 同步成功
+  failed, // 同步失败
+  conflict, // 存在冲突
 }
 
 /// 同步状态详情
@@ -217,17 +219,11 @@ class SyncResult {
   }
 
   factory SyncResult.failure(String errorMessage) {
-    return SyncResult(
-      success: false,
-      errorMessage: errorMessage,
-    );
+    return SyncResult(success: false, errorMessage: errorMessage);
   }
 
   factory SyncResult.withConflicts(List<SyncConflict> conflicts) {
-    return SyncResult(
-      success: false,
-      conflicts: conflicts,
-    );
+    return SyncResult(success: false, conflicts: conflicts);
   }
 }
 
@@ -250,18 +246,18 @@ class SyncConflict {
 
 /// 冲突类型
 enum ConflictType {
-  modifyModify,   // 本地和远程都修改
-  deleteModify,   // 本地删除，远程修改
-  modifyDelete,   // 本地修改，远程删除
-  addAdd,         // 本地和远程都添加相同ID
+  modifyModify, // 本地和远程都修改
+  deleteModify, // 本地删除，远程修改
+  modifyDelete, // 本地修改，远程删除
+  addAdd, // 本地和远程都添加相同ID
 }
 
 /// 冲突解决策略
 enum ConflictResolution {
-  keepLocal,    // 保留本地
-  keepRemote,   // 保留远程
-  merge,        // 合并
-  skip,         // 跳过
+  keepLocal, // 保留本地
+  keepRemote, // 保留远程
+  merge, // 合并
+  skip, // 跳过
 }
 
 /// 连接结果
@@ -270,24 +266,14 @@ class ConnectionResult {
   final String? errorMessage;
   final ServerInfo? serverInfo;
 
-  ConnectionResult({
-    required this.success,
-    this.errorMessage,
-    this.serverInfo,
-  });
+  ConnectionResult({required this.success, this.errorMessage, this.serverInfo});
 
   factory ConnectionResult.success([ServerInfo? serverInfo]) {
-    return ConnectionResult(
-      success: true,
-      serverInfo: serverInfo,
-    );
+    return ConnectionResult(success: true, serverInfo: serverInfo);
   }
 
   factory ConnectionResult.failure(String errorMessage) {
-    return ConnectionResult(
-      success: false,
-      errorMessage: errorMessage,
-    );
+    return ConnectionResult(success: false, errorMessage: errorMessage);
   }
 }
 
@@ -297,11 +283,7 @@ class ServerInfo {
   final String? serverVersion;
   final int? maxFileSize;
 
-  ServerInfo({
-    this.serverName,
-    this.serverVersion,
-    this.maxFileSize,
-  });
+  ServerInfo({this.serverName, this.serverVersion, this.maxFileSize});
 }
 
 /// 同步历史记录

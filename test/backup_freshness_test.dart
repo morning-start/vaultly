@@ -90,7 +90,9 @@ void main() {
       await repo.updateLastUploadKeyTag('tag-a');
 
       expect(
-        await orchestratorWith(repo).isRemoteBackupStale(currentKeyTag: 'tag-a'),
+        await orchestratorWith(
+          repo,
+        ).isRemoteBackupStale(currentKeyTag: 'tag-a'),
         isFalse,
       );
     });
@@ -100,8 +102,9 @@ void main() {
       await repo.updateLastUploadKeyTag('tag-old');
 
       expect(
-        await orchestratorWith(repo)
-            .isRemoteBackupStale(currentKeyTag: 'tag-new'),
+        await orchestratorWith(
+          repo,
+        ).isRemoteBackupStale(currentKeyTag: 'tag-new'),
         isTrue,
       );
     });
@@ -112,12 +115,16 @@ void main() {
       storage.store['webdav_last_upload_key_tag'] = 'old-scheme-tag';
 
       final repo = freshRepo();
-      expect(await repo.getLastUploadKeyTag(), isNull,
-          reason: '方案不匹配的旧值必须当作未知');
+      expect(
+        await repo.getLastUploadKeyTag(),
+        isNull,
+        reason: '方案不匹配的旧值必须当作未知',
+      );
 
       expect(
-        await orchestratorWith(repo)
-            .isRemoteBackupStale(currentKeyTag: 'new-scheme-tag'),
+        await orchestratorWith(
+          repo,
+        ).isRemoteBackupStale(currentKeyTag: 'new-scheme-tag'),
         isFalse,
         reason: '宁可漏报也不能误报——误报会把用户引向一次无意义的重传',
       );
@@ -129,7 +136,9 @@ void main() {
 
       expect(await repo.getLastUploadKeyTag(), equals('tag-a'));
       expect(
-        await orchestratorWith(repo).isRemoteBackupStale(currentKeyTag: 'tag-a'),
+        await orchestratorWith(
+          repo,
+        ).isRemoteBackupStale(currentKeyTag: 'tag-a'),
         isFalse,
       );
     });
@@ -151,8 +160,9 @@ void main() {
 
       final orchestrator = orchestratorWith(repo);
       expect(
-        await orchestrator
-            .isRemoteBackupStale(currentKeyTag: await authService.currentKeyTag()),
+        await orchestrator.isRemoteBackupStale(
+          currentKeyTag: await authService.currentKeyTag(),
+        ),
         isFalse,
         reason: '刚上传过，此时不应提示过期',
       );
@@ -161,8 +171,9 @@ void main() {
       await authService.changePassword('old-password', 'new-password');
 
       expect(
-        await orchestrator
-            .isRemoteBackupStale(currentKeyTag: await authService.currentKeyTag()),
+        await orchestrator.isRemoteBackupStale(
+          currentKeyTag: await authService.currentKeyTag(),
+        ),
         isTrue,
         reason: '改密后必须提示重新上传，否则当前主密码打不开云端备份',
       );
@@ -170,8 +181,9 @@ void main() {
       // 3. 用新密码重新上传 → 提示消失
       await repo.updateLastUploadKeyTag((await authService.currentKeyTag())!);
       expect(
-        await orchestrator
-            .isRemoteBackupStale(currentKeyTag: await authService.currentKeyTag()),
+        await orchestrator.isRemoteBackupStale(
+          currentKeyTag: await authService.currentKeyTag(),
+        ),
         isFalse,
       );
     });

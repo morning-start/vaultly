@@ -3,7 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vaultly/features/vault/data/vault_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'package:vaultly/features/vault/domain/vault_notifier.dart';
 
 import 'package:vaultly/features/vault/presentation/vault_providers.dart';
@@ -27,10 +27,7 @@ void main() {
     VaultService.reset();
   });
 
-  VaultEntry login({
-    String id = 'login-1',
-    String password = 'P@ss!',
-  }) =>
+  VaultEntry login({String id = 'login-1', String password = 'P@ss!'}) =>
       LoginEntry(
         id: id,
         title: '登录条目',
@@ -46,10 +43,7 @@ void main() {
   group('VaultService 基线', () {
     test('未设置密钥时 loadVault 抛 VaultException.keyNotSet', () async {
       final service = freshService();
-      expect(
-        service.loadVault(),
-        throwsA(isA<Exception>()),
-      );
+      expect(service.loadVault(), throwsA(isA<Exception>()));
     });
 
     test('addEntry 后加密持久化，磁盘上无明文 password', () async {
@@ -116,7 +110,8 @@ void main() {
       expect(service.trashedEntries.single.id, id);
 
       final json = persistedVaultJson(storage);
-      final persisted = (json['entries'] as List).single as Map<String, dynamic>;
+      final persisted =
+          (json['entries'] as List).single as Map<String, dynamic>;
       expect(persisted['deletedAt'], isNotNull);
     });
 
@@ -151,8 +146,7 @@ void main() {
       container.dispose();
     });
 
-    VaultNotifier notifier() =>
-        container.read(vaultNotifierProvider.notifier);
+    VaultNotifier notifier() => container.read(vaultNotifierProvider.notifier);
 
     test('unlock 加载条目，lock 清空内存态', () async {
       final service = freshService();
@@ -191,8 +185,11 @@ void main() {
       final ok2 = await n.addEntry(login(id: 'login-2'));
       expect(ok2, isFalse);
       expect(container.read(vaultNotifierProvider).error, isNotNull);
-      expect(container.read(vaultNotifierProvider).entries.length, snapshotLen,
-          reason: '失败后内存快照必须回滚到写前状态');
+      expect(
+        container.read(vaultNotifierProvider).entries.length,
+        snapshotLen,
+        reason: '失败后内存快照必须回滚到写前状态',
+      );
     });
 
     test('rotateKey 用新密钥重加密并持久化', () async {

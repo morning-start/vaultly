@@ -18,8 +18,9 @@ final biometricServiceProvider = Provider<BiometricService>((ref) {
 ///
 /// 位于 auth/presentation 层的顶层组装文件中，
 /// 是两个 feature 之间唯一允许的耦合点（依赖倒置：双方只依赖本文件）。
-final sessionKeyBridgeProvider =
-    Provider<SessionKeyBridge>((ref) => SessionKeyBridge());
+final sessionKeyBridgeProvider = Provider<SessionKeyBridge>(
+  (ref) => SessionKeyBridge(),
+);
 
 /// 会话密钥桥
 ///
@@ -93,8 +94,9 @@ class SessionKeyBridge {
 /// - 解锁/设置密码/改密成功 → publish 密钥；
 /// - 锁定/清除数据 → revoke 密钥。
 /// auth 模块不 import vault 模块，依赖方向保持单向。
-final authNotifierProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((
+  ref,
+) {
   final authService = ref.watch(authServiceProvider);
   final biometricService = ref.watch(biometricServiceProvider);
   final bridge = ref.watch(sessionKeyBridgeProvider);

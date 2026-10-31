@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vaultly/features/vault/data/vault_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'package:vaultly/features/vault/presentation/trash_page.dart';
 import 'package:vaultly/features/vault/presentation/vault_providers.dart';
 import 'package:vaultly/ui/theme/app_theme.dart';
@@ -61,10 +61,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
-          theme: AppTheme.darkTheme,
-          home: const TrashPage(),
-        ),
+        child: MaterialApp(theme: AppTheme.darkTheme, home: const TrashPage()),
       ),
     );
     await tester.pump(const Duration(milliseconds: 50));
@@ -102,10 +99,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
-          theme: AppTheme.darkTheme,
-          home: const TrashPage(),
-        ),
+        child: MaterialApp(theme: AppTheme.darkTheme, home: const TrashPage()),
       ),
     );
     await tester.pump(const Duration(milliseconds: 50));
@@ -117,14 +111,10 @@ void main() {
   testWidgets('墓碑不会出现在条目列表、搜索与统计里', (tester) async {
     final container = await seededContainer();
 
-    expect(
-      container.read(vaultEntriesProvider).map((e) => e.id),
-      ['live-id'],
-    );
-    expect(
-      container.read(vaultSearchProvider('')).map((e) => e.id),
-      ['live-id'],
-    );
+    expect(container.read(vaultEntriesProvider).map((e) => e.id), ['live-id']);
+    expect(container.read(vaultSearchProvider('')).map((e) => e.id), [
+      'live-id',
+    ]);
     expect(container.read(vaultStatsProvider)['total'], 1);
     expect(container.read(vaultTrashedEntriesProvider).map((e) => e.id), [
       'gone-id',

@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../data/vault_service.dart';
-import '../../../core/exceptions/app_exception.dart';
 
 /// 保险库状态
 ///
@@ -57,15 +56,14 @@ class VaultState {
     String? error,
     bool? recoveredFromBackup,
     bool clearError = false,
-  }) =>
-      VaultState(
-        isLoaded: isLoaded ?? this.isLoaded,
-        revision: revision ?? this.revision,
-        entries: entries ?? this.entries,
-        allEntries: allEntries ?? this.allEntries,
-        error: clearError ? null : (error ?? this.error),
-        recoveredFromBackup: recoveredFromBackup ?? this.recoveredFromBackup,
-      );
+  }) => VaultState(
+    isLoaded: isLoaded ?? this.isLoaded,
+    revision: revision ?? this.revision,
+    entries: entries ?? this.entries,
+    allEntries: allEntries ?? this.allEntries,
+    error: clearError ? null : (error ?? this.error),
+    recoveredFromBackup: recoveredFromBackup ?? this.recoveredFromBackup,
+  );
 }
 
 /// 保险库状态管理器

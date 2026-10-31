@@ -141,16 +141,16 @@ final autoLockServiceProvider = Provider<AutoLockService>((ref) {
 /// 通过 SessionKeyBridge revoke 密钥 → VaultNotifier 清空内存态。
 final autoLockNotifierProvider =
     StateNotifierProvider<AutoLockNotifier, AutoLockState>((ref) {
-  final service = ref.watch(autoLockServiceProvider);
-  final notifier = AutoLockNotifier(service);
+      final service = ref.watch(autoLockServiceProvider);
+      final notifier = AutoLockNotifier(service);
 
-  service.onLockRequested = () {
-    notifier.stopMonitoring();
-    ref.read(authNotifierProvider.notifier).lock();
-  };
+      service.onLockRequested = () {
+        notifier.stopMonitoring();
+        ref.read(authNotifierProvider.notifier).lock();
+      };
 
-  return notifier;
-});
+      return notifier;
+    });
 
 /// 全局活动监听器 Widget
 ///
@@ -159,10 +159,7 @@ final autoLockNotifierProvider =
 class AutoLockActivityListener extends ConsumerStatefulWidget {
   final Widget child;
 
-  const AutoLockActivityListener({
-    super.key,
-    required this.child,
-  });
+  const AutoLockActivityListener({super.key, required this.child});
 
   @override
   ConsumerState<AutoLockActivityListener> createState() =>

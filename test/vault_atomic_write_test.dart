@@ -3,9 +3,8 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'package:vaultly/features/vault/data/vault_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
 
 import 'helpers/mock_secure_storage.dart';
 
@@ -32,13 +31,13 @@ void main() {
   tearDown(VaultService.reset);
 
   VaultEntry login(String id) => LoginEntry(
-        id: id,
-        title: '条目 $id',
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-        username: 'user-$id',
-        password: 'secret-$id',
-      );
+    id: id,
+    title: '条目 $id',
+    createdAt: DateTime(2026, 1, 1),
+    updatedAt: DateTime(2026, 1, 1),
+    username: 'user-$id',
+    password: 'secret-$id',
+  );
 
   VaultService freshService() {
     final service = VaultService(secureStorage: const FlutterSecureStorage());
@@ -57,8 +56,7 @@ void main() {
       await service.addEntry(login('a'));
 
       expect(storage.store[mainKey], isNotNull);
-      expect(storage.store[prevKey], isNotNull,
-          reason: '首次保存也要有可回退的副本');
+      expect(storage.store[prevKey], isNotNull, reason: '首次保存也要有可回退的副本');
       expect(entryCountOf(storage.store[mainKey]), equals(1));
     });
 
@@ -100,8 +98,11 @@ void main() {
       storage.failNextWrite = true;
       await expectLater(service.addEntry(login('b')), throwsA(anything));
 
-      expect(storage.store[mainKey], equals(mainBefore),
-          reason: '主存储区最后才写，前面的失败不应动到它');
+      expect(
+        storage.store[mainKey],
+        equals(mainBefore),
+        reason: '主存储区最后才写，前面的失败不应动到它',
+      );
     });
 
     test('失败后重新保存应能正常写入', () async {
@@ -132,8 +133,7 @@ void main() {
       await reloaded.loadVault();
 
       expect(reloaded.recoveredFromPrevious, isTrue);
-      expect(reloaded.entries.length, equals(1),
-          reason: '回退到的是上一次成功写入的版本');
+      expect(reloaded.entries.length, equals(1), reason: '回退到的是上一次成功写入的版本');
       expect(reloaded.entries.first.id, equals('a'));
     });
 
@@ -169,8 +169,11 @@ void main() {
       final reloaded = freshService();
       await reloaded.loadVault();
 
-      expect(reloaded.recoveredFromPrevious, isTrue,
-          reason: '解密失败也必须走回退，不能直接判成数据丢失');
+      expect(
+        reloaded.recoveredFromPrevious,
+        isTrue,
+        reason: '解密失败也必须走回退，不能直接判成数据丢失',
+      );
       expect(reloaded.entries.first.id, equals('a'));
     });
 
@@ -198,10 +201,7 @@ void main() {
 
       final service = freshService();
 
-      await expectLater(
-        service.loadVault(),
-        throwsA(isA<VaultException>()),
-      );
+      await expectLater(service.loadVault(), throwsA(isA<VaultException>()));
     });
   });
 }

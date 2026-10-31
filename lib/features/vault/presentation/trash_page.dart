@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../domain/vault_entry.dart';
-import '../domain/vault_tombstone.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'vault_providers.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
@@ -42,9 +41,9 @@ class _TrashPageState extends ConsumerState<TrashPage> {
     WidgetRef ref,
     VaultEntry entry,
   ) async {
-    final ok = await ref.read(vaultNotifierProvider.notifier).restoreEntry(
-          entry.id,
-        );
+    final ok = await ref
+        .read(vaultNotifierProvider.notifier)
+        .restoreEntry(entry.id);
     if (!context.mounted) return;
     AppToast.show(context, ok ? '已恢复「${entry.title}」' : '恢复失败，请重试');
   }
@@ -64,9 +63,9 @@ class _TrashPageState extends ConsumerState<TrashPage> {
     );
     if (confirmed != true || !context.mounted) return;
 
-    final ok = await ref.read(vaultNotifierProvider.notifier).purgeEntry(
-          entry.id,
-        );
+    final ok = await ref
+        .read(vaultNotifierProvider.notifier)
+        .purgeEntry(entry.id);
     if (!context.mounted) return;
     AppToast.show(context, ok ? '已彻底删除' : '删除失败，请重试');
   }

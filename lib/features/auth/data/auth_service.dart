@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'biometric_service.dart';
-import 'crypto_service.dart';
-import '../../../core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 认证服务 - 纯业务逻辑
 ///
@@ -42,8 +41,8 @@ class AuthService {
   AuthService({
     FlutterSecureStorage? secureStorage,
     BiometricService? biometricService,
-  })  : _secureStorage = secureStorage ?? _createSecureStorage(),
-        _biometricService = biometricService ?? BiometricService();
+  }) : _secureStorage = secureStorage ?? _createSecureStorage(),
+       _biometricService = biometricService ?? BiometricService();
 
   static FlutterSecureStorage _createSecureStorage() {
     return const FlutterSecureStorage(
@@ -78,10 +77,7 @@ class AuthService {
 
   Future<void> _writeKdfParams(KdfParams params) async {
     // 盐值单独保留一份，兼容老版本读取路径
-    await _secureStorage.write(
-      key: _keySalt,
-      value: base64Encode(params.salt),
-    );
+    await _secureStorage.write(key: _keySalt, value: base64Encode(params.salt));
     await _secureStorage.write(
       key: _keyKdfParams,
       value: jsonEncode(params.toJson()),
@@ -228,9 +224,7 @@ class AuthService {
 
     await _writeVerifier(keyMaterial);
     await _secureStorage.delete(key: _keyLegacyVerificationHash);
-    debugPrint(
-      'AuthService: 校验值已升级为 Argon2id + HKDF 派生（sha256 值已删除）',
-    );
+    debugPrint('AuthService: 校验值已升级为 Argon2id + HKDF 派生（sha256 值已删除）');
     return keyMaterial;
   }
 
@@ -318,18 +312,27 @@ class AuthService {
     final attemptsStr = await _secureStorage.read(key: _keyFailedAttempts);
     final attempts = (int.tryParse(attemptsStr ?? '0') ?? 0) + 1;
 
-    await _secureStorage.write(key: _keyFailedAttempts, value: attempts.toString());
+    await _secureStorage.write(
+      key: _keyFailedAttempts,
+      value: attempts.toString(),
+    );
 
     if (attempts >= maxAttemptsBeforeLongLock) {
       final lockedUntil = DateTime.now().add(
         const Duration(minutes: longLockDurationMinutes),
       );
-      await _secureStorage.write(key: _keyLockedUntil, value: lockedUntil.toIso8601String());
+      await _secureStorage.write(
+        key: _keyLockedUntil,
+        value: lockedUntil.toIso8601String(),
+      );
     } else if (attempts >= maxAttemptsBeforeShortLock) {
       final lockedUntil = DateTime.now().add(
         const Duration(minutes: shortLockDurationMinutes),
       );
-      await _secureStorage.write(key: _keyLockedUntil, value: lockedUntil.toIso8601String());
+      await _secureStorage.write(
+        key: _keyLockedUntil,
+        value: lockedUntil.toIso8601String(),
+      );
     }
   }
 
@@ -421,7 +424,9 @@ class AuthService {
         throw AuthException.biometricFailed();
       }
 
-      final keyBase64 = await _secureStorage.read(key: _keyBiometricEncryptionKey);
+      final keyBase64 = await _secureStorage.read(
+        key: _keyBiometricEncryptionKey,
+      );
       if (keyBase64 == null || keyBase64.isEmpty) {
         throw AuthException.biometricFailed('加密密钥不存在，需要重新设置密码');
       }
@@ -461,10 +466,7 @@ class AuthService {
     try {
       final isPasswordSet = await this.isPasswordSet();
       if (!isPasswordSet) {
-        return const BiometricUnavailable(
-          available: false,
-          reason: '未设置主密码',
-        );
+        return const BiometricUnavailable(available: false, reason: '未设置主密码');
       }
 
       final isDeviceAvailable = await _biometricService.isBiometricEnrolled();
@@ -480,10 +482,7 @@ class AuthService {
       final typeName = await _biometricService.getBiometricTypeName();
 
       if (isUserEnabled) {
-        return BiometricAvailable(
-          available: true,
-          biometricTypeName: typeName,
-        );
+        return BiometricAvailable(available: true, biometricTypeName: typeName);
       } else {
         return BiometricAvailable(
           available: false,
@@ -492,10 +491,7 @@ class AuthService {
         );
       }
     } on Exception catch (e) {
-      return BiometricUnavailable(
-        available: false,
-        reason: e.toString(),
-      );
+      return BiometricUnavailable(available: false, reason: e.toString());
     }
   }
 
@@ -520,8 +516,8 @@ class AuthService {
     final keyMaterial = CryptoService.generateKeyMaterial(newPassword);
 
     // 复用已有 DEK；没有（迁移未完成）则新建
-    final dek = await _readDek(verified.masterSecret) ??
-        CryptoService.generateDek();
+    final dek =
+        await _readDek(verified.masterSecret) ?? CryptoService.generateDek();
     await _writeWrappedDek(dek, keyMaterial.key);
 
     await _writeVerifier(keyMaterial);
@@ -594,10 +590,7 @@ class LockStatus {
   final bool isLocked;
   final int remainingMinutes;
 
-  LockStatus({
-    required this.isLocked,
-    this.remainingMinutes = 0,
-  });
+  LockStatus({required this.isLocked, this.remainingMinutes = 0});
 }
 
 /// 生物识别可用性抽象类
@@ -605,10 +598,7 @@ abstract class BiometricAvailability {
   final bool available;
   final String? reason;
 
-  const BiometricAvailability({
-    required this.available,
-    this.reason,
-  });
+  const BiometricAvailability({required this.available, this.reason});
 }
 
 /// 生物识别可用
@@ -624,8 +614,5 @@ class BiometricAvailable extends BiometricAvailability {
 
 /// 生物识别不可用
 class BiometricUnavailable extends BiometricAvailability {
-  const BiometricUnavailable({
-    required super.available,
-    required super.reason,
-  });
+  const BiometricUnavailable({required super.available, required super.reason});
 }
