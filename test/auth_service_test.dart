@@ -12,11 +12,17 @@ void main() {
       final storedSalt = keyMaterial.salt;
 
       // 模拟登录过程 - 使用相同的密码和盐值派生密钥材料
-      final computedKeyMaterial = CryptoService.deriveKeyMaterial(password, storedSalt);
+      final computedKeyMaterial = CryptoService.deriveKeyMaterial(
+        password,
+        storedSalt,
+      );
 
       // 验证哈希值应该相同
-      expect(computedKeyMaterial.hash, equals(storedHash),
-          reason: '注册和登录生成的哈希值应该相同');
+      expect(
+        computedKeyMaterial.hash,
+        equals(storedHash),
+        reason: '注册和登录生成的哈希值应该相同',
+      );
     });
 
     test('不同密码应该生成不同的哈希', () async {
@@ -35,20 +41,32 @@ void main() {
       final keyMaterial1 = CryptoService.generateKeyMaterial(password);
       final keyMaterial2 = CryptoService.generateKeyMaterial(password);
 
-      expect(keyMaterial1.hash, isNot(equals(keyMaterial2.hash)),
-          reason: '不同盐值应该生成不同的哈希');
-      expect(keyMaterial1.salt, isNot(equals(keyMaterial2.salt)),
-          reason: '盐值应该不同');
+      expect(
+        keyMaterial1.hash,
+        isNot(equals(keyMaterial2.hash)),
+        reason: '不同盐值应该生成不同的哈希',
+      );
+      expect(
+        keyMaterial1.salt,
+        isNot(equals(keyMaterial2.salt)),
+        reason: '盐值应该不同',
+      );
     });
 
     test('密钥派生应该一致', () async {
       const password = 'test_password';
 
       final keyMaterial = CryptoService.generateKeyMaterial(password);
-      final derivedKeyMaterial = CryptoService.deriveKeyMaterial(password, keyMaterial.salt);
+      final derivedKeyMaterial = CryptoService.deriveKeyMaterial(
+        password,
+        keyMaterial.salt,
+      );
 
-      expect(derivedKeyMaterial.key, equals(keyMaterial.key),
-          reason: '派生的密钥应该与密钥材料中的密钥相同');
+      expect(
+        derivedKeyMaterial.key,
+        equals(keyMaterial.key),
+        reason: '派生的密钥应该与密钥材料中的密钥相同',
+      );
     });
 
     test('Argon2id 密钥派生应该产生正确的密钥长度', () async {

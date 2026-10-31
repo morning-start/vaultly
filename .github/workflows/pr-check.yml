@@ -74,11 +74,9 @@ jobs:
         run: flutter pub get
 
       - name: 检查代码格式
-        run: |
-          if ! flutter format --set-exit-if-changed --dry-run .; then
-            echo "❌ 代码格式检查失败，请运行 'flutter format .' 修复格式问题"
-            exit 1
-          fi
+        # flutter format 在 Flutter 3.38 已被移除，旧步骤实际早已失效。
+        # dart 3.7 起默认 tall style，全仓已按此风格统一（见 .git-blame-ignore-revs）。
+        run: dart format --output=none --set-exit-if-changed .
 
       - name: 运行代码分析
         # --no-fatal-infos：当前存在 4 条 use_super_parameters info（已知 lint 误报，

@@ -15,7 +15,7 @@ class AutoLockService {
   bool _isMonitoring = false;
 
   AutoLockService({int lockDurationMinutes = defaultLockDuration})
-      : _lockDurationMinutes = lockDurationMinutes;
+    : _lockDurationMinutes = lockDurationMinutes;
 
   // ==================== 配置 ====================
 

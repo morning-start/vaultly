@@ -75,10 +75,7 @@ class CustomTextField extends StatelessWidget {
         errorText: errorText,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
         suffixIcon: suffixIcon != null
-            ? IconButton(
-                icon: Icon(suffixIcon),
-                onPressed: onSuffixIconPressed,
-              )
+            ? IconButton(icon: Icon(suffixIcon), onPressed: onSuffixIconPressed)
             : null,
         contentPadding: contentPadding,
         border: OutlineInputBorder(
@@ -106,7 +103,9 @@ class CustomTextField extends StatelessWidget {
           borderSide: BorderSide(color: colorScheme.outline.withAlpha(128)),
         ),
         filled: !enabled,
-        fillColor: enabled ? null : colorScheme.surfaceContainerHighest.withAlpha(128),
+        fillColor: enabled
+            ? null
+            : colorScheme.surfaceContainerHighest.withAlpha(128),
       ),
       keyboardType: keyboardType,
       textInputAction: textInputAction,
@@ -123,7 +122,9 @@ class CustomTextField extends StatelessWidget {
       onFieldSubmitted: onSubmitted,
       onTap: onTap,
       style: theme.textTheme.bodyLarge?.copyWith(
-        color: enabled ? colorScheme.onSurface : colorScheme.onSurface.withAlpha(128),
+        color: enabled
+            ? colorScheme.onSurface
+            : colorScheme.onSurface.withAlpha(128),
       ),
     );
   }

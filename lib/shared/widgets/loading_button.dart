@@ -97,11 +97,7 @@ class LoadingButton extends StatelessWidget {
     if (icon != null) {
       return Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Text(label),
-        ],
+        children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(label)],
       );
     }
 
@@ -156,9 +152,4 @@ class LoadingButton extends StatelessWidget {
 }
 
 /// 按钮类型枚举
-enum ButtonType {
-  elevated,
-  filled,
-  outlined,
-  text,
-}
+enum ButtonType { elevated, filled, outlined, text }

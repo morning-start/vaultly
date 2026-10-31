@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:vaultly_core/vaultly_core.dart';
+
 /// 保险库服务
 ///
 /// 负责加密存储、读取和维护保险库条目。
@@ -58,9 +59,8 @@ class VaultService {
   }
 
   /// 私有构造函数
-  VaultService._internal({
-    FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  VaultService._internal({FlutterSecureStorage? secureStorage})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// 工厂构造函数 - 返回单例实例
   factory VaultService({FlutterSecureStorage? secureStorage}) {
@@ -455,8 +455,9 @@ class VaultService {
   Future<void> toggleFavorite(String entryId) async {
     final index = _entries.indexWhere((e) => e.id == entryId);
     if (index != -1) {
-      _entries[index] =
-          _entries[index].copyWith(isFavorite: !_entries[index].isFavorite);
+      _entries[index] = _entries[index].copyWith(
+        isFavorite: !_entries[index].isFavorite,
+      );
       await saveVault();
     }
   }

@@ -59,17 +59,18 @@ void main() {
   tearDown(VaultService.reset);
 
   VaultEntry login(String id, String password) => LoginEntry(
-        id: id,
-        title: '条目 $id',
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-        username: 'user-$id',
-        password: password,
-      );
+    id: id,
+    title: '条目 $id',
+    createdAt: DateTime(2026, 1, 1),
+    updatedAt: DateTime(2026, 1, 1),
+    username: 'user-$id',
+    password: password,
+  );
 
   /// 读出一条条目「password」字段的密文（用于验证改密不重加密数据）
   String cipherOf(String id) {
-    final data = jsonDecode(storage.store['vault_data']!) as Map<String, dynamic>;
+    final data =
+        jsonDecode(storage.store['vault_data']!) as Map<String, dynamic>;
     final entries = data['entries'] as List<dynamic>;
     final entry = entries.firstWhere((e) => (e as Map)['id'] == id);
     return ((entry as Map)['passwordEncrypted'] as Map)['cipherText'] as String;
@@ -81,8 +82,11 @@ void main() {
 
       expect(storage.store[wrappedDekKey], isNotNull);
       expect(result.needsDekMigration, isFalse);
-      expect(result.sessionKey, isNot(equals(result.masterSecret)),
-          reason: '本地数据密钥必须与主密码派生密钥分离');
+      expect(
+        result.sessionKey,
+        isNot(equals(result.masterSecret)),
+        reason: '本地数据密钥必须与主密码派生密钥分离',
+      );
       expect(result.sessionKey.length, equals(32));
     });
 
@@ -111,8 +115,10 @@ void main() {
       storage.store['master_kdf_params'] = jsonEncode(
         CryptoService.defaultKdfParams(salt).toJson(),
       );
-      storage.store[legacyHashKey] =
-          CryptoService.deriveVerificationHash(password, salt);
+      storage.store[legacyHashKey] = CryptoService.deriveVerificationHash(
+        password,
+        salt,
+      );
 
       // 用 masterSecret 直接写一份数据（模拟旧版本的行为）
       final service = VaultService(secureStorage: const FlutterSecureStorage())
@@ -127,8 +133,11 @@ void main() {
 
       expect(result, isNotNull);
       expect(result!.needsDekMigration, isTrue);
-      expect(storage.store[wrappedDekKey], isNull,
-          reason: 'verify 不应擅自创建 DEK，迁移由上层在数据重加密时完成');
+      expect(
+        storage.store[wrappedDekKey],
+        isNull,
+        reason: 'verify 不应擅自创建 DEK，迁移由上层在数据重加密时完成',
+      );
 
       // 旧数据用 masterSecret 能读出来
       final service = VaultService(secureStorage: const FlutterSecureStorage())
@@ -163,8 +172,11 @@ void main() {
 
       expect(await authService.hasWrappedDek(), isFalse);
       final again = await authService.verifyMasterPassword('pw');
-      expect(again!.needsDekMigration, isTrue,
-          reason: '回滚后应回到「数据由 masterSecret 加密」的状态');
+      expect(
+        again!.needsDekMigration,
+        isTrue,
+        reason: '回滚后应回到「数据由 masterSecret 加密」的状态',
+      );
     });
 
     test('完整迁移：数据从 masterSecret 重加密到 DEK 后可正常解锁', () async {
@@ -182,8 +194,9 @@ void main() {
       await service.rekeyTo(dek);
 
       // 3) 此后用 DEK 能读，且 masterSecret 已经读不出来
-      final afterMigration = VaultService(secureStorage: const FlutterSecureStorage())
-        ..setEncryptionKey(dek);
+      final afterMigration = VaultService(
+        secureStorage: const FlutterSecureStorage(),
+      )..setEncryptionKey(dek);
       await afterMigration.loadVault();
       expect(afterMigration.entries.length, equals(1));
       expect(afterMigration.entries.first.id, equals('a'));
@@ -207,11 +220,17 @@ void main() {
 
       final after = await authService.changePassword('old-pw', 'new-pw');
 
-      expect(after.sessionKey, equals(before.sessionKey),
-          reason: 'DEK 不变 → 数据无需重加密');
+      expect(
+        after.sessionKey,
+        equals(before.sessionKey),
+        reason: 'DEK 不变 → 数据无需重加密',
+      );
       expect(after.masterSecret, isNot(equals(before.masterSecret)));
-      expect(cipherOf('a'), equals(cipherBefore),
-          reason: '改密不应触碰数据密文（这就是 R2 的收益）');
+      expect(
+        cipherOf('a'),
+        equals(cipherBefore),
+        reason: '改密不应触碰数据密文（这就是 R2 的收益）',
+      );
     });
 
     test('改密后旧密码失效、新密码可解包出同一把 DEK', () async {
@@ -256,16 +275,24 @@ void main() {
       storage.store['master_kdf_params'] = jsonEncode(
         CryptoService.defaultKdfParams(salt).toJson(),
       );
-      storage.store[legacyHashKey] =
-          CryptoService.deriveVerificationHash('old-pw', salt);
+      storage.store[legacyHashKey] = CryptoService.deriveVerificationHash(
+        'old-pw',
+        salt,
+      );
 
       final result = await authService.changePassword('old-pw', 'new-pw');
 
-      expect(result.sessionKey, isNot(equals(masterSecret)),
-          reason: '改密时应生成新的 DEK');
+      expect(
+        result.sessionKey,
+        isNot(equals(masterSecret)),
+        reason: '改密时应生成新的 DEK',
+      );
       expect(await authService.hasWrappedDek(), isTrue);
-      expect(result.needsDekMigration, isTrue,
-          reason: '数据仍由 masterSecret 加密，需要上层补一次重加密');
+      expect(
+        result.needsDekMigration,
+        isTrue,
+        reason: '数据仍由 masterSecret 加密，需要上层补一次重加密',
+      );
     });
   });
 
@@ -290,8 +317,11 @@ void main() {
 
       final viaPassword = await authService.verifyMasterPassword('pw');
       expect(viaPassword!.sessionKey, equals(setup.sessionKey));
-      expect(viaPassword.masterSecret, equals(setup.masterSecret),
-          reason: '生物识别会话靠它继续上传云端备份');
+      expect(
+        viaPassword.masterSecret,
+        equals(setup.masterSecret),
+        reason: '生物识别会话靠它继续上传云端备份',
+      );
     });
 
     test('改密后生物识别项应更新为新密码派生的 masterSecret', () async {
@@ -315,20 +345,29 @@ void main() {
       storage.store['master_kdf_params'] = jsonEncode(
         CryptoService.defaultKdfParams(salt).toJson(),
       );
-      storage.store[legacyHashKey] =
-          CryptoService.deriveVerificationHash('pw', salt);
+      storage.store[legacyHashKey] = CryptoService.deriveVerificationHash(
+        'pw',
+        salt,
+      );
       storage.store[biometricKey] = base64Encode(masterSecret);
 
       final result = await authService.biometricUnlock();
 
-      expect(result.sessionKey, equals(masterSecret),
-          reason: '数据仍由 masterSecret 加密，先用它解锁');
+      expect(
+        result.sessionKey,
+        equals(masterSecret),
+        reason: '数据仍由 masterSecret 加密，先用它解锁',
+      );
       expect(result.masterSecret, equals(masterSecret));
-      expect(result.needsDekMigration, isTrue,
-          reason: '必须提示上层完成 DEK 迁移，否则用户被挡在门外');
+      expect(
+        result.needsDekMigration,
+        isTrue,
+        reason: '必须提示上层完成 DEK 迁移，否则用户被挡在门外',
+      );
     });
 
-    test('生物识别项里的钥匙必须能解包当前 DEK', () async {      final setup = await authService.setupMasterPassword('pw');
+    test('生物识别项里的钥匙必须能解包当前 DEK', () async {
+      final setup = await authService.setupMasterPassword('pw');
       await authService.enableBiometric('pw');
       await authService.changePassword('pw', 'new-pw');
 
@@ -360,12 +399,16 @@ void main() {
   group('包装/解包原语', () {
     test('错误包装密钥应解包失败，正确密钥应还原', () {
       final dek = CryptoService.generateDek();
-      final kek = CryptoService.deriveWrapKey(Uint8List.fromList(List.filled(32, 7)));
-      final wrongKek =
-          CryptoService.deriveWrapKey(Uint8List.fromList(List.filled(32, 9)));
+      final kek = CryptoService.deriveWrapKey(
+        Uint8List.fromList(List.filled(32, 7)),
+      );
+      final wrongKek = CryptoService.deriveWrapKey(
+        Uint8List.fromList(List.filled(32, 9)),
+      );
 
       final wrapped = CryptoService.wrapKey(dek, kek);
-      final json = jsonDecode(jsonEncode(wrapped.toJson())) as Map<String, dynamic>;
+      final json =
+          jsonDecode(jsonEncode(wrapped.toJson())) as Map<String, dynamic>;
 
       expect(
         CryptoService.unwrapKey(EncryptedData.fromJson(json), kek),

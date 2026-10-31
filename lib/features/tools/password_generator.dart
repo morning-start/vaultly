@@ -44,10 +44,10 @@ class PasswordGenerator {
     }
 
     final random = Random.secure();
-    
+
     // 确保每种字符类型至少出现一次
     final passwordChars = <String>[];
-    
+
     if (includeLowercase) {
       passwordChars.add(_lowercase[random.nextInt(_lowercase.length)]);
     }
@@ -98,17 +98,82 @@ class PasswordGenerator {
   /// 生成密码短语（ memorable password）
   static String generatePassphrase({int wordCount = 4}) {
     const words = [
-      'apple', 'banana', 'cherry', 'date', 'elderberry', 'fig', 'grape',
-      'honeydew', 'kiwi', 'lemon', 'mango', 'nectarine', 'orange', 'papaya',
-      'quince', 'raspberry', 'strawberry', 'tangerine', 'ugli', 'vanilla',
-      'watermelon', 'xigua', 'yam', 'zucchini', 'azure', 'blue', 'cyan',
-      'diamond', 'emerald', 'fuchsia', 'gold', 'indigo', 'jade', 'khaki',
-      'lime', 'magenta', 'navy', 'olive', 'purple', 'red', 'silver',
-      'teal', 'violet', 'white', 'yellow', 'amber', 'bronze', 'copper',
-      'forest', 'mountain', 'ocean', 'river', 'sky', 'sun', 'moon',
-      'star', 'cloud', 'rain', 'snow', 'wind', 'fire', 'earth',
-      'eagle', 'falcon', 'hawk', 'owl', 'raven', 'sparrow', 'wolf',
-      'bear', 'deer', 'fox', 'lion', 'tiger', 'zebra', 'horse',
+      'apple',
+      'banana',
+      'cherry',
+      'date',
+      'elderberry',
+      'fig',
+      'grape',
+      'honeydew',
+      'kiwi',
+      'lemon',
+      'mango',
+      'nectarine',
+      'orange',
+      'papaya',
+      'quince',
+      'raspberry',
+      'strawberry',
+      'tangerine',
+      'ugli',
+      'vanilla',
+      'watermelon',
+      'xigua',
+      'yam',
+      'zucchini',
+      'azure',
+      'blue',
+      'cyan',
+      'diamond',
+      'emerald',
+      'fuchsia',
+      'gold',
+      'indigo',
+      'jade',
+      'khaki',
+      'lime',
+      'magenta',
+      'navy',
+      'olive',
+      'purple',
+      'red',
+      'silver',
+      'teal',
+      'violet',
+      'white',
+      'yellow',
+      'amber',
+      'bronze',
+      'copper',
+      'forest',
+      'mountain',
+      'ocean',
+      'river',
+      'sky',
+      'sun',
+      'moon',
+      'star',
+      'cloud',
+      'rain',
+      'snow',
+      'wind',
+      'fire',
+      'earth',
+      'eagle',
+      'falcon',
+      'hawk',
+      'owl',
+      'raven',
+      'sparrow',
+      'wolf',
+      'bear',
+      'deer',
+      'fox',
+      'lion',
+      'tiger',
+      'zebra',
+      'horse',
     ];
 
     final random = Random.secure();
@@ -163,10 +228,7 @@ class PasswordGenerator {
   /// 生成 PIN 码
   static String generatePin({int length = 6}) {
     final random = Random.secure();
-    return List.generate(
-      length,
-      (_) => random.nextInt(10).toString(),
-    ).join();
+    return List.generate(length, (_) => random.nextInt(10).toString()).join();
   }
 
   /// 生成符合特定网站要求的密码

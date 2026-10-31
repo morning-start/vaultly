@@ -205,9 +205,7 @@ class SyncOrchestrator {
       }
     } catch (e) {
       // WebDAVException 已带上下文，避免出现「上传失败: 上传失败: …」的重复前缀
-      return SyncResult.failure(
-        e is WebDAVException ? e.message : '上传失败: $e',
-      );
+      return SyncResult.failure(e is WebDAVException ? e.message : '上传失败: $e');
     }
   }
 
@@ -229,9 +227,7 @@ class SyncOrchestrator {
       }
     } catch (e) {
       // WebDAVException 已带上下文，避免出现「下载失败: 下载失败: …」的重复前缀
-      return SyncResult.failure(
-        e is WebDAVException ? e.message : '下载失败: $e',
-      );
+      return SyncResult.failure(e is WebDAVException ? e.message : '下载失败: $e');
     }
   }
 

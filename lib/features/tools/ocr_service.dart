@@ -16,15 +16,14 @@ class OcrResult {
   });
 
   bool get hasAnyData =>
-      cardNumber != null ||
-      cardHolderName != null ||
-      expiryMonth != null;
+      cardNumber != null || cardHolderName != null || expiryMonth != null;
 }
 
 class OcrService {
   final ImagePicker _picker = ImagePicker();
-  final TextRecognizer _recognizer =
-      TextRecognizer(script: TextRecognitionScript.latin);
+  final TextRecognizer _recognizer = TextRecognizer(
+    script: TextRecognitionScript.latin,
+  );
 
   /// 从图库选择图片并识别银行卡信息
   Future<OcrResult> scanFromGallery() async {
@@ -44,8 +43,9 @@ class OcrService {
   Future<OcrResult> _processImage(File imageFile) async {
     try {
       final inputImage = InputImage.fromFile(imageFile);
-      final RecognizedText recognizedText =
-          await _recognizer.processImage(inputImage);
+      final RecognizedText recognizedText = await _recognizer.processImage(
+        inputImage,
+      );
 
       String? cardNumber;
       String? cardHolderName;

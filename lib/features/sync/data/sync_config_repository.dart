@@ -28,14 +28,14 @@ class SyncConfigRepository {
   DateTime? _configCacheTime;
   static const _cacheValidityDuration = Duration(seconds: 30);
 
-  SyncConfigRepository({
-    FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  SyncConfigRepository({FlutterSecureStorage? secureStorage})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// 检查缓存是否有效
   bool get _isCacheValid {
     if (_configCacheTime == null || _cachedConfig == null) return false;
-    return DateTime.now().difference(_configCacheTime!) < _cacheValidityDuration;
+    return DateTime.now().difference(_configCacheTime!) <
+        _cacheValidityDuration;
   }
 
   /// 获取缓存的配置
@@ -56,10 +56,8 @@ class SyncConfigRepository {
     final username = await _secureStorage.read(key: _keyWebDavUsername);
     final password = await _secureStorage.read(key: _keyWebDavPassword);
 
-    final isConfigured = url != null &&
-        url.isNotEmpty &&
-        username != null &&
-        password != null;
+    final isConfigured =
+        url != null && url.isNotEmpty && username != null && password != null;
 
     _cachedIsConfigured = isConfigured;
     _configCacheTime = DateTime.now();
@@ -103,7 +101,10 @@ class SyncConfigRepository {
   Future<void> saveConfig(SyncConfig config) async {
     await _secureStorage.write(key: _keyWebDavUrl, value: config.serverUrl);
     await _secureStorage.write(key: _keyWebDavUsername, value: config.username);
-    await _secureStorage.write(key: _keyWebDavPassword, value: config.password ?? '');
+    await _secureStorage.write(
+      key: _keyWebDavPassword,
+      value: config.password ?? '',
+    );
 
     _cachedConfig = config;
     _cachedIsConfigured = true;
@@ -179,10 +180,11 @@ class SyncConfigRepository {
       if (historyJson == null) return [];
 
       final List<dynamic> historyList = jsonDecode(historyJson);
-      final histories = historyList
-          .map((e) => SyncHistory.fromJson(e as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      final histories =
+          historyList
+              .map((e) => SyncHistory.fromJson(e as Map<String, dynamic>))
+              .toList()
+            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       return histories.take(limit).toList();
     } catch (e) {

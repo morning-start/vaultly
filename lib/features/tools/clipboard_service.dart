@@ -176,16 +176,16 @@ mixin ClipboardProtectionMixin<T extends StatefulWidget> on State<T> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(_AppLifecycleObserver(
-      onStateChanged: _onAppLifecycleStateChanged,
-    ));
+    WidgetsBinding.instance.addObserver(
+      _AppLifecycleObserver(onStateChanged: _onAppLifecycleStateChanged),
+    );
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(
-      onStateChanged: _onAppLifecycleStateChanged,
-    ));
+    WidgetsBinding.instance.removeObserver(
+      _AppLifecycleObserver(onStateChanged: _onAppLifecycleStateChanged),
+    );
     super.dispose();
   }
 

@@ -56,15 +56,14 @@ class VaultState {
     String? error,
     bool? recoveredFromBackup,
     bool clearError = false,
-  }) =>
-      VaultState(
-        isLoaded: isLoaded ?? this.isLoaded,
-        revision: revision ?? this.revision,
-        entries: entries ?? this.entries,
-        allEntries: allEntries ?? this.allEntries,
-        error: clearError ? null : (error ?? this.error),
-        recoveredFromBackup: recoveredFromBackup ?? this.recoveredFromBackup,
-      );
+  }) => VaultState(
+    isLoaded: isLoaded ?? this.isLoaded,
+    revision: revision ?? this.revision,
+    entries: entries ?? this.entries,
+    allEntries: allEntries ?? this.allEntries,
+    error: clearError ? null : (error ?? this.error),
+    recoveredFromBackup: recoveredFromBackup ?? this.recoveredFromBackup,
+  );
 }
 
 /// 保险库状态管理器

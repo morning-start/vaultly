@@ -83,7 +83,8 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
       context: context,
       builder: (context) => ConfirmDialog(
         title: '移入回收站',
-        content: '「${entry.title}」将移入回收站，30 天内可以恢复；'
+        content:
+            '「${entry.title}」将移入回收站，30 天内可以恢复；'
             '删除记录也会同步到其他设备。',
         confirmLabel: '删除',
         icon: Icons.delete_outline_rounded,
@@ -144,9 +145,7 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
                             const SizedBox(height: AppTokens.spaceM),
                             Text(
                               '条目不存在或已移入回收站',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
+                              style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: colorScheme.textMuted),
                             ),
                           ],

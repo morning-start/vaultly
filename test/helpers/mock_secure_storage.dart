@@ -31,15 +31,13 @@ class MockSecureStorage extends FlutterSecureStoragePlatform {
   Future<String?> read({
     required String key,
     required Map<String, String> options,
-  }) async =>
-      store[key];
+  }) async => store[key];
 
   @override
   Future<bool> containsKey({
     required String key,
     required Map<String, String> options,
-  }) async =>
-      store.containsKey(key);
+  }) async => store.containsKey(key);
 
   @override
   Future<void> delete({
@@ -52,13 +50,10 @@ class MockSecureStorage extends FlutterSecureStoragePlatform {
   @override
   Future<Map<String, String>> readAll({
     required Map<String, String> options,
-  }) async =>
-      Map.of(store);
+  }) async => Map.of(store);
 
   @override
-  Future<void> deleteAll({
-    required Map<String, String> options,
-  }) async {
+  Future<void> deleteAll({required Map<String, String> options}) async {
     store.clear();
   }
 }

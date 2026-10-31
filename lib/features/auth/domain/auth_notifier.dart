@@ -203,10 +203,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 生物识别解锁
   Future<bool> unlockWithBiometric() async {
     try {
-      state = state.copyWith(
-        isAuthenticatingWithBiometric: true,
-        error: null,
-      );
+      state = state.copyWith(isAuthenticatingWithBiometric: true, error: null);
 
       final result = await _authService.biometricUnlock();
 

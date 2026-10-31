@@ -79,10 +79,12 @@ class AuthState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       biometricAvailable: biometricAvailable ?? this.biometricAvailable,
-      deviceSupportsBiometric: deviceSupportsBiometric ?? this.deviceSupportsBiometric,
+      deviceSupportsBiometric:
+          deviceSupportsBiometric ?? this.deviceSupportsBiometric,
       biometricTypeName: biometricTypeName ?? this.biometricTypeName,
       biometricIcon: biometricIcon ?? this.biometricIcon,
-      isAuthenticatingWithBiometric: isAuthenticatingWithBiometric ?? this.isAuthenticatingWithBiometric,
+      isAuthenticatingWithBiometric:
+          isAuthenticatingWithBiometric ?? this.isAuthenticatingWithBiometric,
     );
   }
 }

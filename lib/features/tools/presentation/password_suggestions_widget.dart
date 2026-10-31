@@ -11,10 +11,7 @@ class PasswordSuggestionsWidget extends StatelessWidget {
     required this.suggestions,
   });
 
-  factory PasswordSuggestionsWidget.policy({
-    Key? key,
-    String? title,
-  }) {
+  factory PasswordSuggestionsWidget.policy({Key? key, String? title}) {
     return PasswordSuggestionsWidget(
       key: key,
       title: title ?? '密码要求',
@@ -43,13 +40,12 @@ class PasswordSuggestionsWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (title != null) ...[
-              Text(
-                title!,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
+              Text(title!, style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
             ],
-            ...suggestions.map((suggestion) => _buildSuggestionItem(context, suggestion)),
+            ...suggestions.map(
+              (suggestion) => _buildSuggestionItem(context, suggestion),
+            ),
           ],
         ),
       ),
@@ -67,12 +63,7 @@ class PasswordSuggestionsWidget extends StatelessWidget {
             color: Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );

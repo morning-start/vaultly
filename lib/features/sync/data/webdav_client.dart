@@ -252,7 +252,11 @@ class WebDAVClient {
       }
 
       // 历史遗留的明文备份
-      return DownloadedBackup(data: decoded, legacyFormat: true, plaintext: true);
+      return DownloadedBackup(
+        data: decoded,
+        legacyFormat: true,
+        plaintext: true,
+      );
     } on WebDAVException {
       rethrow;
     } catch (e) {

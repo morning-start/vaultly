@@ -61,8 +61,9 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
   /// 查询，是即时且确定的（不必等 hasRemoteBackup 那次异步探测）。
   Future<void> _refreshBackupFreshness() async {
     try {
-      final currentTag =
-          await ref.read(authNotifierProvider.notifier).currentKeyTag();
+      final currentTag = await ref
+          .read(authNotifierProvider.notifier)
+          .currentKeyTag();
       final stale = await ref
           .read(webDAVServiceProvider)
           .isRemoteBackupStale(currentKeyTag: currentTag);
@@ -281,7 +282,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
         target = remoteEntries;
         final active = remoteEntries.where((e) => !e.isDeleted).length;
         final trashed = remoteEntries.length - active;
-        message = '已恢复 $active 条记录'
+        message =
+            '已恢复 $active 条记录'
             '${trashed > 0 ? '（另含回收站 $trashed 条）' : ''}';
       }
 
@@ -327,9 +329,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       // 传输固定加密：只恢复加密备份
       if (!formats.hasEncrypted) {
         _toast(
-          formats.hasPlain
-              ? '云端只有历史明文备份；请先「合并并上传」生成加密备份'
-              : '云端还没有加密备份，请先上传',
+          formats.hasPlain ? '云端只有历史明文备份；请先「合并并上传」生成加密备份' : '云端还没有加密备份，请先上传',
         );
         return null;
       }
@@ -422,10 +422,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
                     ),
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: () => Navigator.pop(
-                        sheetContext,
-                        _SyncPlan(mode: mode),
-                      ),
+                      onPressed: () =>
+                          Navigator.pop(sheetContext, _SyncPlan(mode: mode)),
                       style: mode == SyncApplyMode.overwrite
                           ? FilledButton.styleFrom(
                               backgroundColor: colorScheme.dangerSoft,
@@ -622,7 +620,11 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, size: 18, color: colorScheme.error),
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: colorScheme.error,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -640,7 +642,11 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           Text(
             '主密码改过之后，云端那份备份需要用旧密码才能解开。'
             '重新上传一次，它就会用当前主密码加密。',
-            style: TextStyle(fontSize: 12, height: 1.6, color: colorScheme.textMuted),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.6,
+              color: colorScheme.textMuted,
+            ),
           ),
           const SizedBox(height: 10),
           Align(
