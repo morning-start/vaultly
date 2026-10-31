@@ -345,6 +345,13 @@ class _WebDAVConfigPageState extends ConsumerState<WebDAVConfigPage> {
           const SizedBox(height: 12),
           _noteRow(
             colorScheme,
+            Icons.key_outlined,
+            '跨设备恢复',
+            '备份文件自带密钥派生参数，只要主密码相同，在新设备上也能恢复',
+          ),
+          const SizedBox(height: 12),
+          _noteRow(
+            colorScheme,
             Icons.compress_rounded,
             '传输压缩',
             '固定启用 GZIP 压缩，减小传输体积',

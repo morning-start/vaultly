@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'biometric_service.dart';
 import 'crypto_service.dart';
@@ -12,6 +13,7 @@ import '../../../core/exceptions/app_exception.dart';
 class AuthService {
   static const _keyMasterPassword = 'master_password_hash';
   static const _keySalt = 'master_salt';
+  static const _keyKdfParams = 'master_kdf_params';
   static const _keyBiometricEncryptionKey = 'biometric_encryption_key';
   static const _keyFailedAttempts = 'failed_attempts';
   static const _keyLockedUntil = 'locked_until';
@@ -40,6 +42,70 @@ class AuthService {
     );
   }
 
+  /// 读取本机当前使用的 KDF 参数。
+  ///
+  /// 优先读完整的参数集；老版本安装只存了盐值，则用当前默认强度补齐。
+  /// 返回 null 表示尚未设置主密码。
+  Future<KdfParams?> _readKdfParams() async {
+    final paramsJson = await _secureStorage.read(key: _keyKdfParams);
+    if (paramsJson != null && paramsJson.isNotEmpty) {
+      try {
+        return KdfParams.fromJson(
+          jsonDecode(paramsJson) as Map<String, dynamic>,
+        );
+      } catch (e) {
+        debugPrint('AuthService: 读取 KDF 参数失败，回退到盐值 + 默认强度: $e');
+      }
+    }
+
+    final saltBase64 = await _secureStorage.read(key: _keySalt);
+    if (saltBase64 == null || saltBase64.isEmpty) return null;
+    return CryptoService.defaultKdfParams(base64Decode(saltBase64));
+  }
+
+  Future<void> _writeKdfParams(KdfParams params) async {
+    // 盐值单独保留一份，兼容老版本读取路径
+    await _secureStorage.write(
+      key: _keySalt,
+      value: base64Encode(params.salt),
+    );
+    await _secureStorage.write(
+      key: _keyKdfParams,
+      value: jsonEncode(params.toJson()),
+    );
+  }
+
+  /// 本机当前使用的 KDF 参数（写入云端备份文件头用）
+  Future<KdfParams> getKdfParams() async {
+    final params = await _readKdfParams();
+    if (params == null) {
+      throw AuthException.passwordNotSet();
+    }
+    return params;
+  }
+
+  /// 用「显式给定的」KDF 参数派生密钥。
+  ///
+  /// 读取云端备份时参数来自文件头，因此任何设备只要主密码正确，
+  /// 派生出的密钥就一致——这正是跨设备恢复能成立的前提。
+  Uint8List deriveVaultKey(String password, KdfParams params) {
+    return CryptoService.deriveKeyWithKdfParams(password, params);
+  }
+
+  /// 当前密钥体系的指纹（非敏感）
+  ///
+  /// 主密码一变，盐和密钥都会变，指纹随之改变。用它来判断
+  /// 「云端那份备份还是不是当前主密码加密的」——改过主密码之后，
+  /// 之前上传的备份只有旧密码能解开，需要重新上传一次。
+  ///
+  /// 这里存的是口令校验哈希的**再哈希**，不可逆且无法用于离线爆破，
+  /// 所以可以安全地写进普通偏好存储做比对。
+  Future<String?> currentKeyTag() async {
+    final storedHash = await _secureStorage.read(key: _keyMasterPassword);
+    if (storedHash == null || storedHash.isEmpty) return null;
+    return sha256.convert(utf8.encode('vaultly-key-tag:$storedHash')).toString();
+  }
+
   /// 检查是否已设置主密码
   Future<bool> isPasswordSet() async {
     final hash = await _secureStorage.read(key: _keyMasterPassword);
@@ -52,7 +118,7 @@ class AuthService {
     final keyMaterial = CryptoService.generateKeyMaterial(password);
 
     await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
-    await _secureStorage.write(key: _keySalt, value: keyMaterial.saltBase64);
+    await _writeKdfParams(CryptoService.defaultKdfParams(keyMaterial.salt));
 
     await _resetFailedAttempts();
 
@@ -68,18 +134,20 @@ class AuthService {
     }
 
     final storedHash = await _secureStorage.read(key: _keyMasterPassword);
-    final saltBase64 = await _secureStorage.read(key: _keySalt);
+    final kdfParams = await _readKdfParams();
 
-    if (storedHash == null || saltBase64 == null) {
+    if (storedHash == null || kdfParams == null) {
       throw AuthException.passwordNotSet();
     }
 
-    final salt = base64Decode(saltBase64);
-    final keyMaterial = CryptoService.deriveKeyMaterial(password, salt);
+    final computedHash = CryptoService.deriveVerificationHash(
+      password,
+      kdfParams.salt,
+    );
 
-    if (keyMaterial.hash == storedHash) {
+    if (computedHash == storedHash) {
       await _resetFailedAttempts();
-      return keyMaterial.key;
+      return CryptoService.deriveKeyWithKdfParams(password, kdfParams);
     } else {
       await _incrementFailedAttempts();
       return null;
@@ -148,25 +216,25 @@ class AuthService {
       throw AuthException.biometricFailed(e.message);
     }
 
-    final saltBase64 = await _secureStorage.read(key: _keySalt);
+    final kdfParams = await _readKdfParams();
     final storedHash = await _secureStorage.read(key: _keyMasterPassword);
-    if (saltBase64 == null || storedHash == null) {
+    if (kdfParams == null || storedHash == null) {
       throw AuthException.passwordNotSet();
     }
 
-    final salt = base64Decode(saltBase64);
-    final keyMaterial = CryptoService.deriveKeyMaterial(password, salt);
-
-    if (keyMaterial.hash != storedHash) {
+    if (CryptoService.deriveVerificationHash(password, kdfParams.salt) !=
+        storedHash) {
       throw AuthException.invalidPassword();
     }
 
+    final key = CryptoService.deriveKeyWithKdfParams(password, kdfParams);
+
     await _secureStorage.write(
       key: _keyBiometricEncryptionKey,
-      value: base64Encode(keyMaterial.key),
+      value: base64Encode(key),
     );
 
-    return keyMaterial.key;
+    return key;
   }
 
   /// 禁用生物识别
@@ -275,7 +343,7 @@ class AuthService {
     final keyMaterial = CryptoService.generateKeyMaterial(newPassword);
 
     await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
-    await _secureStorage.write(key: _keySalt, value: keyMaterial.saltBase64);
+    await _writeKdfParams(CryptoService.defaultKdfParams(keyMaterial.salt));
 
     if (wasBiometricEnabled) {
       await _secureStorage.write(
@@ -291,6 +359,7 @@ class AuthService {
   Future<void> clearAllData() async {
     await _secureStorage.delete(key: _keyMasterPassword);
     await _secureStorage.delete(key: _keySalt);
+    await _secureStorage.delete(key: _keyKdfParams);
     await _secureStorage.delete(key: _keyBiometricEncryptionKey);
     await _secureStorage.delete(key: _keyFailedAttempts);
     await _secureStorage.delete(key: _keyLockedUntil);

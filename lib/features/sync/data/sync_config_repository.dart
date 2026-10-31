@@ -12,6 +12,7 @@ class SyncConfigRepository {
   static const _keyWebDavUsername = 'webdav_username';
   static const _keyWebDavPassword = 'webdav_password';
   static const _keyLastSyncTime = 'webdav_last_sync';
+  static const _keyLastUploadKeyTag = 'webdav_last_upload_key_tag';
   static const _keySyncHistory = 'webdav_sync_history';
 
   final FlutterSecureStorage _secureStorage;
@@ -110,6 +111,7 @@ class SyncConfigRepository {
     await _secureStorage.delete(key: _keyWebDavUsername);
     await _secureStorage.delete(key: _keyWebDavPassword);
     await _secureStorage.delete(key: _keyLastSyncTime);
+    await _secureStorage.delete(key: _keyLastUploadKeyTag);
     _cachedConfig = null;
     _cachedIsConfigured = null;
     _configCacheTime = null;
@@ -135,6 +137,22 @@ class SyncConfigRepository {
       key: _keyLastSyncTime,
       value: time.toIso8601String(),
     );
+  }
+
+  /// 记录本次上传所用密钥体系的指纹
+  ///
+  /// 用于检测「云端备份还是旧主密码加密的」：改主密码后指纹变化，
+  /// 与云端那份不一致时提示用户重新上传。
+  Future<void> updateLastUploadKeyTag(String tag) async {
+    await _secureStorage.write(key: _keyLastUploadKeyTag, value: tag);
+  }
+
+  /// 读取最近一次上传所用的密钥指纹
+  ///
+  /// null 表示未知（尚未上传过，或由旧版本上传、当时没有记录指纹）。
+  Future<String?> getLastUploadKeyTag() async {
+    final tag = await _secureStorage.read(key: _keyLastUploadKeyTag);
+    return (tag == null || tag.isEmpty) ? null : tag;
   }
 
   /// 获取同步历史
