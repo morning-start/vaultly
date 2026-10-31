@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 void main() {
   group('VaultEntry 序列化基线', () {
@@ -132,8 +132,7 @@ void main() {
         createdAt: DateTime(2026),
         updatedAt: DateTime(2026),
         type: EntryType.custom,
-      ).toJson()
-        ..['type'] = 'futureType';
+      ).toJson()..['type'] = 'futureType';
 
       final restored = VaultEntry.fromJson(json);
       expect(restored.type, EntryType.custom);

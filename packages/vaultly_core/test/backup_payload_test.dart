@@ -1,8 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/features/sync/domain/backup_payload.dart';
-import 'package:vaultly/features/sync/domain/vault_merge.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
-import 'package:vaultly/features/vault/domain/vault_tombstone.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// ADR-006 R3 + §3.5 C2：备份负载 v2 与版本闸门
 void main() {
@@ -11,14 +8,15 @@ void main() {
   final now = DateTime.now();
   final t0 = now.subtract(const Duration(hours: 3));
 
-  LoginEntry login(String id, {DateTime? updatedAt, String? title}) => LoginEntry(
-    id: id,
-    title: title ?? '条目 $id',
-    createdAt: t0,
-    updatedAt: updatedAt ?? t0,
-    username: 'alice',
-    password: 'P@ss!',
-  );
+  LoginEntry login(String id, {DateTime? updatedAt, String? title}) =>
+      LoginEntry(
+        id: id,
+        title: title ?? '条目 $id',
+        createdAt: t0,
+        updatedAt: updatedAt ?? t0,
+        username: 'alice',
+        password: 'P@ss!',
+      );
 
   group('v2 负载形状', () {
     test('声明 schemaVersion 2，并把条目放进 vault.entries', () {
@@ -93,8 +91,14 @@ void main() {
 
       final contents = BackupPayload.decode(encoded);
       expect(contents.entries, hasLength(2));
-      expect(contents.entries.firstWhere((e) => e.id == 'live').isDeleted, isFalse);
-      expect(contents.entries.firstWhere((e) => e.id == 'gone').isDeleted, isTrue);
+      expect(
+        contents.entries.firstWhere((e) => e.id == 'live').isDeleted,
+        isFalse,
+      );
+      expect(
+        contents.entries.firstWhere((e) => e.id == 'gone').isDeleted,
+        isTrue,
+      );
     });
 
     test('单条坏数据被跳过并计数，不让整份备份打不开', () {
@@ -159,10 +163,7 @@ void main() {
 
     test('旧格式（无墓碑）上传确实会复活——这正是 v2 要解决的问题', () {
       // 对照组：v1 负载里没有删除记录，另一台设备的旧副本必然胜出
-      final legacyPayload = {
-        'version': 1,
-        'entries': <dynamic>[],
-      };
+      final legacyPayload = {'version': 1, 'entries': <dynamic>[]};
       final received = BackupPayload.decode(legacyPayload).entries;
 
       final deviceB = [login('x')];
@@ -180,9 +181,7 @@ void main() {
         BackupPayload.encode([restored]),
       ).entries;
 
-      final deviceA = [
-        markEntryDeleted(login('x'), at: t0),
-      ];
+      final deviceA = [markEntryDeleted(login('x'), at: t0)];
       final merged = mergeVaultEntries(local: deviceA, remote: received);
 
       expect(merged.entries.single.isDeleted, isFalse);

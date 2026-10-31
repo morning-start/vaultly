@@ -1,9 +1,7 @@
 import 'dart:math';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/features/sync/domain/vault_merge.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
-import 'package:vaultly/features/vault/domain/vault_tombstone.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// ADR-006 R3 + C5 的性质测试：合并必须确定，删除不得被合并撤销
 void main() {
@@ -17,19 +15,17 @@ void main() {
   );
 
   VaultEntry dead(String id, DateTime at, {String? title}) => markEntryDeleted(
-    VaultEntry(
-      id: id,
-      title: title ?? '条目 $id',
-      createdAt: t0,
-      updatedAt: at,
-    ),
+    VaultEntry(id: id, title: title ?? '条目 $id', createdAt: t0, updatedAt: at),
     at: at,
   );
 
   /// 条目集合的可比较快照（列表顺序也算，顺序抖动同样是缺陷）
   List<String> snapshot(List<VaultEntry> entries) => entries
-      .map((e) => '${e.id}|${e.title}|${e.updatedAt.toIso8601String()}'
-          '|${e.deletedAt?.toIso8601String() ?? "-"}')
+      .map(
+        (e) =>
+            '${e.id}|${e.title}|${e.updatedAt.toIso8601String()}'
+            '|${e.deletedAt?.toIso8601String() ?? "-"}',
+      )
       .toList();
 
   /// 忽略顺序的快照（用于「内容未变」类断言，顺序另有专门用例）
@@ -208,7 +204,11 @@ void main() {
         );
 
         final again = mergeVaultEntries(local: ab.entries, remote: ab.entries);
-        expect(snapshot(again.entries), snapshot(ab.entries), reason: '第 $round 组不幂等');
+        expect(
+          snapshot(again.entries),
+          snapshot(ab.entries),
+          reason: '第 $round 组不幂等',
+        );
 
         // 删除不得被撤销：某 id 只要「最新的一次动作是删除」，结果就必须是墓碑
         for (final id in ids) {
@@ -218,11 +218,17 @@ void main() {
           final tombstoneMax = involved
               .where((e) => e.isDeleted)
               .map((e) => e.updatedAt)
-              .fold<DateTime?>(null, (max, t) => max == null || t.isAfter(max) ? t : max);
+              .fold<DateTime?>(
+                null,
+                (max, t) => max == null || t.isAfter(max) ? t : max,
+              );
           final liveMax = involved
               .where((e) => !e.isDeleted)
               .map((e) => e.updatedAt)
-              .fold<DateTime?>(null, (max, t) => max == null || t.isAfter(max) ? t : max);
+              .fold<DateTime?>(
+                null,
+                (max, t) => max == null || t.isAfter(max) ? t : max,
+              );
 
           final expectDeleted =
               tombstoneMax != null &&

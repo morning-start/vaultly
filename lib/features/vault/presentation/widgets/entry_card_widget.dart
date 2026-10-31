@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import '../../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'entry_type_helper.dart';
 import 'totp_pill.dart';
 import '../../../../ui/theme/tokens.dart';

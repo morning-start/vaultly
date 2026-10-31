@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../vault/domain/vault_entry.dart';
+import '../vault/vault_entry.dart';
 
 /// 合并统计（用于提示用户本次兼容同步发生了什么）
 class VaultMergeResult {
@@ -138,9 +138,9 @@ VaultEntry pickMergeWinner({
 
   // 都活跃或都删除、内容却不同：用内容指纹裁决。
   // 换顺序调用时指纹大小关系不变，因此结果与参数顺序无关（C5）。
-  final byContent = _contentFingerprint(remote).compareTo(
-    _contentFingerprint(local),
-  );
+  final byContent = _contentFingerprint(
+    remote,
+  ).compareTo(_contentFingerprint(local));
   if (byContent > 0) return remote;
   if (byContent < 0) return local;
   return local;

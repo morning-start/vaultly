@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'biometric_service.dart';
-import 'crypto_service.dart';
-import '../../../core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 认证服务 - 纯业务逻辑
 ///

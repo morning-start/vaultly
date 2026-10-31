@@ -111,7 +111,9 @@ Provider 派生查询。摸底发现 7 处真实问题，按严重度分级：
   （网页账号记忆 / 自动填充，方案 B 宿主解密；含 R0 原子写、R1 校验哈希加固、
   R2 DEK/KEK 密钥层次、R3 同步墓碑+回收站、R4 vaultly_core 抽包五项前置重构，
   以及 C1~C6 六条跨阶段硬约束）
-  - 进度（见该文档 §8）：R0/R1（P1）、R2（P2）、R3（P3）已落地；
-    R2b（生物识别硬件绑定）与 R4 待做
+  - 进度（见该文档 §8）：R0/R1（P1）、R2（P2）、R3（P3）、R4（P4）已落地；
+    R2b（生物识别硬件绑定）待做
   - 格式版本：本地存储 `schemaVersion: 2`、云端备份负载 `v2`（含墓碑），
     读取侧 fail-closed；升级后不可降级回 v4.0.1 及更早版本
+  - 核心领域层：`packages/vaultly_core`（纯 Dart，零 Flutter 依赖），
+    App / 桌面宿主 / CLI 共用；`cd packages/vaultly_core && dart test` 可独立验证

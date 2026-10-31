@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../data/vault_service.dart';
-import '../../../core/exceptions/app_exception.dart';
 
 /// 保险库状态
 ///

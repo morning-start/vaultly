@@ -17,7 +17,7 @@ import '../../features/vault/presentation/favorites_page.dart';
 import '../../features/vault/presentation/add_entry_page.dart';
 import '../../features/vault/presentation/entry_detail_page.dart';
 import '../../features/vault/presentation/trash_page.dart';
-import '../../features/vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../../features/tools/presentation/tools_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/settings/presentation/auth_lock_bridge.dart';

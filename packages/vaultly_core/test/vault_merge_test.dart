@@ -1,6 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/features/sync/domain/vault_merge.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 void main() {
   final base = DateTime(2026, 1, 1, 10);
@@ -57,10 +56,7 @@ void main() {
 
       // 旧实现遇到同时间戳「保留本地」，于是两台设备交替同步会来回抖动。
       // 现在由内容指纹裁决：谁胜出都必须与参数顺序无关。
-      expect(
-        forward.entries.single.title,
-        backward.entries.single.title,
-      );
+      expect(forward.entries.single.title, backward.entries.single.title);
       expect(forward.entries.single.title, anyOf('本地', '云端'));
     });
 

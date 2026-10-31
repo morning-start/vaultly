@@ -5,14 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../../features/vault/presentation/vault_providers.dart';
 import 'sync_providers.dart';
 import '../../../features/auth/presentation/auth_providers.dart';
-import '../../../features/vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../ui/theme/tokens.dart';
 import '../../../ui/theme/vaultly_colors.dart';
 import '../data/webdav_client.dart' show RemoteBackupFormats, WebDAVException;
-import '../../auth/data/crypto_service.dart' show KdfParams;
-import '../domain/backup_payload.dart';
-import '../domain/vault_merge.dart';
 
 /// 每次操作的执行方式
 enum SyncApplyMode {

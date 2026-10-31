@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'sync_models.dart';
 import '../data/webdav_client.dart';
 import '../data/sync_config_repository.dart';
-import '../../auth/data/crypto_service.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 同步编排器
 ///

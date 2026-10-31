@@ -1,15 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../domain/vault_entry.dart';
-import '../domain/entry_codec.dart';
-import '../domain/vault_tombstone.dart';
-import '../domain/encryption/entry_encryption_strategy.dart';
-import '../domain/encryption/login_encryption_strategy.dart';
-import '../domain/encryption/bank_card_encryption_strategy.dart';
-import '../domain/encryption/secure_note_encryption_strategy.dart';
-import '../domain/encryption/identity_encryption_strategy.dart';
-import '../../../core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 /// 保险库服务
 ///
 /// 负责加密存储、读取和维护保险库条目。

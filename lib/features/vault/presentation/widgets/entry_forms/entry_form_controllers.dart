@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 /// 银行卡表单局部状态（有效期与卡类型）。
 class BankCardFormState {

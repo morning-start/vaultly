@@ -3,10 +3,8 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/core/exceptions/app_exception.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'package:vaultly/features/vault/data/vault_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
-import 'package:vaultly/features/vault/domain/vault_tombstone.dart';
 
 import 'helpers/mock_secure_storage.dart';
 

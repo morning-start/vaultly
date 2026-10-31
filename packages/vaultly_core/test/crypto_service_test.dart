@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/features/auth/data/crypto_service.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 void main() {
   group('CryptoService', () {

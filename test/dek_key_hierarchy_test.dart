@@ -6,9 +6,8 @@ import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vaultly/features/auth/data/auth_service.dart';
 import 'package:vaultly/features/auth/data/biometric_service.dart';
-import 'package:vaultly/features/auth/data/crypto_service.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'package:vaultly/features/vault/data/vault_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
 
 import 'helpers/mock_secure_storage.dart';
 

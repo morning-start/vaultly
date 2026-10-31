@@ -2,9 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_service.dart';
 import '../data/biometric_service.dart';
-import '../data/crypto_service.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import 'auth_state.dart';
-import '../../../core/exceptions/app_exception.dart';
 
 /// 密钥发布回调：认证流程解锁/改密后，把会话密钥发布给保险库。
 typedef KeyPublisher = void Function(Uint8List key);

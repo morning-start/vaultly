@@ -5,7 +5,7 @@ import '../../../features/tools/presentation/password_generator_panel.dart';
 import '../../../shared/widgets/type_badge.dart';
 import '../../../ui/theme/tokens.dart';
 import '../../../ui/theme/vaultly_colors.dart';
-import '../../vault/domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../../vault/presentation/vault_providers.dart';
 import '../password_generator.dart';
 

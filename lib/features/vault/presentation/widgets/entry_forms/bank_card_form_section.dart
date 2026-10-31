@@ -3,7 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../../shared/widgets/secure_text_field.dart';
 import '../../../../../ui/theme/tokens.dart';
 import '../../../../tools/ocr_service.dart';
-import '../../../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../../widgets/entry_type_helper.dart';
 import 'entry_form_controllers.dart';
 

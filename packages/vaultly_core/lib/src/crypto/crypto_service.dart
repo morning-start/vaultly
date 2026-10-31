@@ -5,7 +5,7 @@ import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/key_derivators/api.dart';
 import 'package:pointycastle/key_derivators/argon2.dart';
-import '../../../core/exceptions/app_exception.dart';
+import '../exceptions/app_exception.dart';
 
 class CryptoService {
   static const int _keyLength = 32; // 256 bits
@@ -31,13 +31,12 @@ class CryptoService {
     required String info,
     Uint8List? salt,
     int length = 32,
-  }) =>
-      hkdfSha256Bytes(
-        ikm: ikm,
-        info: utf8.encode(info),
-        salt: salt,
-        length: length,
-      );
+  }) => hkdfSha256Bytes(
+    ikm: ikm,
+    info: utf8.encode(info),
+    salt: salt,
+    length: length,
+  );
 
   /// HKDF-SHA256 的字节级实现（RFC 5869 测试向量使用非 UTF-8 的 info）
   static Uint8List hkdfSha256Bytes({
@@ -53,8 +52,9 @@ class CryptoService {
     }
 
     // extract：salt 缺省为全零（RFC 5869 §2.2）
-    final effectiveSalt =
-        (salt == null || salt.isEmpty) ? Uint8List(hashLen) : salt;
+    final effectiveSalt = (salt == null || salt.isEmpty)
+        ? Uint8List(hashLen)
+        : salt;
     final prk = Hmac(sha256, effectiveSalt).convert(ikm).bytes;
 
     // expand
@@ -219,10 +219,7 @@ class CryptoService {
     );
   }
 
-  static Uint8List deriveKeyWithArgon2id(
-    String password,
-    Uint8List salt,
-  ) {
+  static Uint8List deriveKeyWithArgon2id(String password, Uint8List salt) {
     return deriveKeyWithKdfParams(password, defaultKdfParams(salt));
   }
 
@@ -231,10 +228,7 @@ class CryptoService {
   /// 与 [deriveKeyWithArgon2id] 的区别：这里的强度参数来自调用方
   /// （读取备份文件时来自文件头），而不是编译期常量。这样即使以后
   /// 调高 Argon2 内存/迭代强度，旧备份依然能用旧参数解开。
-  static Uint8List deriveKeyWithKdfParams(
-    String password,
-    KdfParams params,
-  ) {
+  static Uint8List deriveKeyWithKdfParams(String password, KdfParams params) {
     final parameters = Argon2Parameters(
       Argon2Parameters.ARGON2_id,
       params.salt,
@@ -263,10 +257,7 @@ class CryptoService {
     Uint8List key,
     KdfParams kdf,
   ) {
-    return EncryptedEnvelope(
-      kdf: kdf,
-      data: encrypt(plainText, key),
-    );
+    return EncryptedEnvelope(kdf: kdf, data: encrypt(plainText, key));
   }
 
   /// 解开自描述信封
@@ -285,10 +276,7 @@ class CryptoService {
     return sha256.convert(salted).toString();
   }
 
-  static KeyMaterial deriveKeyMaterial(
-    String password,
-    Uint8List salt,
-  ) {
+  static KeyMaterial deriveKeyMaterial(String password, Uint8List salt) {
     final masterSecret = deriveKeyWithArgon2id(password, salt);
 
     return KeyMaterial(
@@ -411,14 +399,14 @@ class KdfParams {
   });
 
   Map<String, dynamic> toJson() => {
-        'algorithm': algorithm,
-        'salt': base64Encode(salt),
-        'memoryPowerOf2': memoryPowerOf2,
-        'iterations': iterations,
-        'parallelism': parallelism,
-        'keyLength': keyLength,
-        'argon2Version': argon2Version,
-      };
+    'algorithm': algorithm,
+    'salt': base64Encode(salt),
+    'memoryPowerOf2': memoryPowerOf2,
+    'iterations': iterations,
+    'parallelism': parallelism,
+    'keyLength': keyLength,
+    'argon2Version': argon2Version,
+  };
 
   factory KdfParams.fromJson(Map<String, dynamic> json) {
     final algorithm = json['algorithm'];
@@ -456,7 +444,8 @@ class KdfParams {
       iterations: iterations.toInt(),
       parallelism: parallelism.toInt(),
       keyLength: keyLength.toInt(),
-      argon2Version: (json['argon2Version'] as num?)?.toInt() ?? argon2Version13,
+      argon2Version:
+          (json['argon2Version'] as num?)?.toInt() ?? argon2Version13,
     );
   }
 
@@ -510,12 +499,12 @@ class EncryptedEnvelope {
   });
 
   Map<String, dynamic> toJson() => {
-        'format': format,
-        'version': version,
-        'cipher': cipher,
-        'kdf': kdf.toJson(),
-        'data': data.toJson(),
-      };
+    'format': format,
+    'version': version,
+    'cipher': cipher,
+    'kdf': kdf.toJson(),
+    'data': data.toJson(),
+  };
 
   /// 判断解析出的 JSON 是否为信封格式（旧格式只有 cipherText/iv/authTag）
   static bool isEnvelope(Map<String, dynamic> json) =>
@@ -541,6 +530,7 @@ class EncryptedEnvelope {
 class KeyMaterial {
   final Uint8List key;
   final Uint8List salt;
+
   /// 【遗留】sha256(password ‖ salt)，仅供旧格式迁移校验
   final String hash;
 
@@ -561,8 +551,8 @@ class KeyMaterial {
     String? keyTag,
     this.algorithm = 'sha256',
     this.version = 1,
-  })  : authKey = authKey ?? Uint8List(0),
-        keyTag = keyTag ?? '';
+  }) : authKey = authKey ?? Uint8List(0),
+       keyTag = keyTag ?? '';
 
   String get keyBase64 => base64Encode(key);
 

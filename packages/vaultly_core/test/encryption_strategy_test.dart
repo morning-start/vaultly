@@ -1,8 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultly/features/auth/data/crypto_service.dart';
-import 'package:vaultly/features/vault/domain/vault_entry.dart';
-import 'package:vaultly/features/vault/domain/encryption/login_encryption_strategy.dart';
-import 'package:vaultly/features/vault/domain/encryption/bank_card_encryption_strategy.dart';
+import 'package:test/test.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 
 void main() {
   group('FieldBasedEncryptionStrategy 加密往返', () {
@@ -21,16 +18,27 @@ void main() {
         notes: 'secret note',
       );
 
-      final encrypted =
-          const LoginEncryptionStrategy().encryptFields(entry, key);
+      final encrypted = const LoginEncryptionStrategy().encryptFields(
+        entry,
+        key,
+      );
 
       // 明文字段必须被移除，否则加密形同虚设
-      expect(encrypted.containsKey('password'), isFalse,
-          reason: '明文 password 泄漏到持久化 JSON');
-      expect(encrypted.containsKey('totpSecret'), isFalse,
-          reason: '明文 totpSecret 泄漏到持久化 JSON');
-      expect(encrypted.containsKey('notes'), isFalse,
-          reason: '明文 notes 泄漏到持久化 JSON');
+      expect(
+        encrypted.containsKey('password'),
+        isFalse,
+        reason: '明文 password 泄漏到持久化 JSON',
+      );
+      expect(
+        encrypted.containsKey('totpSecret'),
+        isFalse,
+        reason: '明文 totpSecret 泄漏到持久化 JSON',
+      );
+      expect(
+        encrypted.containsKey('notes'),
+        isFalse,
+        reason: '明文 notes 泄漏到持久化 JSON',
+      );
       expect(encrypted.containsKey('username'), isFalse);
       expect(encrypted.containsKey('email'), isFalse);
 
@@ -71,13 +79,21 @@ void main() {
         cvv: '123',
       );
 
-      final encrypted =
-          const BankCardEncryptionStrategy().encryptFields(entry, key);
+      final encrypted = const BankCardEncryptionStrategy().encryptFields(
+        entry,
+        key,
+      );
 
-      expect(encrypted.containsKey('cardNumber'), isFalse,
-          reason: '明文卡号泄漏到持久化 JSON');
-      expect(encrypted.containsKey('cvv'), isFalse,
-          reason: '明文 CVV 泄漏到持久化 JSON');
+      expect(
+        encrypted.containsKey('cardNumber'),
+        isFalse,
+        reason: '明文卡号泄漏到持久化 JSON',
+      );
+      expect(
+        encrypted.containsKey('cvv'),
+        isFalse,
+        reason: '明文 CVV 泄漏到持久化 JSON',
+      );
       expect(encrypted.containsKey('cardNumberEncrypted'), isTrue);
       expect(encrypted.containsKey('cvvEncrypted'), isTrue);
     });

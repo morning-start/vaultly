@@ -1,6 +1,6 @@
-import '../../vault/domain/entry_codec.dart';
-import '../../vault/domain/vault_entry.dart';
-import '../../vault/domain/vault_tombstone.dart';
+import '../vault/vault_entry.dart';
+import '../vault/entry_codec.dart';
+import '../vault/vault_tombstone.dart';
 
 /// 备份负载版本高于本应用认知时抛出
 ///
@@ -79,9 +79,7 @@ class BackupPayload {
     return {
       'schemaVersion': currentSchema,
       'exportTime': (now ?? DateTime.now()).toIso8601String(),
-      vaultKey: {
-        legacyEntriesKey: retained.map((e) => e.toJson()).toList(),
-      },
+      vaultKey: {legacyEntriesKey: retained.map((e) => e.toJson()).toList()},
     };
   }
 

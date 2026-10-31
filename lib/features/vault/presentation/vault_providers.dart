@@ -1,9 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/vault_service.dart';
-import '../domain/vault_entry.dart';
+import 'package:vaultly_core/vaultly_core.dart';
 import '../domain/vault_notifier.dart';
-import '../domain/search/entry_search_strategy.dart';
 import '../../auth/presentation/auth_providers.dart';
 
 /// Vault 服务提供者
