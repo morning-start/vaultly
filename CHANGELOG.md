@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [4.0.1] - 2026-10-31
+
+### 修复
+- **换新设备后无法解密云端备份**（`Instance of 'InvalidCipherTextException'`）
+  - 根因：AES 密钥由 `Argon2id(主密码, 盐)` 派生，而盐值只存在原设备的安全存储里，备份文件一个字节都不带。换设备后重新生成盐，同一个主密码派生出的密钥完全不同，因此必然解密失败——提示却指向「主密码不一致」，误导排查方向
+  - 备份改为**自描述信封**（格式 v2）：密钥派生算法、盐值、Argon2 强度与密文写在同一个文件里。盐值不是秘密，它必须随密文一起走
+  - 解密时用「主密码 + 文件头参数」重新派生，不再依赖原设备残留数据；本机参数与文件一致时直接复用会话密钥
+  - 文件头受 AES-GCM 隐式认证：篡改盐值或强度参数必然解密失败，不会解出错误数据
+  - 旧格式备份仍可在原设备解密；在其他设备上解不开时给出可操作提示（在原设备更新后重新上传），不再笼统归因为「密码不对」
+- **设置页版本号硬编码为 `2.4.1`**
+  - 改为构建时由标签名注入（`--dart-define=APP_VERSION`），与 APK 的 versionName 同源；未注入时显示「开发版」
+  - 此前从 2.4.1 一直到 4.0.0，用户看到的版本号都是错的
+
+### 新增
+- **云端备份过期提示**：改过主密码后，云端那份备份只有旧密码能解开
+  - 上传时记录所用密钥体系的非敏感指纹（口令校验哈希的再哈希，不可逆），与当前指纹比对即可发现失效
+  - 同步页显示警示卡并提供「用当前主密码重新上传」一键操作，上传后提示自动消失
+  - 采用状态判定而非「改密时弹一次」，因此也覆盖改密时未配置 WebDAV、断网、上传失败等情况
+
 ## [未发布]
 
 ### 改进
@@ -247,7 +266,8 @@
 
 ---
 
-[未发布]: https://github.com/morning-start/vaultly/compare/v3.0.0...HEAD
+[未发布]: https://github.com/morning-start/vaultly/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/morning-start/vaultly/releases/tag/v4.0.1
 [3.0.0]: https://github.com/morning-start/vaultly/releases/tag/v3.0.0
 [2.5.1]: https://github.com/morning-start/vaultly/releases/tag/v2.5.1
 [2.5.0]: https://github.com/morning-start/vaultly/releases/tag/v2.5.0
