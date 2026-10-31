@@ -13,6 +13,11 @@ class SyncConfigRepository {
   static const _keyWebDavPassword = 'webdav_password';
   static const _keyLastSyncTime = 'webdav_last_sync';
   static const _keyLastUploadKeyTag = 'webdav_last_upload_key_tag';
+
+  /// 指纹方案版本：前缀不匹配的旧值一律视为「未知」
+  ///
+  /// v2 = HKDF(masterSecret, "vaultly/key-tag")；v1（无前缀）= 校验值再哈希。
+  static const _keyTagScheme = '2';
   static const _keySyncHistory = 'webdav_sync_history';
 
   final FlutterSecureStorage _secureStorage;
@@ -144,15 +149,27 @@ class SyncConfigRepository {
   /// 用于检测「云端备份还是旧主密码加密的」：改主密码后指纹变化，
   /// 与云端那份不一致时提示用户重新上传。
   Future<void> updateLastUploadKeyTag(String tag) async {
-    await _secureStorage.write(key: _keyLastUploadKeyTag, value: tag);
+    await _secureStorage.write(
+      key: _keyLastUploadKeyTag,
+      value: '$_keyTagScheme:$tag',
+    );
   }
 
   /// 读取最近一次上传所用的密钥指纹
   ///
-  /// null 表示未知（尚未上传过，或由旧版本上传、当时没有记录指纹）。
+  /// 返回 null 表示未知：尚未上传过、无方案前缀（v4.0.1 及更早写入的旧值），
+  /// 或指纹方案已变更。方案变更后旧值不再可比，一律当作未知——
+  /// 宁可漏报「备份过期」，也不能误报（误报会把用户引向无意义的重传）。
   Future<String?> getLastUploadKeyTag() async {
-    final tag = await _secureStorage.read(key: _keyLastUploadKeyTag);
-    return (tag == null || tag.isEmpty) ? null : tag;
+    final raw = await _secureStorage.read(key: _keyLastUploadKeyTag);
+    if (raw == null || raw.isEmpty) return null;
+
+    final separator = raw.indexOf(':');
+    if (separator <= 0) return null;
+    if (raw.substring(0, separator) != _keyTagScheme) return null;
+
+    final tag = raw.substring(separator + 1);
+    return tag.isEmpty ? null : tag;
   }
 
   /// 获取同步历史

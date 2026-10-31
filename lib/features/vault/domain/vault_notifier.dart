@@ -20,11 +20,15 @@ class VaultState {
   /// 最近一次操作错误（展示后清除）
   final String? error;
 
+  /// 本次加载是否从写前备份恢复（主数据损坏）
+  final bool recoveredFromBackup;
+
   const VaultState({
     this.isLoaded = false,
     this.revision = 0,
     this.entries = const [],
     this.error,
+    this.recoveredFromBackup = false,
   });
 
   VaultState copyWith({
@@ -32,6 +36,7 @@ class VaultState {
     int? revision,
     List<VaultEntry>? entries,
     String? error,
+    bool? recoveredFromBackup,
     bool clearError = false,
   }) =>
       VaultState(
@@ -39,6 +44,7 @@ class VaultState {
         revision: revision ?? this.revision,
         entries: entries ?? this.entries,
         error: clearError ? null : (error ?? this.error),
+        recoveredFromBackup: recoveredFromBackup ?? this.recoveredFromBackup,
       );
 }
 
@@ -80,6 +86,7 @@ class VaultNotifier extends StateNotifier<VaultState> {
         isLoaded: true,
         revision: _nextRevision,
         entries: _service.entries,
+        recoveredFromBackup: _service.recoveredFromPrevious,
         error: null,
       );
     } on AppException catch (e) {

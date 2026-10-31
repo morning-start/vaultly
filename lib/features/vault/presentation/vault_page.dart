@@ -177,6 +177,56 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     );
   }
 
+  /// 主数据损坏、已从写前备份恢复时的告知条
+  ///
+  /// 必须明确告知：恢复出来的是「上一次成功写入」的内容，
+  /// 最后一次修改已经丢了，用户需要自己核对。
+  Widget _buildRecoveryNotice() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      padding: const EdgeInsets.all(AppTokens.spaceM),
+      decoration: BoxDecoration(
+        color: colorScheme.dangerSoft,
+        borderRadius: BorderRadius.circular(AppTokens.radiusM),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.history_rounded, size: 18, color: colorScheme.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '已从写前备份恢复',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '本地数据主副本损坏，已回退到上一次保存的版本。'
+                  '最后一次修改的内容可能丢失，请核对后再继续操作。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.6,
+                    color: colorScheme.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody(
     VaultState vaultState,
     WebDAVConfigState syncState,
@@ -206,6 +256,8 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
+        if (vaultState.recoveredFromBackup)
+          SliverToBoxAdapter(child: _buildRecoveryNotice()),
         SliverToBoxAdapter(child: _buildHeader(vaultState, syncState)),
         SliverToBoxAdapter(child: _buildSearch()),
         SliverToBoxAdapter(child: _buildFilterChips(vaultState)),
