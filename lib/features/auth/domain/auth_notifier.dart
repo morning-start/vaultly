@@ -57,6 +57,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 本机当前使用的 KDF 参数（写入云端备份文件头用）
   Future<KdfParams> currentKdfParams() => _authService.getKdfParams();
 
+  /// 当前密钥体系指纹（判断云端备份是否由当前主密码加密）
+  Future<String?> currentKeyTag() => _authService.currentKeyTag();
+
   /// 用指定 KDF 参数从主密码派生密钥（参数通常来自备份文件头）
   Uint8List deriveVaultKey(String password, KdfParams params) =>
       _authService.deriveVaultKey(password, params);

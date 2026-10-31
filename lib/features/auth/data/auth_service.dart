@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'biometric_service.dart';
@@ -89,6 +90,20 @@ class AuthService {
   /// 派生出的密钥就一致——这正是跨设备恢复能成立的前提。
   Uint8List deriveVaultKey(String password, KdfParams params) {
     return CryptoService.deriveKeyWithKdfParams(password, params);
+  }
+
+  /// 当前密钥体系的指纹（非敏感）
+  ///
+  /// 主密码一变，盐和密钥都会变，指纹随之改变。用它来判断
+  /// 「云端那份备份还是不是当前主密码加密的」——改过主密码之后，
+  /// 之前上传的备份只有旧密码能解开，需要重新上传一次。
+  ///
+  /// 这里存的是口令校验哈希的**再哈希**，不可逆且无法用于离线爆破，
+  /// 所以可以安全地写进普通偏好存储做比对。
+  Future<String?> currentKeyTag() async {
+    final storedHash = await _secureStorage.read(key: _keyMasterPassword);
+    if (storedHash == null || storedHash.isEmpty) return null;
+    return sha256.convert(utf8.encode('vaultly-key-tag:$storedHash')).toString();
   }
 
   /// 检查是否已设置主密码

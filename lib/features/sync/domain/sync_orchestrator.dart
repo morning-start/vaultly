@@ -106,6 +106,7 @@ class SyncOrchestrator {
     required Uint8List encryptionKey,
     required KdfParams kdfParams,
     required BackupKeyResolver keyResolver,
+    String? keyTag,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -136,6 +137,7 @@ class SyncOrchestrator {
             vaultData: localVaultData,
             encryptionKey: encryptionKey,
             kdfParams: kdfParams,
+            keyTag: keyTag,
             onProgress: onProgress,
           );
           break;
@@ -184,6 +186,7 @@ class SyncOrchestrator {
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
     required KdfParams kdfParams,
+    String? keyTag,
     Function(double progress)? onProgress,
   }) async {
     try {
@@ -191,6 +194,7 @@ class SyncOrchestrator {
         vaultData: vaultData,
         encryptionKey: encryptionKey,
         kdfParams: kdfParams,
+        keyTag: keyTag,
         onProgress: onProgress,
       );
 
@@ -232,10 +236,14 @@ class SyncOrchestrator {
   }
 
   /// 上传保险库数据（固定加密 + 压缩）
+  ///
+  /// [keyTag] 为本次加密所用密钥体系的指纹，上传成功后记录下来，
+  /// 用于后续判断云端备份是否已被主密码变更「作废」。
   Future<bool> upload({
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
     required KdfParams kdfParams,
+    String? keyTag,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -255,7 +263,23 @@ class SyncOrchestrator {
     // 更新最后同步时间
     await _configRepository.updateLastSyncTime(DateTime.now());
 
+    // 记录本次上传的密钥指纹：改主密码后再比对即可发现备份已过期
+    if (keyTag != null) {
+      await _configRepository.updateLastUploadKeyTag(keyTag);
+    }
+
     return result;
+  }
+
+  /// 云端备份是否由「另一套密钥体系」上传（即改过主密码）
+  ///
+  /// 返回 true 表示云端那份备份用当前主密码解不开，需要重新上传。
+  /// 指纹未知（旧版本上传）时返回 false，避免误报。
+  Future<bool> isRemoteBackupStale({required String? currentKeyTag}) async {
+    if (currentKeyTag == null) return false;
+    final uploadedTag = await _configRepository.getLastUploadKeyTag();
+    if (uploadedTag == null) return false;
+    return uploadedTag != currentKeyTag;
   }
 
   /// 下载保险库数据（固定解密 + 解压）
