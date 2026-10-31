@@ -37,10 +37,23 @@ final vaultNotifierProvider =
     notifier.lock();
   }
 
+  /// DEK 迁移：确保数据已用旧密钥（masterSecret）加载完成，
+  /// 再用新密钥（DEK）重加密。必须 await，否则会出现
+  /// 「数据还没加载完就重加密」→ 用空列表覆盖磁盘的严重后果。
+  Future<void> onMigrate(Uint8List oldKey, Uint8List newKey) async {
+    await notifier.unlock(oldKey);
+    await notifier.rotateKey(newKey);
+  }
+
   bridge.onPublished(onPublished);
   bridge.onRevoked(onRevoked);
+  bridge.onMigrate(onMigrate);
   ref.onDispose(() {
-    bridge.removeListeners(published: onPublished, revoked: onRevoked);
+    bridge.removeListeners(
+      published: onPublished,
+      revoked: onRevoked,
+      migrator: onMigrate,
+    );
   });
 
   // 补偿时序竞争：密钥可能在 provider 首次被 watch 之前就已发布

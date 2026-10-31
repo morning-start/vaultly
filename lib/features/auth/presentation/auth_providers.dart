@@ -29,6 +29,7 @@ class SessionKeyBridge {
   Uint8List? _key;
   final List<void Function(Uint8List key)> _publishedListeners = [];
   final List<void Function()> _revokedListeners = [];
+  final List<KeyMigrator> _migrators = [];
 
   /// 当前会话密钥（可能已被清零回收）
   Uint8List? get key => _key;
@@ -38,6 +39,14 @@ class SessionKeyBridge {
     for (final listener in List.of(_publishedListeners)) {
       listener(key);
     }
+  }
+
+  /// 只更新缓存，不触发监听器
+  ///
+  /// 用于 DEK 迁移：迁移由 [migrateTo] 显式驱动（需等待完成），
+  /// 若再 publish 一次会让保险库重复重加密。
+  void recache(Uint8List key) {
+    _key = key;
   }
 
   void revoke() {
@@ -55,12 +64,26 @@ class SessionKeyBridge {
     _revokedListeners.add(listener);
   }
 
+  /// 注册迁移处理器（保险库侧实现「用旧密钥读出、用新密钥写回」）
+  void onMigrate(KeyMigrator handler) {
+    _migrators.add(handler);
+  }
+
+  /// 执行密钥迁移，等待全部处理器完成
+  Future<void> migrateTo(Uint8List oldKey, Uint8List newKey) async {
+    for (final migrator in List.of(_migrators)) {
+      await migrator(oldKey, newKey);
+    }
+  }
+
   void removeListeners({
     void Function(Uint8List key)? published,
     void Function()? revoked,
+    KeyMigrator? migrator,
   }) {
     if (published != null) _publishedListeners.remove(published);
     if (revoked != null) _revokedListeners.remove(revoked);
+    if (migrator != null) _migrators.remove(migrator);
   }
 }
 
@@ -81,5 +104,7 @@ final authNotifierProvider =
     biometricService,
     keyPublisher: bridge.publish,
     keyRevoker: bridge.revoke,
+    keyMigrator: bridge.migrateTo,
+    keyRecacher: bridge.recache,
   );
 });

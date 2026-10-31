@@ -81,6 +81,36 @@ class CryptoService {
   static Uint8List deriveWrapKey(Uint8List masterSecret) =>
       hkdfSha256(ikm: masterSecret, info: hkdfInfoKek);
 
+  /// 生成数据加密密钥（DEK）
+  ///
+  /// DEK 是随机的、与主密码无关：主密码只负责「包装」它。
+  /// 于是改主密码只需重新包装（毫秒级），不必重加密整个保险库。
+  static Uint8List generateDek() => _generateRandomBytes(_keyLength);
+
+  /// 用包装密钥（KEK）包装 DEK，返回可直接落盘的结构
+  static EncryptedData wrapKey(Uint8List key, Uint8List wrappingKey) {
+    return encrypt(base64Encode(key), wrappingKey);
+  }
+
+  /// 解包 DEK
+  ///
+  /// 包装密钥不对或数据被篡改时抛 [CryptoException]（GCM 认证失败），
+  /// 因此本方法天然同时完成「密钥是否正确」的校验。
+  static Uint8List unwrapKey(EncryptedData wrapped, Uint8List wrappingKey) {
+    final plain = decrypt(wrapped, wrappingKey);
+    final Uint8List key;
+    try {
+      key = base64Decode(plain);
+    } catch (e) {
+      throw CryptoException.decryptionFailed(e);
+    }
+
+    if (key.length != _keyLength) {
+      throw const CryptoException('解包出的密钥长度不正确');
+    }
+    return key;
+  }
+
   /// 密钥体系指纹：用于判断「云端备份是否还是当前主密码加密的」
   ///
   /// 必须由 masterSecret 直接派生，**不能**基于落盘的校验值算——

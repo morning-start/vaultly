@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_service.dart';
 import '../data/biometric_service.dart';
@@ -11,6 +11,12 @@ typedef KeyPublisher = void Function(Uint8List key);
 
 /// 密钥清除回调：锁定时通知保险库丢弃密钥。
 typedef KeyRevoker = void Function();
+
+/// 密钥迁移回调：用新密钥重加密已加载的数据（**必须等待完成**）。
+///
+/// 不能走 fire-and-forget 的发布通道：迁移时数据必须先以旧密钥加载完，
+/// 否则「用新密钥重加密」会拿空列表覆盖磁盘。
+typedef KeyMigrator = Future<void> Function(Uint8List oldKey, Uint8List newKey);
 
 /// 认证状态管理器
 ///
@@ -29,8 +35,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 锁定/清除数据时回收密钥
   final KeyRevoker? keyRevoker;
 
+  /// 本地数据密钥迁移（把数据从 masterSecret 重加密为 DEK），必须等待完成
+  final KeyMigrator? keyMigrator;
+
+  /// 只更新会话密钥缓存（不触发保险库动作）
+  final void Function(Uint8List key)? keyRecacher;
+
   /// 当前会话的加密密钥（内存中临时保存）
+  ///
+  /// R2 之后这是 **DEK**（本地数据的字段级加密密钥）；
+  /// DEK 迁移尚未完成时暂时等于 masterSecret。
   Uint8List? _encryptionKey;
+
+  /// 主密码派生密钥（内存中临时保存）
+  ///
+  /// 用途与 [_encryptionKey] 不同：**云端备份**始终由它加密，
+  /// 因此生物识别会话（没有明文主密码）也必须持有它，否则无法上传。
+  Uint8List? _masterSecret;
 
   /// 当前会话的主密码（内存中临时保存，锁定即清除）
   ///
@@ -44,12 +65,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     this._biometricService, {
     this.keyPublisher,
     this.keyRevoker,
+    this.keyMigrator,
+    this.keyRecacher,
   }) : super(AuthState()) {
     _init();
   }
 
-  /// 获取当前加密密钥
+  /// 获取当前加密密钥（本地字段加密用，R2 后为 DEK）
   Uint8List? get encryptionKey => _encryptionKey;
+
+  /// 云端备份用的密钥（主密码派生）
+  ///
+  /// 与 [encryptionKey] 是两把不同的密钥：备份必须能被其他设备
+  /// 用同一个主密码解开，因此不能用 DEK。
+  Uint8List? get backupKey => _masterSecret;
 
   /// 获取当前会话的主密码（仅内存态；生物识别解锁后可能为 null）
   String? get masterPassword => _masterPassword;
@@ -106,9 +135,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> setupPassword(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
-      _encryptionKey = await _authService.setupMasterPassword(password);
+      final result = await _authService.setupMasterPassword(password);
+      _applyUnlockResult(result);
       _masterPassword = password;
-      keyPublisher?.call(_encryptionKey!);
+      keyPublisher?.call(result.sessionKey);
 
       final bioAvailability = await _authService.checkBiometricAvailability();
 
@@ -143,12 +173,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> unlock(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
-      _encryptionKey = await _authService.verifyMasterPassword(password);
-      final success = _encryptionKey != null;
+      final result = await _authService.verifyMasterPassword(password);
+      final success = result != null;
 
       if (success) {
         _masterPassword = password;
-        keyPublisher?.call(_encryptionKey!);
+        _applyUnlockResult(result);
+        // 先让保险库用会话密钥加载（迁移时它是 masterSecret，数据可读）
+        keyPublisher?.call(result.sessionKey);
+        if (result.needsDekMigration) {
+          await _migrateToDek(result.masterSecret);
+        }
       }
 
       state = state.copyWith(
@@ -174,22 +209,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: null,
       );
 
-      _encryptionKey = await _authService.biometricUnlock();
-      final success = _encryptionKey != null;
+      final result = await _authService.biometricUnlock();
 
-      if (success) {
-        // 生物识别路径没有明文口令可用，跨设备解密备份时会要求改用密码解锁
-        _masterPassword = null;
-        keyPublisher?.call(_encryptionKey!);
+      // 生物识别路径没有明文口令可用，跨设备解密备份时会要求改用密码解锁
+      _masterPassword = null;
+      _applyUnlockResult(result);
+      keyPublisher?.call(result.sessionKey);
+      if (result.needsDekMigration) {
+        await _migrateToDek(result.masterSecret);
       }
 
       state = state.copyWith(
-        isUnlocked: success,
+        isUnlocked: true,
         isAuthenticatingWithBiometric: false,
-        error: success ? null : '生物识别验证失败',
+        error: null,
       );
 
-      return success;
+      return true;
     } on AuthException catch (e) {
       state = state.copyWith(
         isAuthenticatingWithBiometric: false,
@@ -209,7 +245,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> enableBiometric(String password) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
-      _encryptionKey = await _authService.enableBiometric(password);
+      final result = await _authService.enableBiometric(password);
+      _applyUnlockResult(result);
       _masterPassword = password;
 
       final bioAvailability = await _authService.checkBiometricAvailability();
@@ -260,28 +297,71 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (_encryptionKey != null) {
       _authService.secureKey(_encryptionKey!);
     }
+    if (_masterSecret != null) {
+      _authService.secureKey(_masterSecret!);
+    }
     _encryptionKey = null;
+    _masterSecret = null;
     _masterPassword = null;
     keyRevoker?.call();
   }
 
-  /// 修改密码
+  /// 记录解锁结果中的两把密钥
+  void _applyUnlockResult(UnlockResult result) {
+    _encryptionKey = result.sessionKey;
+    _masterSecret = result.masterSecret;
+  }
+
+  /// 完成 DEK 迁移：把本地数据从 masterSecret 重加密为 DEK
   ///
-  /// 修改成功后通过 [keyPublisher] 发布新密钥，
-  /// 由保险库侧执行重加密（见 VaultNotifier.rotateKey）。
-  /// 否则旧密文仍以旧密钥加密，下次用新密钥解锁将无法解密，
-  /// 保险库数据会静默丢失。
+  /// 顺序很重要：
+  /// 1. `ensureDek` 先落盘包装好的 DEK（保证 DEK 可恢复）
+  /// 2. 由保险库侧「用旧密钥读、用新密钥写」完成重加密（等待完成，避免竞态）
+  /// 3. 失败则删除刚写的 wrappedDek 回滚，保持旧的密钥体系——数据依然可读
+  Future<void> _migrateToDek(Uint8List masterSecret) async {
+    if (keyMigrator == null) {
+      debugPrint('Auth: 无密钥迁移通道，本地数据继续使用 masterSecret');
+      return;
+    }
+
+    final hadDek = await _authService.hasWrappedDek();
+
+    try {
+      final dek = await _authService.ensureDek(masterSecret);
+      await keyMigrator!(masterSecret, dek);
+
+      _encryptionKey = dek;
+      keyRecacher?.call(dek);
+      debugPrint('Auth: 本地数据已迁移到独立的数据密钥（DEK）');
+    } catch (e) {
+      debugPrint('Auth: DEK 迁移失败，保留原密钥体系: $e');
+      if (!hadDek) {
+        await _authService.clearWrappedDek();
+      }
+      // 会话密钥仍是 masterSecret，数据可正常读取
+    }
+  }
+
+  /// 修改主密码
+  ///
+  /// R2 之后改密**只重新包装 DEK**，保险库数据不动，
+  /// 因此这里不再需要触发全量重加密（旧的实现靠 keyPublisher 让保险库重写全部条目）。
+  /// 注意：云端备份仍由主密码派生密钥加密，所以改密后 keyTag 会变，
+  /// 同步页会提示「云端备份还是旧主密码加密的」，需要重新上传一次。
   Future<bool> changePassword(String oldPassword, String newPassword) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
-      _encryptionKey = await _authService.changePassword(
+      final result = await _authService.changePassword(
         oldPassword,
         newPassword,
       );
+      _applyUnlockResult(result);
       _masterPassword = newPassword;
 
-      // 发布新密钥：保险库收到后用新密钥重加密并持久化
-      keyPublisher?.call(_encryptionKey!);
+      // 尚未迁移完成时，这里补上最后一步重加密
+      if (result.needsDekMigration) {
+        await _migrateToDek(result.masterSecret);
+      }
 
       state = state.copyWith(isLoading: false);
       return true;

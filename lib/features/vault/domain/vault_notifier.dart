@@ -72,10 +72,12 @@ class VaultNotifier extends StateNotifier<VaultState> {
     await _reload();
   }
 
-  /// 密钥轮换（修改主密码）后，用新密钥重加密并持久化全部数据。
+  /// 密钥轮换：用新密钥重加密并持久化全部数据。
+  ///
+  /// 用于「本地数据从 masterSecret 迁移到 DEK」（ADR-006 R2）。
+  /// 改主密码本身不再需要它——那只重新包装 DEK，数据不动。
   Future<void> rotateKey(Uint8List newKey) async {
-    _service.setEncryptionKey(newKey);
-    await _service.saveVault();
+    await _service.rekeyTo(newKey);
     state = state.copyWith(revision: _nextRevision);
   }
 

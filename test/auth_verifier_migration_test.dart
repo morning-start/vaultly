@@ -97,18 +97,23 @@ void main() {
       expect(await authService.verifyMasterPassword('bad'), isNull);
     });
 
-    test('迁移前后派生出的是同一把加密密钥（数据不会因此读不出来）', () async {
+    test('迁移前后派生出的是同一把会话密钥（数据不会因此读不出来）', () async {
       seedLegacyInstall(password: 'legacy-password');
       final salt = base64Decode(storage.store['master_salt']!);
       final expected =
           CryptoService.deriveKeyWithArgon2id('legacy-password', salt);
 
       final migrated = await authService.verifyMasterPassword('legacy-password');
-      expect(migrated, equals(expected));
+      expect(migrated, isNotNull);
+      // 尚未完成 DEK 迁移：会话密钥仍是 masterSecret，数据可读
+      expect(migrated!.sessionKey, equals(expected));
+      expect(migrated.masterSecret, equals(expected));
+      expect(migrated.needsDekMigration, isTrue,
+          reason: '本机还没有 DEK，必须提示上层完成重加密');
 
-      // 迁移后再次解锁也必须得到同一把密钥
+      // 再次解锁同样得到 masterSecret（直到迁移真正完成）
       final again = await authService.verifyMasterPassword('legacy-password');
-      expect(again, equals(expected));
+      expect(again!.sessionKey, equals(expected));
     });
   });
 

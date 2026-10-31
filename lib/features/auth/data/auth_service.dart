@@ -23,6 +23,10 @@ class AuthService {
 
   static const _keySalt = 'master_salt';
   static const _keyKdfParams = 'master_kdf_params';
+
+  /// 被 KEK 包装的数据加密密钥（DEK）
+  static const _keyWrappedDek = 'vault_dek_wrapped';
+
   static const _keyBiometricEncryptionKey = 'biometric_encryption_key';
   static const _keyFailedAttempts = 'failed_attempts';
   static const _keyLockedUntil = 'locked_until';
@@ -126,6 +130,62 @@ class AuthService {
     await _secureStorage.write(key: _keyKeyTag, value: keyMaterial.keyTag);
   }
 
+  // ==================== DEK（数据加密密钥）====================
+
+  /// 是否已有包装好的 DEK
+  Future<bool> hasWrappedDek() async {
+    final raw = await _secureStorage.read(key: _keyWrappedDek);
+    return raw != null && raw.isNotEmpty;
+  }
+
+  /// 用 masterSecret 解包 DEK；不存在或解不开时返回 null
+  Future<Uint8List?> _readDek(Uint8List masterSecret) async {
+    final raw = await _secureStorage.read(key: _keyWrappedDek);
+    if (raw == null || raw.isEmpty) return null;
+
+    try {
+      final wrapped = EncryptedData.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+      return CryptoService.unwrapKey(
+        wrapped,
+        CryptoService.deriveWrapKey(masterSecret),
+      );
+    } catch (e) {
+      // 解不开（包装密钥不对或数据损坏）→ 交给上层决定回退/重建
+      debugPrint('AuthService: DEK 解包失败: $e');
+      return null;
+    }
+  }
+
+  Future<void> _writeWrappedDek(Uint8List dek, Uint8List masterSecret) async {
+    final wrapped = CryptoService.wrapKey(
+      dek,
+      CryptoService.deriveWrapKey(masterSecret),
+    );
+    await _secureStorage.write(
+      key: _keyWrappedDek,
+      value: jsonEncode(wrapped.toJson()),
+    );
+  }
+
+  /// 确保 DEK 存在并已用 [masterSecret] 包装，返回该 DEK
+  ///
+  /// 幂等：已存在且能解包时直接复用（不会因为重复调用而换密钥）。
+  Future<Uint8List> ensureDek(Uint8List masterSecret) async {
+    final existing = await _readDek(masterSecret);
+    if (existing != null) return existing;
+
+    final dek = CryptoService.generateDek();
+    await _writeWrappedDek(dek, masterSecret);
+    return dek;
+  }
+
+  /// 清除包装好的 DEK（迁移失败时回滚，恢复「数据由 masterSecret 加密」的状态）
+  Future<void> clearWrappedDek() async {
+    await _secureStorage.delete(key: _keyWrappedDek);
+  }
+
   /// 校验主密码并返回密钥材料；密码错误返回 null。
   ///
   /// 双轨校验：
@@ -184,22 +244,34 @@ class AuthService {
   }
 
   /// 设置主密码
-  /// 返回加密密钥供 Notifier 管理
-  Future<Uint8List> setupMasterPassword(String password) async {
+  ///
+  /// 新安装直接生成随机 DEK 并用主密码包装：数据从一开始就由 DEK 加密，
+  /// 因此永不需要「迁移」。返回解锁结果供 Notifier 管理。
+  Future<UnlockResult> setupMasterPassword(String password) async {
     final keyMaterial = CryptoService.generateKeyMaterial(password);
 
     // 新安装只写 v2 校验值，不再产生可被离线爆破的 sha256 值
     await _writeVerifier(keyMaterial);
     await _writeKdfParams(CryptoService.defaultKdfParams(keyMaterial.salt));
 
+    final dek = CryptoService.generateDek();
+    await _writeWrappedDek(dek, keyMaterial.key);
+
     await _resetFailedAttempts();
 
-    return keyMaterial.key;
+    return UnlockResult(
+      sessionKey: dek,
+      masterSecret: keyMaterial.key,
+      needsDekMigration: false,
+    );
   }
 
   /// 验证主密码
-  /// 返回加密密钥供 Notifier 管理
-  Future<Uint8List?> verifyMasterPassword(String password) async {
+  ///
+  /// 返回解锁结果（含会话密钥与主密码派生密钥），密码错误返回 null。
+  /// 此时**不**创建 DEK——若本机还没有 DEK，说明数据仍由 masterSecret 加密，
+  /// 该标记为 [UnlockResult.needsDekMigration]，由上层完成重加密后再切换。
+  Future<UnlockResult?> verifyMasterPassword(String password) async {
     final lockStatus = await checkLockStatus();
     if (lockStatus.isLocked) {
       throw AuthException.locked(lockStatus.remainingMinutes);
@@ -209,7 +281,15 @@ class AuthService {
 
     if (keyMaterial != null) {
       await _resetFailedAttempts();
-      return keyMaterial.key;
+      final dek = await _readDek(keyMaterial.key);
+      final needsMigration = dek == null;
+
+      return UnlockResult(
+        // 还没有 DEK 时，数据仍是 masterSecret 加密的，会话密钥先用它
+        sessionKey: dek ?? keyMaterial.key,
+        masterSecret: keyMaterial.key,
+        needsDekMigration: needsMigration,
+      );
     }
 
     await _incrementFailedAttempts();
@@ -259,8 +339,8 @@ class AuthService {
   }
 
   /// 启用生物识别
-  /// 返回加密密钥供 Notifier 管理
-  Future<Uint8List> enableBiometric(String password) async {
+  /// 返回解锁结果供 Notifier 管理
+  Future<UnlockResult> enableBiometric(String password) async {
     final isPasswordSet = await this.isPasswordSet();
     if (!isPasswordSet) {
       throw AuthException.passwordNotSet();
@@ -283,12 +363,20 @@ class AuthService {
       throw AuthException.invalidPassword();
     }
 
+    // 存的是 masterSecret：它既能解包 DEK（本地数据），
+    // 又能在生物识别会话里继续加密云端备份（见 ADR-006 R2 的 F2 约束）
     await _secureStorage.write(
       key: _keyBiometricEncryptionKey,
       value: base64Encode(keyMaterial.key),
     );
 
-    return keyMaterial.key;
+    final dek = await _readDek(keyMaterial.key);
+
+    return UnlockResult(
+      sessionKey: dek ?? keyMaterial.key,
+      masterSecret: keyMaterial.key,
+      needsDekMigration: dek == null,
+    );
   }
 
   /// 禁用生物识别
@@ -303,8 +391,12 @@ class AuthService {
   }
 
   /// 生物识别解锁
-  /// 返回加密密钥供 Notifier 管理
-  Future<Uint8List> biometricUnlock() async {
+  ///
+  /// 取出包装用的 masterSecret → 解包 DEK 作为会话密钥。
+  /// masterSecret 同时回传给上层：生物识别会话没有明文主密码，
+  /// 但**上传云端备份必须仍可用**（用 masterSecret 加密），
+  /// 因此这里一并返回，见 ADR-006 R2 的能力矩阵。
+  Future<UnlockResult> biometricUnlock() async {
     final isPasswordSet = await this.isPasswordSet();
     if (!isPasswordSet) {
       throw AuthException.passwordNotSet();
@@ -334,9 +426,31 @@ class AuthService {
         throw AuthException.biometricFailed('加密密钥不存在，需要重新设置密码');
       }
 
-      final key = base64Decode(keyBase64);
+      final masterSecret = base64Decode(keyBase64);
+      final dek = await _readDek(masterSecret);
+
+      if (dek == null) {
+        // 有 DEK 却解不开 → 包装密钥不匹配（例如改密后本项未更新）
+        if (await hasWrappedDek()) {
+          throw AuthException.biometricFailed('密钥已失效，请用主密码解锁一次');
+        }
+
+        // 本机还没有 DEK（升级前的老安装）：数据仍由 masterSecret 加密，
+        // 先照常解锁，由上层完成到 DEK 的迁移
+        await _resetFailedAttempts();
+        return UnlockResult(
+          sessionKey: masterSecret,
+          masterSecret: masterSecret,
+          needsDekMigration: true,
+        );
+      }
+
       await _resetFailedAttempts();
-      return key;
+      return UnlockResult(
+        sessionKey: dek,
+        masterSecret: masterSecret,
+        needsDekMigration: false,
+      );
     } on BiometricException catch (e) {
       throw AuthException.biometricFailed(e.message);
     }
@@ -385,16 +499,30 @@ class AuthService {
     }
   }
 
-  /// 修改密码
-  /// 返回新加密密钥供 Notifier 管理
-  Future<Uint8List> changePassword(String oldPassword, String newPassword) async {
-    final key = await verifyMasterPassword(oldPassword);
-    if (key == null) {
+  /// 修改主密码
+  ///
+  /// **只重新包装 DEK**，不重加密保险库数据——这是 R2 的核心收益：
+  /// 改密从「全量重写所有条目」变成一次 AES-GCM 包装（毫秒级）。
+  /// 会话密钥（DEK）保持不变，因此调用方无需重载/重加密数据。
+  ///
+  /// 例外：本机还没有 DEK（尚未完成迁移）时，这里会新建一个并置位
+  /// [UnlockResult.needsDekMigration]，由上层完成最后一步重加密。
+  Future<UnlockResult> changePassword(
+    String oldPassword,
+    String newPassword,
+  ) async {
+    final verified = await verifyMasterPassword(oldPassword);
+    if (verified == null) {
       throw AuthException.invalidPassword();
     }
 
     final wasBiometricEnabled = await isBiometricEnabledByUser();
     final keyMaterial = CryptoService.generateKeyMaterial(newPassword);
+
+    // 复用已有 DEK；没有（迁移未完成）则新建
+    final dek = await _readDek(verified.masterSecret) ??
+        CryptoService.generateDek();
+    await _writeWrappedDek(dek, keyMaterial.key);
 
     await _writeVerifier(keyMaterial);
     await _writeKdfParams(CryptoService.defaultKdfParams(keyMaterial.salt));
@@ -402,13 +530,18 @@ class AuthService {
     await _secureStorage.delete(key: _keyLegacyVerificationHash);
 
     if (wasBiometricEnabled) {
+      // 生物识别项存的是 masterSecret，必须跟着换成新密码派生的
       await _secureStorage.write(
         key: _keyBiometricEncryptionKey,
-        value: keyMaterial.keyBase64,
+        value: base64Encode(keyMaterial.key),
       );
     }
 
-    return keyMaterial.key;
+    return UnlockResult(
+      sessionKey: dek,
+      masterSecret: keyMaterial.key,
+      needsDekMigration: verified.needsDekMigration,
+    );
   }
 
   /// 清除所有数据
@@ -418,6 +551,7 @@ class AuthService {
     await _secureStorage.delete(key: _keyKeyTag);
     await _secureStorage.delete(key: _keySalt);
     await _secureStorage.delete(key: _keyKdfParams);
+    await _secureStorage.delete(key: _keyWrappedDek);
     await _secureStorage.delete(key: _keyBiometricEncryptionKey);
     await _secureStorage.delete(key: _keyFailedAttempts);
     await _secureStorage.delete(key: _keyLockedUntil);
@@ -433,6 +567,26 @@ class AuthService {
   void secureKey(Uint8List key) {
     CryptoService.secureClear(key);
   }
+}
+
+/// 解锁/改密的结果
+///
+/// R2 之后本机有**两把**用途不同的密钥，必须分开传递：
+/// - [sessionKey]：字段级加密用（DEK）。迁移未完成时暂时等于 masterSecret
+/// - [masterSecret]：主密码派生密钥，用于加密云端备份
+///   （生物识别会话没有明文主密码，但上传必须仍可用，所以由这里回传）
+class UnlockResult {
+  final Uint8List sessionKey;
+  final Uint8List masterSecret;
+
+  /// 本地数据仍由 masterSecret 加密，需要上层用新 DEK 重加密一次
+  final bool needsDekMigration;
+
+  const UnlockResult({
+    required this.sessionKey,
+    required this.masterSecret,
+    this.needsDekMigration = false,
+  });
 }
 
 /// 锁定状态
