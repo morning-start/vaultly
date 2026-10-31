@@ -23,6 +23,7 @@ class SettingsPage extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final syncState = ref.watch(webDAVConfigProvider);
     final entryCount = ref.watch(vaultNotifierProvider).entries.length;
+    final trashCount = ref.watch(vaultNotifierProvider).trashCount;
     final colorScheme = Theme.of(context).colorScheme;
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
@@ -63,6 +64,12 @@ class SettingsPage extends ConsumerWidget {
                         .read(settingsProvider.notifier)
                         .setClipboardAutoClear(v),
                   ),
+                ),
+                _SettingRow(
+                  title: '回收站',
+                  subtitle: '删除的条目保留 30 天，可恢复',
+                  value: trashCount > 0 ? '$trashCount 个条目' : '空',
+                  onTap: () => context.push('/trash'),
                 ),
               ],
             ),

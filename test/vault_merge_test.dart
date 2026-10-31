@@ -45,14 +45,31 @@ void main() {
       expect(result.hasRemoteChanges, isFalse);
     });
 
-    test('更新时间相同时保留本地', () {
-      final result = mergeVaultEntries(
+    test('更新时间相同时结果与参数顺序无关（C5 确定性）', () {
+      final forward = mergeVaultEntries(
         local: [entry('a', '本地', base)],
         remote: [entry('a', '云端', base)],
       );
+      final backward = mergeVaultEntries(
+        local: [entry('a', '云端', base)],
+        remote: [entry('a', '本地', base)],
+      );
 
-      expect(result.entries.single.title, '本地');
+      // 旧实现遇到同时间戳「保留本地」，于是两台设备交替同步会来回抖动。
+      // 现在由内容指纹裁决：谁胜出都必须与参数顺序无关。
+      expect(
+        forward.entries.single.title,
+        backward.entries.single.title,
+      );
+      expect(forward.entries.single.title, anyOf('本地', '云端'));
+    });
+
+    test('更新时间完全相同且内容一致时不产生改动', () {
+      final same = entry('a', '同一份内容', base);
+      final result = mergeVaultEntries(local: [same], remote: [same]);
+
       expect(result.localKept, 1);
+      expect(result.hasRemoteChanges, isFalse);
     });
 
     test('云端为空时返回本地全部条目', () {
@@ -81,7 +98,8 @@ void main() {
         remote: [
           entry('a', 'A2', base.add(const Duration(hours: 1))),
           entry('c', 'C', base),
-          entry('b', 'B2', base),
+          // b：本地更新（时间戳明确更晚，避免落到平局规则上）
+          entry('b', 'B2', base.subtract(const Duration(hours: 1))),
         ],
       );
 

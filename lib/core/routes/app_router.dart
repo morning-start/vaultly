@@ -16,6 +16,7 @@ import '../../features/vault/presentation/vault_page.dart';
 import '../../features/vault/presentation/favorites_page.dart';
 import '../../features/vault/presentation/add_entry_page.dart';
 import '../../features/vault/presentation/entry_detail_page.dart';
+import '../../features/vault/presentation/trash_page.dart';
 import '../../features/vault/domain/vault_entry.dart';
 import '../../features/tools/presentation/tools_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
@@ -165,6 +166,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return _slideUpPage(AddEntryPage(entryId: id));
         },
+      ),
+
+      // 回收站（全屏推入，不进 shell）
+      GoRoute(
+        path: '/trash',
+        pageBuilder: (context, state) => _fadePage(const TrashPage()),
       ),
 
       // WebDAV 同步页（保留旧路径，设置中心跳转）

@@ -68,8 +68,17 @@ final vaultNotifierProvider =
 });
 
 /// Vault 条目列表（同步快照，无 Future 开销）
+///
+/// **只含活跃条目**：回收站里的墓碑不参与界面展示。
+/// 需要含墓碑的全量列表（同步/合并且用）请读
+/// `vaultNotifierProvider.allEntries`。
 final vaultEntriesProvider = Provider<List<VaultEntry>>((ref) {
   return ref.watch(vaultNotifierProvider).entries;
+});
+
+/// 回收站条目（墓碑，按删除时间倒序）
+final vaultTrashedEntriesProvider = Provider<List<VaultEntry>>((ref) {
+  return ref.watch(vaultNotifierProvider).trashedEntries;
 });
 
 /// 按类型筛选的条目列表

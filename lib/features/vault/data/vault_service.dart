@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../domain/vault_entry.dart';
+import '../domain/entry_codec.dart';
+import '../domain/vault_tombstone.dart';
 import '../domain/encryption/entry_encryption_strategy.dart';
 import '../domain/encryption/login_encryption_strategy.dart';
 import '../domain/encryption/bank_card_encryption_strategy.dart';
@@ -20,6 +22,12 @@ class VaultService {
   /// 写前备份：始终保存「上一次成功写入的完整数据」
   static const _keyVaultDataPrev = 'vault_data.prev';
 
+  /// 本地存储格式版本
+  ///
+  /// v1 → v2：条目增加 `deletedAt` 墓碑字段（ADR-006 R3）。
+  /// 读取时高于本值一律拒绝（见 [VaultException.schemaVersionUnsupported]）。
+  static const int currentSchemaVersion = 2;
+
   static VaultService? _instance;
 
   final FlutterSecureStorage _secureStorage;
@@ -34,6 +42,14 @@ class VaultService {
   ///
   /// 损坏时**不得**用坏数据覆盖写前备份，否则唯一可用的副本会被毁掉。
   bool _mainPayloadCorrupt = false;
+
+  /// 是否因「本地数据版本过高」而拒绝工作
+  ///
+  /// 置位后所有写入都会被拒绝：读不懂的数据格式，写回去只会丢字段。
+  bool _schemaVersionBlocked = false;
+
+  /// 检测到的高版本号（用于错误文案）
+  int? _blockedSchemaVersion;
 
   // 加密策略映射
   static const _encryptionStrategies = <EntryType, EntryEncryptionStrategy>{
@@ -65,7 +81,25 @@ class VaultService {
     _instance = null;
   }
 
+  /// 全部条目（**含墓碑**，即已删除待同步的条目）
+  ///
+  /// 持久化与云端同步都必须用这个列表，否则删除无法传播到其他设备。
+  /// UI 展示请用 [activeEntries]。
   List<VaultEntry> get entries => List.unmodifiable(_entries);
+
+  /// 活跃条目（不含墓碑）——展示用
+  List<VaultEntry> get activeEntries =>
+      List.unmodifiable(_entries.where((e) => !e.isDeleted));
+
+  /// 回收站内容（墓碑，按删除时间倒序）
+  List<VaultEntry> get trashedEntries {
+    final trashed = _entries.where((e) => e.isDeleted).toList()
+      ..sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
+    return List.unmodifiable(trashed);
+  }
+
+  /// 本地数据是否因版本过高被拒绝读取（此时禁止写入）
+  bool get isSchemaVersionBlocked => _schemaVersionBlocked;
 
   /// 本次加载是否从写前备份恢复
   ///
@@ -94,6 +128,8 @@ class VaultService {
 
     _recoveredFromPrevious = false;
     _mainPayloadCorrupt = false;
+    _schemaVersionBlocked = false;
+    _blockedSchemaVersion = null;
 
     final raw = await _secureStorage.read(key: _keyVaultData);
     if (raw == null || raw.isEmpty) {
@@ -104,45 +140,103 @@ class VaultService {
     try {
       _entries = _decodePayload(raw);
       return;
-    } catch (e, stackTrace) {
-      // 主数据不可用：先尝试写前备份，避免直接把用户判成「数据丢失」
-      final previous = await _secureStorage.read(key: _keyVaultDataPrev);
-      if (previous != null && previous.isNotEmpty) {
-        try {
-          _entries = _decodePayload(previous);
-          _recoveredFromPrevious = true;
-          // 主区仍是坏的：在它被修好之前，不要用坏数据覆盖好备份
-          _mainPayloadCorrupt = true;
-          debugPrint('VaultService: 主数据不可用，已从写前备份恢复 ${_entries.length} 条');
-          return;
-        } catch (backupError) {
-          debugPrint('VaultService: 写前备份同样不可用: $backupError');
-        }
+    } on VaultException catch (e) {
+      // 版本过高必须直接失败：绝不能回退到写前备份再继续写盘。
+      // 那会把「新版本写入的数据」替换成一份旧快照，等于静默回滚数据（C2）。
+      if (e.code == VaultException.codeSchemaVersionUnsupported) {
+        _entries = [];
+        _schemaVersionBlocked = true;
+        _blockedSchemaVersion = _detectSchemaVersionOf(raw);
+        rethrow;
       }
-
-      // 解密/解析失败时不能静默清空内存态：一旦后续 saveVault 执行，
-      // 空列表会覆盖持久化数据，造成不可恢复的数据丢失。
-      // 抛出异常让调用方（UI 层）感知并阻止后续写入。
+      final recovered = await _recoverFromPrevious(e);
+      if (recovered != null) {
+        _entries = recovered;
+        return;
+      }
+      _entries = [];
+      throw VaultException.decryptionFailed(e, StackTrace.current);
+    } catch (e, stackTrace) {
+      final recovered = await _recoverFromPrevious(e);
+      if (recovered != null) {
+        _entries = recovered;
+        return;
+      }
+      // 解密/解析失败时不能把内存态当作可信数据：一旦后续 saveVault 执行，
+      // 可能用不完整的内容覆盖持久化数据。抛出让调用方停止写入。
       _entries = [];
       throw VaultException.decryptionFailed(e, stackTrace);
     }
   }
 
-  /// 序列化 + 字段级加密，得到可直接落盘的完整数据
-  String _encodePayload() {
+  /// 主数据不可用时尝试写前备份；成功返回条目列表，否则返回 null。
+  ///
+  /// 写前备份同样是「更高版本」时照样拒绝：两份数据来自新版本就都读不懂，
+  /// 不能因为主区坏了就退回一份同样读不懂的快照，更不能允许之后写回。
+  Future<List<VaultEntry>?> _recoverFromPrevious(Object cause) async {
+    final previous = await _secureStorage.read(key: _keyVaultDataPrev);
+    if (previous == null || previous.isEmpty) return null;
+
+    try {
+      final entries = _decodePayload(previous);
+      _recoveredFromPrevious = true;
+      // 主区仍是坏的：在它被修好之前，不要用坏数据覆盖好备份
+      _mainPayloadCorrupt = true;
+      debugPrint('VaultService: 主数据不可用，已从写前备份恢复 ${entries.length} 条');
+      return entries;
+    } on VaultException catch (backupError) {
+      if (backupError.code == VaultException.codeSchemaVersionUnsupported) {
+        _entries = [];
+        _schemaVersionBlocked = true;
+        _blockedSchemaVersion =
+            _detectSchemaVersionOf(previous) ?? _blockedSchemaVersion;
+        rethrow;
+      }
+      debugPrint('VaultService: 写前备份不可用 ($cause): $backupError');
+      return null;
+    } catch (backupError) {
+      debugPrint('VaultService: 写前备份不可用 ($cause): $backupError');
+      return null;
+    }
+  }
+
+  /// 序列化 + 字段级加密，得到可直接落盘的完整数据。
+  ///
+  /// 返回 (负载, 期望条目数)：写盘前会剔除超龄墓碑，因此回读校验必须
+  /// 与「剔除之后」的条数比较，否则每一次过期的保存都会被误判为坏数据。
+  (String, int) _encodePayload({DateTime? now}) {
+    final retained = pruneExpiredTombstones(_entries, now: now);
+
     // 直接使用策略返回的加密 JSON 持久化；
     // 不能再经过 entry.toJson()，否则密文字段会被丢弃。
-    final entriesJson = _entries.map(_encryptEntry).toList();
+    final entriesJson = retained.map(_encryptEntry).toList();
 
-    return jsonEncode({
+    final payload = jsonEncode({
+      'schemaVersion': currentSchemaVersion,
       'entries': entriesJson,
       'updatedAt': DateTime.now().toIso8601String(),
     });
+
+    return (payload, retained.length);
   }
 
   /// 解析 + 解密落盘数据
+  ///
+  /// 版本闸门（ADR-006 §3.5 C2，fail-closed）：
+  /// - 缺 `schemaVersion` → 视为 v1（旧的本地数据，无墓碑），按默认值读；
+  /// - 高于 [currentSchemaVersion] → 抛
+  ///   [VaultException.schemaVersionUnsupported]，**不尝试解析**。
   List<VaultEntry> _decodePayload(String payload) {
     final data = jsonDecode(payload) as Map<String, dynamic>;
+
+    final version = data['schemaVersion'] as int? ?? 1;
+    if (version > currentSchemaVersion) {
+      throw VaultException.schemaVersionUnsupported(
+        found: version,
+        supported: currentSchemaVersion,
+      );
+    }
+
     // 先解密原始持久化 JSON（密文字段在这里），
     // 再按条目类型恢复具体模型，便于兼容不同字段结构。
     final entriesJson = data['entries'] as List<dynamic>;
@@ -152,11 +246,23 @@ class VaultService {
         .toList();
   }
 
+  /// 尽力读出负载里的 `schemaVersion`（只解析明文头，不解密条目），
+  /// 仅用于给用户一个准确的错误文案。
+  int? _detectSchemaVersionOf(String payload) {
+    try {
+      final data = jsonDecode(payload);
+      if (data is Map<String, dynamic>) return data['schemaVersion'] as int?;
+    } catch (_) {
+      // 解析不出来就算了，错误文案退回默认值
+    }
+    return null;
+  }
+
   /// 写前回读校验：确认刚序列化出的数据能被完整解析并解密。
   ///
   /// 这是「拒绝写入坏数据」的闸门——宁可本次保存失败，也不能把
   /// 无法读回的内容写进主存储区，否则下一次启动就是数据丢失。
-  void _verifyPayload(String payload) {
+  void _verifyPayload(String payload, int expectedCount) {
     final List<VaultEntry> decoded;
     try {
       decoded = _decodePayload(payload);
@@ -164,9 +270,9 @@ class VaultService {
       throw VaultException.writeVerificationFailed('回读失败 ($e)');
     }
 
-    if (decoded.length != _entries.length) {
+    if (decoded.length != expectedCount) {
       throw VaultException.writeVerificationFailed(
-        '条目数不一致：写入 ${_entries.length} 条，回读 ${decoded.length} 条',
+        '条目数不一致：写入 $expectedCount 条，回读 ${decoded.length} 条',
       );
     }
   }
@@ -182,10 +288,18 @@ class VaultService {
       throw VaultException.keyNotSet();
     }
 
-    final payload = _encodePayload();
+    // 数据版本比本应用新时禁止写回：读不懂就不许覆盖（C2）
+    if (_schemaVersionBlocked) {
+      throw VaultException.schemaVersionUnsupported(
+        found: _blockedSchemaVersion ?? currentSchemaVersion + 1,
+        supported: currentSchemaVersion,
+      );
+    }
+
+    final (payload, expectedCount) = _encodePayload();
 
     // 1) 写前校验：不合格就抛错，主存储区保持不变
-    _verifyPayload(payload);
+    _verifyPayload(payload, expectedCount);
 
     // 2) 留存写前备份
     final previous = await _secureStorage.read(key: _keyVaultData);
@@ -203,27 +317,6 @@ class VaultService {
     _mainPayloadCorrupt = false;
   }
 
-  /// 根据类型将 JSON 转换为对应的条目类型。
-  VaultEntry _entryFromJson(Map<String, dynamic> json) {
-    final type = EntryType.values.firstWhere(
-      (e) => e.name == json['type'],
-      orElse: () => EntryType.custom,
-    );
-
-    switch (type) {
-      case EntryType.login:
-        return LoginEntry.fromJson(json);
-      case EntryType.bankCard:
-        return BankCardEntry.fromJson(json);
-      case EntryType.secureNote:
-        return SecureNoteEntry.fromJson(json);
-      case EntryType.identity:
-        return IdentityEntry.fromJson(json);
-      case EntryType.custom:
-        return VaultEntry.fromJson(json);
-    }
-  }
-
   /// 加密单个条目，返回可直接持久化的 JSON（敏感字段为密文）。
   Map<String, dynamic> _encryptEntry(VaultEntry entry) {
     final strategy = _encryptionStrategies[entry.type];
@@ -235,14 +328,14 @@ class VaultService {
 
   /// 解密持久化 JSON 并重建条目对象。
   VaultEntry _decryptPersistedJson(Map<String, dynamic> json) {
-    final strategy = _encryptionStrategies[_entryFromJson(json).type];
+    final strategy = _encryptionStrategies[entryTypeFromJson(json)];
 
     if (_encryptionKey != null && strategy != null) {
       // 直接解密原始持久化 JSON —— 密文字段只存在于这里。
       strategy.decryptFields(json, _encryptionKey!);
     }
 
-    return _entryFromJson(json);
+    return parseVaultEntry(json);
   }
 
   /// 用新密钥重加密当前内存中的全部条目并持久化。
@@ -286,10 +379,61 @@ class VaultService {
     await saveVault();
   }
 
-  /// 删除指定条目并刷新持久化数据。
+  /// 删除指定条目（移入回收站）并刷新持久化数据。
+  ///
+  /// ADR-006 R3：删除**不是**从列表里抹掉，而是打上 `deletedAt` 墓碑
+  /// 并刷新 `updatedAt`，让它作为一次「更新」参与同步；回收站 UI 可恢复。
+  /// 墓碑本身也会在超过 [kTombstoneRetention] 后被物理清除。
+  ///
+  /// 条目不存在或已是墓碑时静默忽略（与旧的宽松语义一致），
+  /// 避免重复删除把 `deletedAt` 越推越远、把回收站里的条目一直续期。
   Future<void> deleteEntry(String id) async {
-    _entries.removeWhere((e) => e.id == id);
+    final index = _entries.indexWhere((e) => e.id == id);
+    if (index == -1 || _entries[index].isDeleted) return;
+
+    _entries[index] = markEntryDeleted(_entries[index]);
     await saveVault();
+  }
+
+  /// 从回收站恢复条目并刷新持久化数据。
+  ///
+  /// 恢复同样刷新 `updatedAt`，才能盖过其他设备上可能存在的墓碑。
+  Future<void> restoreEntry(String id) async {
+    final index = _entries.indexWhere((e) => e.id == id);
+    if (index == -1 || !_entries[index].isDeleted) return;
+
+    _entries[index] = clearEntryDeletion(_entries[index]);
+    await saveVault();
+  }
+
+  /// 物理清除单个条目（回收站里的「彻底删除」，不可恢复）
+  Future<void> purgeEntry(String id) async {
+    final before = _entries.length;
+    _entries.removeWhere((e) => e.id == id);
+    if (_entries.length == before) return;
+
+    await saveVault();
+  }
+
+  /// 清空回收站
+  Future<int> purgeAllTrashed() async {
+    final before = _entries.length;
+    _entries.removeWhere((e) => e.isDeleted);
+    final removed = before - _entries.length;
+    if (removed > 0) await saveVault();
+    return removed;
+  }
+
+  /// 物理清除已超过保留期的墓碑（返回清除条数）。
+  ///
+  /// 注意：日常写入已经在 [_encodePayload] 里顺带剔除超龄墓碑，
+  /// 这个方法是给「需要立刻回收」的场景（如回收站里的剩余天数显示为 0）用的。
+  Future<int> purgeExpiredTombstones({DateTime? now}) async {
+    final before = _entries.length;
+    _entries = pruneExpiredTombstones(_entries, now: now);
+    final removed = before - _entries.length;
+    if (removed > 0) await saveVault();
+    return removed;
   }
 
   /// 原子替换全部条目并持久化一次。

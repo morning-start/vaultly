@@ -11,6 +11,7 @@ import '../../../ui/theme/tokens.dart';
 import '../../../ui/theme/vaultly_colors.dart';
 import '../data/webdav_client.dart' show RemoteBackupFormats, WebDAVException;
 import '../../auth/data/crypto_service.dart' show KdfParams;
+import '../domain/backup_payload.dart';
 import '../domain/vault_merge.dart';
 
 /// 每次操作的执行方式
@@ -110,7 +111,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           title: '覆盖本地数据？',
           content:
               '覆盖模式会用云端数据完全替换本地保险库，'
-              '尚未上传的本地条目将丢失。此操作不可撤销。',
+              '尚未上传的本地条目将丢失，回收站内容也会被云端覆盖。'
+              '此操作不可撤销。',
           confirmLabel: '继续恢复',
           isDangerous: true,
         ),
@@ -180,7 +182,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     final kdfParams = await authNotifier.currentKdfParams();
     final keyTag = await authNotifier.currentKeyTag();
 
-    var entries = ref.read(vaultNotifierProvider).entries;
+    // 含墓碑的全量条目：删除必须参与同步，否则其他设备的副本会复活
+    var entries = ref.read(vaultNotifierProvider).allEntries;
     VaultMergeResult? mergeResult;
 
     syncNotifier.startSync('正在合并并加密上传...');
@@ -192,16 +195,20 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
           final remoteBackup = await webDAVService.download(
             keyResolver: _resolveBackupKey,
           );
-          final remoteEntries = _parseEntries(remoteBackup.data);
-          if (remoteEntries != null && remoteEntries.isNotEmpty) {
+          final remoteContents = _parseBackup(remoteBackup.data);
+          if (remoteContents.entries.isNotEmpty) {
             mergeResult = mergeVaultEntries(
               local: entries,
-              remote: remoteEntries,
+              remote: remoteContents.entries,
             );
             entries = mergeResult.entries;
           }
+        } on WebDAVException catch (e) {
+          // 「备份比本应用新」绝不能忽略：忽略就等于用旧数据覆盖新备份
+          if (e.code == WebDAVException.codeBackupVersionUnsupported) rethrow;
+          // 其余情况按「云端还没有该格式的备份」处理，走首次上传
+          debugPrint('WebDAV merge skipped: $e');
         } catch (e) {
-          // 云端还没有该格式的备份：按首次上传处理
           debugPrint('WebDAV merge skipped: $e');
         }
       }
@@ -231,7 +238,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       if (!mounted) return;
 
       final detail = mergeResult == null
-          ? '${entries.length} 条'
+          ? '${entries.where((e) => !e.isDeleted).length} 条'
           : mergeResult.summary;
       _toast('已上传到云端 · $detail');
     } catch (e) {
@@ -257,12 +264,11 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
         keyResolver: _resolveBackupKey,
       );
 
-      final remoteEntries = _parseEntries(backup.data);
-      if (remoteEntries == null) {
-        throw Exception('下载的数据为空或格式不正确');
-      }
+      final contents = _parseBackup(backup.data);
+      final remoteEntries = contents.entries;
 
-      final localEntries = ref.read(vaultNotifierProvider).entries;
+      // 含墓碑的全量：合并/恢复都必须带上，否则删除会在本地丢失
+      final localEntries = ref.read(vaultNotifierProvider).allEntries;
       final vaultNotifier = ref.read(vaultNotifierProvider.notifier);
 
       String message;
@@ -276,13 +282,21 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
         message = '合并完成 · ${merged.summary}';
       } else {
         target = remoteEntries;
-        message = '已恢复 ${remoteEntries.length} 条记录';
+        final active = remoteEntries.where((e) => !e.isDeleted).length;
+        final trashed = remoteEntries.length - active;
+        message = '已恢复 $active 条记录'
+            '${trashed > 0 ? '（另含回收站 $trashed 条）' : ''}';
       }
 
       // 旧格式备份没有文件头，只能在本机解开；提示用户重新上传一次，
       // 生成可跨设备恢复的新格式备份。
       if (backup.legacyFormat) {
         message = '$message · 旧格式备份，建议重新上传以支持跨设备恢复';
+      }
+
+      // 有读不出来的条目必须说出来：静默跳过等于悄悄丢数据
+      if (contents.skipped > 0) {
+        message = '$message · 有 ${contents.skipped} 条无法识别，已跳过';
       }
 
       final success = await vaultNotifier.replaceAllEntries(target);
@@ -717,49 +731,31 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
   // ==================== 数据转换 ====================
 
-  Map<String, dynamic> _vaultData(List<VaultEntry> entries) => {
-    'version': 1,
-    'exportTime': DateTime.now().toIso8601String(),
-    'entries': entries.map((e) => e.toJson()).toList(),
-  };
+  Map<String, dynamic> _vaultData(List<VaultEntry> entries) =>
+      BackupPayload.encode(entries);
 
-  List<VaultEntry>? _parseEntries(Map<String, dynamic>? data) {
-    if (data == null) return null;
-    final list = data['entries'] as List<dynamic>?;
-    if (list == null) return null;
-
-    final entries = <VaultEntry>[];
-    for (final json in list) {
-      try {
-        final entry = _parseEntryFromJson(json as Map<String, dynamic>);
-        if (entry != null) entries.add(entry);
-      } catch (e) {
-        // 跳过损坏条目，继续解析其他条目
-      }
+  /// 解析备份负载
+  ///
+  /// 版本高于本应用认知时**抛错中止**，绝不「尽力解析」：读不懂就合并
+  /// 会把不认识的字段（如墓碑）丢掉再上传回去，让别处删掉的条目复活。
+  BackupContents _parseBackup(Map<String, dynamic>? data) {
+    if (data == null) {
+      throw WebDAVException('下载的数据为空或格式不正确');
     }
-    return entries;
-  }
 
-  VaultEntry? _parseEntryFromJson(Map<String, dynamic> json) {
-    final typeStr = json['type'] as String?;
-    if (typeStr == null) return null;
-
-    final type = EntryType.values.firstWhere(
-      (e) => e.name == typeStr,
-      orElse: () => EntryType.custom,
-    );
-
-    switch (type) {
-      case EntryType.login:
-        return LoginEntry.fromJson(json);
-      case EntryType.bankCard:
-        return BankCardEntry.fromJson(json);
-      case EntryType.secureNote:
-        return SecureNoteEntry.fromJson(json);
-      case EntryType.identity:
-        return IdentityEntry.fromJson(json);
-      case EntryType.custom:
-        return VaultEntry.fromJson(json);
+    try {
+      return BackupPayload.decode(data);
+    } on BackupVersionException catch (e) {
+      throw WebDAVException(
+        '这份备份来自更新版本的 Vaultly（格式 v${e.found}，本应用支持到 '
+        'v${e.supported}）。请先把本机应用升级到最新版本，再去动这份备份——'
+        '用旧版本继续同步会丢掉删除记录，让已删除的条目复活。',
+        code: WebDAVException.codeBackupVersionUnsupported,
+      );
+    } on FormatException catch (e) {
+      // 旧版本读不到 v2 的嵌套键时也会走到这里，措辞保持与旧版一致，
+      // 至少让用户知道「这份备份打不开」而不是「密码不对」
+      throw WebDAVException('下载的数据为空或格式不正确（${e.message}）');
     }
   }
 

@@ -77,19 +77,36 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
   }
 
   Future<void> _deleteEntry(VaultEntry entry) async {
+    // ADR-006 R3：删除是「移入回收站」（打墓碑继续同步），不是立刻抹掉，
+    // 因此文案不能再写「不可恢复」。
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => ConfirmDialog(
-        title: '确认删除',
-        content: '确定要删除 "${entry.title}" 吗？此操作不可恢复。',
+        title: '移入回收站',
+        content: '「${entry.title}」将移入回收站，30 天内可以恢复；'
+            '删除记录也会同步到其他设备。',
         confirmLabel: '删除',
+        icon: Icons.delete_outline_rounded,
         isDangerous: true,
       ),
     );
 
     if (confirmed == true) {
-      await ref.read(vaultNotifierProvider.notifier).deleteEntry(entry.id);
-      if (mounted) context.pop();
+      final ok = await ref
+          .read(vaultNotifierProvider.notifier)
+          .deleteEntry(entry.id);
+      if (!mounted) return;
+
+      if (ok) {
+        // 先弹提示再 pop：pop 之后本页 context 就可能失效，取不到根 Overlay
+        AppToast.show(context, '已移入回收站');
+        context.pop();
+      } else {
+        AppToast.show(
+          context,
+          ref.read(vaultNotifierProvider).error ?? '删除失败，请重试',
+        );
+      }
     }
   }
 
@@ -103,13 +120,40 @@ class _EntryDetailPageState extends ConsumerState<EntryDetailPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     if (entry == null) {
+      // 已加载完却找不到条目：多半是它被删除（本机或另一台设备同步过来的墓碑），
+      // 直接说明情况，不要一直转圈让人以为还在加载。
+      final loaded = ref.watch(vaultNotifierProvider).isLoaded;
+
       return Scaffold(
         backgroundColor: colorScheme.bg,
         body: SafeArea(
           child: Column(
             children: [
               _buildNavBar(null),
-              const Expanded(child: Center(child: CircularProgressIndicator())),
+              Expanded(
+                child: Center(
+                  child: loaded
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              size: 40,
+                              color: colorScheme.textMuted,
+                            ),
+                            const SizedBox(height: AppTokens.spaceM),
+                            Text(
+                              '条目不存在或已移入回收站',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(color: colorScheme.textMuted),
+                            ),
+                          ],
+                        )
+                      : const CircularProgressIndicator(),
+                ),
+              ),
             ],
           ),
         ),

@@ -443,7 +443,18 @@ class RemoteBackupFormats {
 /// WebDAV 异常
 class WebDAVException implements Exception {
   final String message;
-  WebDAVException(this.message);
+
+  /// 机器可判定的错误码
+  ///
+  /// 存在的理由：调用方需要区分「可以忽略的失败」（如云端还没有备份）
+  /// 与「必须立刻中止的失败」（如备份格式比本应用新）。
+  final String? code;
+
+  WebDAVException(this.message, {this.code});
+
+  /// 备份格式版本高于本应用认知（ADR-006 §3.5 C2，fail-closed）
+  static const String codeBackupVersionUnsupported =
+      'BACKUP_VERSION_UNSUPPORTED';
 
   @override
   String toString() => message;

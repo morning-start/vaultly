@@ -103,11 +103,29 @@ void main() {
       );
     });
 
-    test('deleteEntry 移除条目并落盘', () async {
+    test('deleteEntry 移入回收站（墓碑落盘，活跃列表移除）', () async {
       final service = freshService();
       service.setEncryptionKey(testKey());
       final id = await service.addEntry(login());
       await service.deleteEntry(id);
+
+      // ADR-006 R3：删除不再是物理移除，而是打墓碑继续同步
+      expect(service.activeEntries, isEmpty);
+      expect(service.entries, hasLength(1));
+      expect(service.entries.single.isDeleted, isTrue);
+      expect(service.trashedEntries.single.id, id);
+
+      final json = persistedVaultJson(storage);
+      final persisted = (json['entries'] as List).single as Map<String, dynamic>;
+      expect(persisted['deletedAt'], isNotNull);
+    });
+
+    test('purgeEntry 物理移除（回收站的彻底删除）', () async {
+      final service = freshService();
+      service.setEncryptionKey(testKey());
+      final id = await service.addEntry(login());
+      await service.deleteEntry(id);
+      await service.purgeEntry(id);
 
       expect(service.entries, isEmpty);
       final json = persistedVaultJson(storage);

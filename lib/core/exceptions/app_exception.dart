@@ -72,6 +72,10 @@ class CryptoException extends AppException {
 class VaultException extends AppException {
   const VaultException(super.message, {super.code, super.originalError});
 
+  /// 本地数据结构版本高于本应用所能理解的版本
+  static const String codeSchemaVersionUnsupported =
+      'VAULT_SCHEMA_VERSION_UNSUPPORTED';
+
   factory VaultException.notFound(String id) => VaultException(
         '条目不存在: $id',
         code: 'VAULT_ENTRY_NOT_FOUND',
@@ -107,6 +111,20 @@ class VaultException extends AppException {
         '保险库解密失败，数据可能已损坏或密钥不匹配',
         code: 'VAULT_DECRYPT_FAILED',
         originalError: error,
+      );
+
+  /// 本地数据由更新的版本写入（通常是装过新版本后又降级）。
+  ///
+  /// ADR-006 §3.5 C2：**fail-closed**——拒绝读取，更拒绝写回。
+  /// 绝不能「尽力解析」后把读不懂的字段丢掉再存回去，那等于静默丢数据。
+  factory VaultException.schemaVersionUnsupported({
+    required int found,
+    required int supported,
+  }) =>
+      VaultException(
+        '本地数据由更新版本的 Vaultly 写入（格式 v$found，本应用支持到 v$supported）。'
+        '请升级到最新版本后再打开，以免损坏数据。',
+        code: codeSchemaVersionUnsupported,
       );
 }
 
