@@ -90,6 +90,12 @@ class VaultBaseData {
   final bool isFavorite;
   final String? folderId;
 
+  /// 墓碑标记：非 null 表示条目已被删除，等待合并后再物理清除。
+  ///
+  /// 见 ADR-006 R3：删除必须作为一次「更新」参与同步，否则其他设备上的
+  /// 副本会在下一次合并时把条目复活。旧备份缺这个字段 → 默认 null。
+  final DateTime? deletedAt;
+
   const VaultBaseData({
     required this.id,
     required this.title,
@@ -100,6 +106,7 @@ class VaultBaseData {
     this.tags = const [],
     this.isFavorite = false,
     this.folderId,
+    this.deletedAt,
   });
 
   factory VaultBaseData.fromJson(Map<String, dynamic> json) => VaultBaseData(
@@ -118,6 +125,9 @@ class VaultBaseData {
     tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
     isFavorite: json['isFavorite'] as bool? ?? false,
     folderId: json['folderId'] as String?,
+    deletedAt: json['deletedAt'] != null
+        ? DateTime.tryParse(json['deletedAt'] as String)
+        : null,
   );
 }
 
@@ -137,6 +147,9 @@ class VaultEntry {
   final bool isFavorite;
   final String? folderId;
 
+  /// 墓碑标记：非 null 表示已删除（进入回收站），仍参与同步与持久化。
+  final DateTime? deletedAt;
+
   VaultEntry.base(VaultBaseData b)
       : this(
           id: b.id,
@@ -148,6 +161,7 @@ class VaultEntry {
           tags: b.tags,
           isFavorite: b.isFavorite,
           folderId: b.folderId,
+          deletedAt: b.deletedAt,
         );
 
   const VaultEntry({
@@ -160,7 +174,11 @@ class VaultEntry {
     this.tags = const [],
     this.isFavorite = false,
     this.folderId,
+    this.deletedAt,
   });
+
+  /// 是否为墓碑（已删除，在回收站里等待清除）
+  bool get isDeleted => deletedAt != null;
 
   /// 返回刷新更新时间的新实例（原实例不变）。
   VaultEntry withUpdatedTimestamp({DateTime? at}) =>
@@ -174,6 +192,8 @@ class VaultEntry {
     bool? isFavorite,
     String? folderId,
     bool clearFolderId = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       VaultEntry(
         id: id,
@@ -185,6 +205,7 @@ class VaultEntry {
         tags: tags ?? this.tags,
         isFavorite: isFavorite ?? this.isFavorite,
         folderId: clearFolderId ? null : (folderId ?? this.folderId),
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       );
 
   factory VaultEntry.fromJson(Map<String, dynamic> json) =>
@@ -200,6 +221,7 @@ class VaultEntry {
     'tags': tags,
     'isFavorite': isFavorite,
     'folderId': folderId,
+    'deletedAt': deletedAt?.toIso8601String(),
   };
 
   @override
@@ -212,10 +234,12 @@ class VaultEntry {
           other.updatedAt == updatedAt &&
           other.type == type &&
           other.isFavorite == isFavorite &&
-          other.folderId == folderId;
+          other.folderId == folderId &&
+          other.deletedAt == deletedAt;
 
   @override
-  int get hashCode => Object.hash(id, title, updatedAt, type, isFavorite);
+  int get hashCode =>
+      Object.hash(id, title, updatedAt, type, isFavorite, deletedAt);
 }
 
 class LoginEntry extends VaultEntry {
@@ -246,6 +270,7 @@ class LoginEntry extends VaultEntry {
     super.tags = const [],
     super.isFavorite = false,
     super.folderId,
+    super.deletedAt,
     this.username,
     this.email,
     this.password,
@@ -284,6 +309,8 @@ class LoginEntry extends VaultEntry {
     String? notes,
     bool clearPassword = false,
     bool clearTotpSecret = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       LoginEntry(
         id: id,
@@ -295,6 +322,7 @@ class LoginEntry extends VaultEntry {
         tags: tags ?? this.tags,
         isFavorite: isFavorite ?? this.isFavorite,
         folderId: clearFolderId ? null : (folderId ?? this.folderId),
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
         username: username ?? this.username,
         email: email ?? this.email,
         password: clearPassword ? null : (password ?? this.password),
@@ -363,6 +391,7 @@ class BankCardEntry extends VaultEntry {
     super.tags = const [],
     super.isFavorite = false,
     super.folderId,
+    super.deletedAt,
     this.cardNumber,
     this.cardHolderName,
     this.expiryMonth,
@@ -409,6 +438,8 @@ class BankCardEntry extends VaultEntry {
     CardType? cardType,
     bool clearCardNumber = false,
     bool clearCvv = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       BankCardEntry(
         id: id,
@@ -420,6 +451,7 @@ class BankCardEntry extends VaultEntry {
         tags: tags ?? this.tags,
         isFavorite: isFavorite ?? this.isFavorite,
         folderId: clearFolderId ? null : (folderId ?? this.folderId),
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
         cardNumber: clearCardNumber ? null : (cardNumber ?? this.cardNumber),
         cardHolderName: cardHolderName ?? this.cardHolderName,
         expiryMonth: expiryMonth ?? this.expiryMonth,
@@ -480,6 +512,7 @@ class SecureNoteEntry extends VaultEntry {
     super.tags = const [],
     super.isFavorite = false,
     super.folderId,
+    super.deletedAt,
     this.content,
     this.isMarkdown = false,
   });
@@ -505,6 +538,8 @@ class SecureNoteEntry extends VaultEntry {
     String? content,
     bool? isMarkdown,
     bool clearContent = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       SecureNoteEntry(
         id: id,
@@ -516,6 +551,7 @@ class SecureNoteEntry extends VaultEntry {
         tags: tags ?? this.tags,
         isFavorite: isFavorite ?? this.isFavorite,
         folderId: clearFolderId ? null : (folderId ?? this.folderId),
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
         content: clearContent ? null : (content ?? this.content),
         isMarkdown: isMarkdown ?? this.isMarkdown,
       );
@@ -571,6 +607,7 @@ class IdentityEntry extends VaultEntry {
     super.tags = const [],
     super.isFavorite = false,
     super.folderId,
+    super.deletedAt,
     this.firstName,
     this.lastName,
     this.middleName,
@@ -616,6 +653,8 @@ class IdentityEntry extends VaultEntry {
     String? phone,
     String? email,
     bool clearIdNumber = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       IdentityEntry(
         id: id,
@@ -627,6 +666,7 @@ class IdentityEntry extends VaultEntry {
         tags: tags ?? this.tags,
         isFavorite: isFavorite ?? this.isFavorite,
         folderId: clearFolderId ? null : (folderId ?? this.folderId),
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
         firstName: firstName ?? this.firstName,
         lastName: lastName ?? this.lastName,
         middleName: middleName ?? this.middleName,

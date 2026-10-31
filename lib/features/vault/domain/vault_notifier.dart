@@ -6,7 +6,11 @@ import '../../../core/exceptions/app_exception.dart';
 
 /// 保险库状态
 ///
-/// [entries] 为已解密的内存态条目（不可变列表）。
+/// 两个列表必须分清（ADR-006 R3）：
+/// - [entries] 活跃条目，**不含**回收站里的墓碑 —— 界面展示用；
+/// - [allEntries] 全部条目，**含**墓碑 —— 持久化、合并、上传用。
+///
+/// 同步误用 [entries] 会让删除无法传播到其他设备（条目在别处复活）。
 class VaultState {
   /// 是否已完成首次加载
   final bool isLoaded;
@@ -14,8 +18,11 @@ class VaultState {
   /// 条目变更序号：每次写操作递增，派生 Provider 依赖它做缓存失效
   final int revision;
 
-  /// 只读条目快照
+  /// 活跃条目只读快照（不含墓碑）
   final List<VaultEntry> entries;
+
+  /// 全部条目只读快照（含墓碑，供同步/合并使用）
+  final List<VaultEntry> allEntries;
 
   /// 最近一次操作错误（展示后清除）
   final String? error;
@@ -27,14 +34,26 @@ class VaultState {
     this.isLoaded = false,
     this.revision = 0,
     this.entries = const [],
+    this.allEntries = const [],
     this.error,
     this.recoveredFromBackup = false,
   });
+
+  /// 回收站内容（墓碑，按删除时间倒序）
+  List<VaultEntry> get trashedEntries {
+    final trashed = allEntries.where((e) => e.isDeleted).toList()
+      ..sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
+    return trashed;
+  }
+
+  /// 回收站条目数（设置页入口角标用）
+  int get trashCount => allEntries.where((e) => e.isDeleted).length;
 
   VaultState copyWith({
     bool? isLoaded,
     int? revision,
     List<VaultEntry>? entries,
+    List<VaultEntry>? allEntries,
     String? error,
     bool? recoveredFromBackup,
     bool clearError = false,
@@ -43,6 +62,7 @@ class VaultState {
         isLoaded: isLoaded ?? this.isLoaded,
         revision: revision ?? this.revision,
         entries: entries ?? this.entries,
+        allEntries: allEntries ?? this.allEntries,
         error: clearError ? null : (error ?? this.error),
         recoveredFromBackup: recoveredFromBackup ?? this.recoveredFromBackup,
       );
@@ -87,7 +107,8 @@ class VaultNotifier extends StateNotifier<VaultState> {
       state = state.copyWith(
         isLoaded: true,
         revision: _nextRevision,
-        entries: _service.entries,
+        entries: _service.activeEntries,
+        allEntries: _service.entries,
         recoveredFromBackup: _service.recoveredFromPrevious,
         error: null,
       );
@@ -100,12 +121,14 @@ class VaultNotifier extends StateNotifier<VaultState> {
 
   /// 写操作的统一包装：执行 → 失败回滚内存态 → 成功刷新快照。
   Future<bool> _mutate(Future<void> Function() action) async {
+    // 快照必须是「含墓碑的全量」，否则回滚会把回收站里的条目丢掉
     final snapshot = _service.entries;
     try {
       await action();
       state = state.copyWith(
         revision: _nextRevision,
-        entries: _service.entries,
+        entries: _service.activeEntries,
+        allEntries: _service.entries,
         clearError: true,
       );
       return true;
@@ -145,6 +168,20 @@ class VaultNotifier extends StateNotifier<VaultState> {
 
   Future<bool> deleteEntry(String id) =>
       _mutate(() => _service.deleteEntry(id));
+
+  /// 从回收站恢复条目
+  Future<bool> restoreEntry(String id) =>
+      _mutate(() => _service.restoreEntry(id));
+
+  /// 彻底删除单个条目（不可恢复）
+  Future<bool> purgeEntry(String id) => _mutate(() => _service.purgeEntry(id));
+
+  /// 清空回收站
+  Future<bool> purgeAllTrashed() => _mutate(() => _service.purgeAllTrashed());
+
+  /// 物理清除已超过保留期的墓碑
+  Future<bool> purgeExpiredTombstones() =>
+      _mutate(() => _service.purgeExpiredTombstones());
 
   Future<bool> replaceAllEntries(List<VaultEntry> entries) =>
       _mutate(() => _service.replaceAllEntries(entries));
