@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_service.dart';
 import '../data/biometric_service.dart';
+import '../data/crypto_service.dart';
 import 'auth_state.dart';
 import '../../../core/exceptions/app_exception.dart';
 
@@ -31,6 +32,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 当前会话的加密密钥（内存中临时保存）
   Uint8List? _encryptionKey;
 
+  /// 当前会话的主密码（内存中临时保存，锁定即清除）
+  ///
+  /// 跨设备解密云端备份时必须重新做一次密钥派生：备份文件头里的盐值
+  /// 与本机盐值不同，而 Argon2id 需要明文口令才能派生。
+  /// 只保留内存副本，不落盘。
+  String? _masterPassword;
+
   AuthNotifier(
     this._authService,
     this._biometricService, {
@@ -42,6 +50,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// 获取当前加密密钥
   Uint8List? get encryptionKey => _encryptionKey;
+
+  /// 获取当前会话的主密码（仅内存态；生物识别解锁后可能为 null）
+  String? get masterPassword => _masterPassword;
+
+  /// 本机当前使用的 KDF 参数（写入云端备份文件头用）
+  Future<KdfParams> currentKdfParams() => _authService.getKdfParams();
+
+  /// 用指定 KDF 参数从主密码派生密钥（参数通常来自备份文件头）
+  Uint8List deriveVaultKey(String password, KdfParams params) =>
+      _authService.deriveVaultKey(password, params);
 
   /// 初始化状态
   Future<void> _init() async {
@@ -86,6 +104,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       state = state.copyWith(isLoading: true, error: null);
       _encryptionKey = await _authService.setupMasterPassword(password);
+      _masterPassword = password;
       keyPublisher?.call(_encryptionKey!);
 
       final bioAvailability = await _authService.checkBiometricAvailability();
@@ -125,6 +144,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final success = _encryptionKey != null;
 
       if (success) {
+        _masterPassword = password;
         keyPublisher?.call(_encryptionKey!);
       }
 
@@ -155,6 +175,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final success = _encryptionKey != null;
 
       if (success) {
+        // 生物识别路径没有明文口令可用，跨设备解密备份时会要求改用密码解锁
+        _masterPassword = null;
         keyPublisher?.call(_encryptionKey!);
       }
 
@@ -185,6 +207,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       state = state.copyWith(isLoading: true, error: null);
       _encryptionKey = await _authService.enableBiometric(password);
+      _masterPassword = password;
 
       final bioAvailability = await _authService.checkBiometricAvailability();
       final icon = await _biometricService.getBiometricIcon();
@@ -235,6 +258,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _authService.secureKey(_encryptionKey!);
     }
     _encryptionKey = null;
+    _masterPassword = null;
     keyRevoker?.call();
   }
 
@@ -251,6 +275,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         oldPassword,
         newPassword,
       );
+      _masterPassword = newPassword;
 
       // 发布新密钥：保险库收到后用新密钥重加密并持久化
       keyPublisher?.call(_encryptionKey!);

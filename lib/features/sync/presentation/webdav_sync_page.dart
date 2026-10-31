@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../ui/theme/tokens.dart';
 import '../../../ui/theme/vaultly_colors.dart';
 import '../data/webdav_client.dart' show RemoteBackupFormats, WebDAVException;
+import '../../auth/data/crypto_service.dart' show KdfParams;
 import '../domain/vault_merge.dart';
 
 /// 每次操作的执行方式
@@ -96,6 +98,44 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     await _download(plan);
   }
 
+  // ==================== 解密密钥 ====================
+
+  /// 按备份文件头里的 KDF 参数解析出解密密钥。
+  ///
+  /// 三种情况：
+  /// 1. 文件头与本机参数一致（本机上传的备份）→ 直接用会话密钥，
+  ///    不需要明文口令，生物识别解锁下也能恢复；
+  /// 2. 文件头不同（备份来自另一台设备）→ 必须用「主密码 + 文件里的盐值」
+  ///    重新派生。这正是换手机后能解开云端备份的关键；
+  /// 3. 旧格式备份没有文件头（盐值只存在于原设备）→ 退回本机会话密钥，
+  ///    只有原设备能解开。
+  Future<Uint8List> _resolveBackupKey(KdfParams? kdfFromFile) async {
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+
+    final sessionKey = authNotifier.encryptionKey;
+    if (sessionKey == null) {
+      throw WebDAVException('未找到主密钥，请重新解锁');
+    }
+
+    if (kdfFromFile == null) {
+      return sessionKey;
+    }
+
+    final localKdf = await authNotifier.currentKdfParams();
+    if (localKdf.matches(kdfFromFile)) {
+      return sessionKey;
+    }
+
+    final password = authNotifier.masterPassword;
+    if (password == null) {
+      throw WebDAVException(
+        '这份备份来自另一台设备，需要用主密码解密。'
+        '请锁定后改用主密码解锁，再重试恢复。',
+      );
+    }
+    return authNotifier.deriveVaultKey(password, kdfFromFile);
+  }
+
   // ==================== 上传 ====================
 
   Future<void> _upload(_SyncPlan plan) async {
@@ -110,6 +150,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       return;
     }
 
+    final kdfParams = await authNotifier.currentKdfParams();
+
     var entries = ref.read(vaultNotifierProvider).entries;
     VaultMergeResult? mergeResult;
 
@@ -119,10 +161,10 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       if (plan.mode == SyncApplyMode.merge) {
         // 兼容模式：先拉取云端，合并后再整体上传，并同步回本地
         try {
-          final remoteData = await webDAVService.download(
-            encryptionKey: encryptionKey,
+          final remoteBackup = await webDAVService.download(
+            keyResolver: _resolveBackupKey,
           );
-          final remoteEntries = _parseEntries(remoteData);
+          final remoteEntries = _parseEntries(remoteBackup.data);
           if (remoteEntries != null && remoteEntries.isNotEmpty) {
             mergeResult = mergeVaultEntries(
               local: entries,
@@ -139,6 +181,7 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       await webDAVService.upload(
         vaultData: _vaultData(entries),
         encryptionKey: encryptionKey,
+        kdfParams: kdfParams,
       );
 
       // 合并结果回写本地，保持两端一致
@@ -173,22 +216,15 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     final webDAVService = ref.read(webDAVServiceProvider);
     final syncNotifier = ref.read(syncOperationProvider.notifier);
     final configNotifier = ref.read(webDAVConfigProvider.notifier);
-    final authNotifier = ref.read(authNotifierProvider.notifier);
-
-    final encryptionKey = authNotifier.encryptionKey;
-    if (encryptionKey == null) {
-      _toast('未找到主密钥，请重新解锁');
-      return;
-    }
 
     syncNotifier.startSync('正在下载并解密...');
 
     try {
-      final data = await webDAVService.download(
-        encryptionKey: encryptionKey,
+      final backup = await webDAVService.download(
+        keyResolver: _resolveBackupKey,
       );
 
-      final remoteEntries = _parseEntries(data);
+      final remoteEntries = _parseEntries(backup.data);
       if (remoteEntries == null) {
         throw Exception('下载的数据为空或格式不正确');
       }
@@ -208,6 +244,12 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
       } else {
         target = remoteEntries;
         message = '已恢复 ${remoteEntries.length} 条记录';
+      }
+
+      // 旧格式备份没有文件头，只能在本机解开；提示用户重新上传一次，
+      // 生成可跨设备恢复的新格式备份。
+      if (backup.legacyFormat) {
+        message = '$message · 旧格式备份，建议重新上传以支持跨设备恢复';
       }
 
       final success = await vaultNotifier.replaceAllEntries(target);
@@ -323,7 +365,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '传输固定使用 AES-256-GCM 加密 + GZIP 压缩，服务器只保存密文',
+                              '传输固定使用 AES-256-GCM 加密 + GZIP 压缩，密钥派生参数随备份保存，'
+                              '换设备后用同一个主密码即可恢复',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: colorScheme.textMuted,

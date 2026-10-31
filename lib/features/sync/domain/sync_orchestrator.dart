@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'sync_models.dart';
 import '../data/webdav_client.dart';
 import '../data/sync_config_repository.dart';
+import '../../auth/data/crypto_service.dart';
 
 /// 同步编排器
 ///
@@ -98,10 +99,13 @@ class SyncOrchestrator {
   ///
   /// 流程：
   /// 1. 根据同步模式路由（当前全部为上传）
-  /// 2. 传输固定启用 AES-256-GCM 加密与 GZIP 压缩
+  /// 2. 传输固定启用 AES-256-GCM 加密与 GZIP 压缩，
+  ///    并把 KDF 参数写进备份文件头，保证换设备也能用主密码恢复
   Future<SyncResult> sync({
     required Map<String, dynamic> localVaultData,
     required Uint8List encryptionKey,
+    required KdfParams kdfParams,
+    required BackupKeyResolver keyResolver,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -131,12 +135,13 @@ class SyncOrchestrator {
           result = await syncUpload(
             vaultData: localVaultData,
             encryptionKey: encryptionKey,
+            kdfParams: kdfParams,
             onProgress: onProgress,
           );
           break;
         case SyncMode.downloadOnly:
           result = await syncDownload(
-            encryptionKey: encryptionKey,
+            keyResolver: keyResolver,
             onProgress: onProgress,
           );
           break;
@@ -178,16 +183,14 @@ class SyncOrchestrator {
   Future<SyncResult> syncUpload({
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
-    bool enableEncryption = true,
-    bool enableCompression = true,
+    required KdfParams kdfParams,
     Function(double progress)? onProgress,
   }) async {
     try {
       final success = await upload(
         vaultData: vaultData,
         encryptionKey: encryptionKey,
-        enableEncryption: enableEncryption,
-        enableCompression: enableCompression,
+        kdfParams: kdfParams,
         onProgress: onProgress,
       );
 
@@ -206,20 +209,16 @@ class SyncOrchestrator {
 
   /// 下载同步（结果语义包装，实际传输见 [download]）
   Future<SyncResult> syncDownload({
-    required Uint8List encryptionKey,
-    bool enableEncryption = true,
-    bool enableCompression = true,
+    required BackupKeyResolver keyResolver,
     Function(double progress)? onProgress,
   }) async {
     try {
-      final data = await download(
-        encryptionKey: encryptionKey,
-        enableEncryption: enableEncryption,
-        enableCompression: enableCompression,
+      final result = await download(
+        keyResolver: keyResolver,
         onProgress: onProgress,
       );
 
-      if (data != null) {
+      if (result.data.isNotEmpty) {
         return SyncResult.success(updated: 1);
       } else {
         return SyncResult.failure('下载失败：无数据');
@@ -232,12 +231,11 @@ class SyncOrchestrator {
     }
   }
 
-  /// 上传保险库数据（支持加密/不加密模式）
+  /// 上传保险库数据（固定加密 + 压缩）
   Future<bool> upload({
     required Map<String, dynamic> vaultData,
     required Uint8List encryptionKey,
-    bool enableEncryption = true,
-    bool enableCompression = true,
+    required KdfParams kdfParams,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -250,8 +248,7 @@ class SyncOrchestrator {
     final result = await _client.upload(
       vaultData: vaultData,
       encryptionKey: encryptionKey,
-      enableEncryption: enableEncryption,
-      enableCompression: enableCompression,
+      kdfParams: kdfParams,
       onProgress: onProgress,
     );
 
@@ -261,11 +258,9 @@ class SyncOrchestrator {
     return result;
   }
 
-  /// 下载保险库数据（支持解密/不解密模式）
-  Future<Map<String, dynamic>?> download({
-    required Uint8List encryptionKey,
-    bool enableEncryption = true,
-    bool enableCompression = true,
+  /// 下载保险库数据（固定解密 + 解压）
+  Future<DownloadedBackup> download({
+    required BackupKeyResolver keyResolver,
     Function(double progress)? onProgress,
   }) async {
     final config = await getConfig();
@@ -276,9 +271,7 @@ class SyncOrchestrator {
     _client.initClient(config);
 
     final result = await _client.download(
-      encryptionKey: encryptionKey,
-      enableEncryption: enableEncryption,
-      enableCompression: enableCompression,
+      keyResolver: keyResolver,
       onProgress: onProgress,
     );
 
