@@ -17,8 +17,25 @@ import 'widgets/empty_state.dart';
 /// ADR-006 R3 的配套界面：删除后的条目会变成「墓碑」并继续同步，
 /// 在这里可以恢复或彻底清除。没有这个入口，墓碑对用户就是不可见状态，
 /// 既恢复不了也清不掉（v1.0 遗漏项 F7）。
-class TrashPage extends ConsumerWidget {
+class TrashPage extends ConsumerStatefulWidget {
   const TrashPage({super.key});
+
+  @override
+  ConsumerState<TrashPage> createState() => _TrashPageState();
+}
+
+class _TrashPageState extends ConsumerState<TrashPage> {
+  @override
+  void initState() {
+    super.initState();
+    // 打开回收站时顺手清理超期墓碑：日常写入也会剔除它们，
+    // 但用户如果一直不做写操作，「剩余 0 天」的条目会一直挂在这里。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(vaultNotifierProvider.notifier).purgeExpiredTombstones();
+      }
+    });
+  }
 
   Future<void> _restore(
     BuildContext context,
@@ -71,7 +88,7 @@ class TrashPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final trashed = ref.watch(vaultTrashedEntriesProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
