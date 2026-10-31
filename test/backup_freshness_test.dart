@@ -106,6 +106,34 @@ void main() {
       );
     });
 
+    test('旧方案（无前缀）写入的指纹应视为未知，避免升级后误报过期', () async {
+      // v4.0.1 及更早：指纹是「校验值的再哈希」，直接写字符串、没有方案前缀。
+      // R1 把指纹来源改成 HKDF(masterSecret) 后，旧值不再可比。
+      storage.store['webdav_last_upload_key_tag'] = 'old-scheme-tag';
+
+      final repo = freshRepo();
+      expect(await repo.getLastUploadKeyTag(), isNull,
+          reason: '方案不匹配的旧值必须当作未知');
+
+      expect(
+        await orchestratorWith(repo)
+            .isRemoteBackupStale(currentKeyTag: 'new-scheme-tag'),
+        isFalse,
+        reason: '宁可漏报也不能误报——误报会把用户引向一次无意义的重传',
+      );
+    });
+
+    test('新方案写入的指纹应能正常往返比对', () async {
+      final repo = freshRepo();
+      await repo.updateLastUploadKeyTag('tag-a');
+
+      expect(await repo.getLastUploadKeyTag(), equals('tag-a'));
+      expect(
+        await orchestratorWith(repo).isRemoteBackupStale(currentKeyTag: 'tag-a'),
+        isFalse,
+      );
+    });
+
     test('清除 WebDAV 配置后指纹记录也应被清除', () async {
       final repo = freshRepo();
       await repo.updateLastUploadKeyTag('tag-a');

@@ -88,6 +88,14 @@ class VaultException extends AppException {
         originalError: error,
       );
 
+  /// 写盘前回读校验失败：刚序列化出的数据无法被完整解析/解密。
+  ///
+  /// 此时**不会**写入主存储区，旧数据保持完好，属于「拒绝写入坏数据」的保护。
+  factory VaultException.writeVerificationFailed(String detail) => VaultException(
+        '写入前校验失败，已放弃本次保存以保护现有数据：$detail',
+        code: 'VAULT_WRITE_VERIFY_FAILED',
+      );
+
   /// 保险库解密失败（密钥不匹配或数据损坏）。
   ///
   /// 携带原始错误与堆栈，便于诊断；上层应阻止后续写入避免数据被覆盖。

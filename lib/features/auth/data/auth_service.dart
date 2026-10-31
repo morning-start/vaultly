@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'biometric_service.dart';
@@ -11,7 +10,17 @@ import '../../../core/exceptions/app_exception.dart';
 /// 负责执行认证相关的业务逻辑，不持有状态。
 /// 状态管理由 Riverpod Notifier 负责。
 class AuthService {
-  static const _keyMasterPassword = 'master_password_hash';
+  /// 【遗留】sha256 校验哈希的存储键。
+  ///
+  /// 仅用于旧安装的迁移校验；迁移成功后会被删除（该值可被低成本离线爆破）。
+  static const _keyLegacyVerificationHash = 'master_password_hash';
+
+  /// 口令校验值（HKDF(masterSecret, "vaultly/auth")，base64）
+  static const _keyMasterVerifier = 'master_verifier';
+
+  /// 密钥体系指纹（备份过期检测）
+  static const _keyKeyTag = 'master_key_tag';
+
   static const _keySalt = 'master_salt';
   static const _keyKdfParams = 'master_kdf_params';
   static const _keyBiometricEncryptionKey = 'biometric_encryption_key';
@@ -98,18 +107,80 @@ class AuthService {
   /// 「云端那份备份还是不是当前主密码加密的」——改过主密码之后，
   /// 之前上传的备份只有旧密码能解开，需要重新上传一次。
   ///
-  /// 这里存的是口令校验哈希的**再哈希**，不可逆且无法用于离线爆破，
-  /// 所以可以安全地写进普通偏好存储做比对。
+  /// 指纹由 `HKDF(masterSecret, "vaultly/key-tag")` 派生，在解锁/设密/改密时
+  /// 写入。**不能**基于落盘的校验值再哈希：校验方案一升级，基于它的指纹就会变，
+  /// 会让所有设备在升级当天误报「云端备份已过期」。
+  ///
+  /// 读取不需要主密码，因此生物识别解锁的会话同样可用。
   Future<String?> currentKeyTag() async {
-    final storedHash = await _secureStorage.read(key: _keyMasterPassword);
-    if (storedHash == null || storedHash.isEmpty) return null;
-    return sha256.convert(utf8.encode('vaultly-key-tag:$storedHash')).toString();
+    final tag = await _secureStorage.read(key: _keyKeyTag);
+    return (tag == null || tag.isEmpty) ? null : tag;
+  }
+
+  /// 写入校验值与指纹（凭证体系 v2）
+  Future<void> _writeVerifier(KeyMaterial keyMaterial) async {
+    await _secureStorage.write(
+      key: _keyMasterVerifier,
+      value: keyMaterial.authKeyBase64,
+    );
+    await _secureStorage.write(key: _keyKeyTag, value: keyMaterial.keyTag);
+  }
+
+  /// 校验主密码并返回密钥材料；密码错误返回 null。
+  ///
+  /// 双轨校验：
+  /// - 已有 v2 校验值 → 用 HKDF 派生的 authKey 定长时间比较
+  /// - 只有旧版 sha256 值（升级前的安装）→ 校验通过后**就地升级**：
+  ///   写入 v2 校验值与指纹，并删除可被离线爆破的 sha256 值
+  Future<KeyMaterial?> _verifyPassword(String password) async {
+    final kdfParams = await _readKdfParams();
+    if (kdfParams == null) {
+      throw AuthException.passwordNotSet();
+    }
+
+    final keyMaterial = CryptoService.deriveKeyMaterial(
+      password,
+      kdfParams.salt,
+    );
+
+    final storedVerifier = await _secureStorage.read(key: _keyMasterVerifier);
+    final legacyHash = await _secureStorage.read(
+      key: _keyLegacyVerificationHash,
+    );
+
+    if ((storedVerifier == null || storedVerifier.isEmpty) &&
+        (legacyHash == null || legacyHash.isEmpty)) {
+      throw AuthException.passwordNotSet();
+    }
+
+    if (storedVerifier != null && storedVerifier.isNotEmpty) {
+      final matches = CryptoService.constantTimeEquals(
+        keyMaterial.authKey,
+        base64Decode(storedVerifier),
+      );
+      if (!matches) return null;
+      await _secureStorage.write(key: _keyKeyTag, value: keyMaterial.keyTag);
+      return keyMaterial;
+    }
+
+    // —— 旧格式迁移路径 ——
+    if (keyMaterial.hash != legacyHash) return null;
+
+    await _writeVerifier(keyMaterial);
+    await _secureStorage.delete(key: _keyLegacyVerificationHash);
+    debugPrint(
+      'AuthService: 校验值已升级为 Argon2id + HKDF 派生（sha256 值已删除）',
+    );
+    return keyMaterial;
   }
 
   /// 检查是否已设置主密码
   Future<bool> isPasswordSet() async {
-    final hash = await _secureStorage.read(key: _keyMasterPassword);
-    return hash != null && hash.isNotEmpty;
+    final verifier = await _secureStorage.read(key: _keyMasterVerifier);
+    if (verifier != null && verifier.isNotEmpty) return true;
+
+    final legacy = await _secureStorage.read(key: _keyLegacyVerificationHash);
+    return legacy != null && legacy.isNotEmpty;
   }
 
   /// 设置主密码
@@ -117,7 +188,8 @@ class AuthService {
   Future<Uint8List> setupMasterPassword(String password) async {
     final keyMaterial = CryptoService.generateKeyMaterial(password);
 
-    await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
+    // 新安装只写 v2 校验值，不再产生可被离线爆破的 sha256 值
+    await _writeVerifier(keyMaterial);
     await _writeKdfParams(CryptoService.defaultKdfParams(keyMaterial.salt));
 
     await _resetFailedAttempts();
@@ -133,25 +205,15 @@ class AuthService {
       throw AuthException.locked(lockStatus.remainingMinutes);
     }
 
-    final storedHash = await _secureStorage.read(key: _keyMasterPassword);
-    final kdfParams = await _readKdfParams();
+    final keyMaterial = await _verifyPassword(password);
 
-    if (storedHash == null || kdfParams == null) {
-      throw AuthException.passwordNotSet();
-    }
-
-    final computedHash = CryptoService.deriveVerificationHash(
-      password,
-      kdfParams.salt,
-    );
-
-    if (computedHash == storedHash) {
+    if (keyMaterial != null) {
       await _resetFailedAttempts();
-      return CryptoService.deriveKeyWithKdfParams(password, kdfParams);
-    } else {
-      await _incrementFailedAttempts();
-      return null;
+      return keyMaterial.key;
     }
+
+    await _incrementFailedAttempts();
+    return null;
   }
 
   /// 检查锁定状态
@@ -216,25 +278,17 @@ class AuthService {
       throw AuthException.biometricFailed(e.message);
     }
 
-    final kdfParams = await _readKdfParams();
-    final storedHash = await _secureStorage.read(key: _keyMasterPassword);
-    if (kdfParams == null || storedHash == null) {
-      throw AuthException.passwordNotSet();
-    }
-
-    if (CryptoService.deriveVerificationHash(password, kdfParams.salt) !=
-        storedHash) {
+    final keyMaterial = await _verifyPassword(password);
+    if (keyMaterial == null) {
       throw AuthException.invalidPassword();
     }
 
-    final key = CryptoService.deriveKeyWithKdfParams(password, kdfParams);
-
     await _secureStorage.write(
       key: _keyBiometricEncryptionKey,
-      value: base64Encode(key),
+      value: base64Encode(keyMaterial.key),
     );
 
-    return key;
+    return keyMaterial.key;
   }
 
   /// 禁用生物识别
@@ -342,8 +396,10 @@ class AuthService {
     final wasBiometricEnabled = await isBiometricEnabledByUser();
     final keyMaterial = CryptoService.generateKeyMaterial(newPassword);
 
-    await _secureStorage.write(key: _keyMasterPassword, value: keyMaterial.hash);
+    await _writeVerifier(keyMaterial);
     await _writeKdfParams(CryptoService.defaultKdfParams(keyMaterial.salt));
+    // 改密后旧格式校验值已无意义，顺手清掉
+    await _secureStorage.delete(key: _keyLegacyVerificationHash);
 
     if (wasBiometricEnabled) {
       await _secureStorage.write(
@@ -357,7 +413,9 @@ class AuthService {
 
   /// 清除所有数据
   Future<void> clearAllData() async {
-    await _secureStorage.delete(key: _keyMasterPassword);
+    await _secureStorage.delete(key: _keyLegacyVerificationHash);
+    await _secureStorage.delete(key: _keyMasterVerifier);
+    await _secureStorage.delete(key: _keyKeyTag);
     await _secureStorage.delete(key: _keySalt);
     await _secureStorage.delete(key: _keyKdfParams);
     await _secureStorage.delete(key: _keyBiometricEncryptionKey);

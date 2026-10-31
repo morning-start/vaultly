@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../domain/vault_entry.dart';
 import '../domain/encryption/entry_encryption_strategy.dart';
@@ -17,12 +17,23 @@ import '../../../core/exceptions/app_exception.dart';
 class VaultService {
   static const _keyVaultData = 'vault_data';
 
+  /// 写前备份：始终保存「上一次成功写入的完整数据」
+  static const _keyVaultDataPrev = 'vault_data.prev';
+
   static VaultService? _instance;
 
   final FlutterSecureStorage _secureStorage;
   Uint8List? _encryptionKey;
 
   List<VaultEntry> _entries = [];
+
+  /// 本次加载是否从写前备份恢复（主数据损坏）
+  bool _recoveredFromPrevious = false;
+
+  /// 主存储区当前是否处于损坏态
+  ///
+  /// 损坏时**不得**用坏数据覆盖写前备份，否则唯一可用的副本会被毁掉。
+  bool _mainPayloadCorrupt = false;
 
   // 加密策略映射
   static const _encryptionStrategies = <EntryType, EntryEncryptionStrategy>{
@@ -56,6 +67,12 @@ class VaultService {
 
   List<VaultEntry> get entries => List.unmodifiable(_entries);
 
+  /// 本次加载是否从写前备份恢复
+  ///
+  /// 为 true 说明主数据读不出来、已回退到上一次成功写入的副本。
+  /// UI 应明确告知用户「请检查最近一次修改」，因为丢失的是最后一次写入的内容。
+  bool get recoveredFromPrevious => _recoveredFromPrevious;
+
   /// 设置当前会话的加密密钥。
   ///
   /// 解锁后由认证模块注入，后续的读写、加密和解密都依赖该密钥。
@@ -66,27 +83,43 @@ class VaultService {
   /// 从安全存储加载整个保险库。
   ///
   /// 数据在存储层以 JSON 形式保存，敏感字段会被单独加密后再序列化。
+  ///
+  /// 主存储区读不出来时（解析/解密失败）自动回退到写前备份，
+  /// 并把 [recoveredFromPrevious] 置为 true 供 UI 提示；
+  /// 两份都读不出来才抛 [VaultException.decryptionFailed]。
   Future<void> loadVault() async {
     if (_encryptionKey == null) {
       throw VaultException.keyNotSet();
     }
 
-    final encryptedData = await _secureStorage.read(key: _keyVaultData);
-    if (encryptedData == null || encryptedData.isEmpty) {
+    _recoveredFromPrevious = false;
+    _mainPayloadCorrupt = false;
+
+    final raw = await _secureStorage.read(key: _keyVaultData);
+    if (raw == null || raw.isEmpty) {
       _entries = [];
       return;
     }
 
     try {
-      final data = jsonDecode(encryptedData) as Map<String, dynamic>;
-      // 先解密原始持久化 JSON（密文字段在这里），
-      // 再按条目类型恢复具体模型，便于兼容不同字段结构。
-      final entriesJson = data['entries'] as List<dynamic>;
-
-      _entries = entriesJson
-          .map((e) => _decryptPersistedJson(e as Map<String, dynamic>))
-          .toList();
+      _entries = _decodePayload(raw);
+      return;
     } catch (e, stackTrace) {
+      // 主数据不可用：先尝试写前备份，避免直接把用户判成「数据丢失」
+      final previous = await _secureStorage.read(key: _keyVaultDataPrev);
+      if (previous != null && previous.isNotEmpty) {
+        try {
+          _entries = _decodePayload(previous);
+          _recoveredFromPrevious = true;
+          // 主区仍是坏的：在它被修好之前，不要用坏数据覆盖好备份
+          _mainPayloadCorrupt = true;
+          debugPrint('VaultService: 主数据不可用，已从写前备份恢复 ${_entries.length} 条');
+          return;
+        } catch (backupError) {
+          debugPrint('VaultService: 写前备份同样不可用: $backupError');
+        }
+      }
+
       // 解密/解析失败时不能静默清空内存态：一旦后续 saveVault 执行，
       // 空列表会覆盖持久化数据，造成不可恢复的数据丢失。
       // 抛出异常让调用方（UI 层）感知并阻止后续写入。
@@ -95,25 +128,79 @@ class VaultService {
     }
   }
 
-  /// 将当前内存中的保险库重新写回安全存储。
+  /// 序列化 + 字段级加密，得到可直接落盘的完整数据
+  String _encodePayload() {
+    // 直接使用策略返回的加密 JSON 持久化；
+    // 不能再经过 entry.toJson()，否则密文字段会被丢弃。
+    final entriesJson = _entries.map(_encryptEntry).toList();
+
+    return jsonEncode({
+      'entries': entriesJson,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// 解析 + 解密落盘数据
+  List<VaultEntry> _decodePayload(String payload) {
+    final data = jsonDecode(payload) as Map<String, dynamic>;
+    // 先解密原始持久化 JSON（密文字段在这里），
+    // 再按条目类型恢复具体模型，便于兼容不同字段结构。
+    final entriesJson = data['entries'] as List<dynamic>;
+
+    return entriesJson
+        .map((e) => _decryptPersistedJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 写前回读校验：确认刚序列化出的数据能被完整解析并解密。
   ///
-  /// 写入前会对敏感字段执行字段级加密，非敏感结构字段保持可读，方便导出和调试。
+  /// 这是「拒绝写入坏数据」的闸门——宁可本次保存失败，也不能把
+  /// 无法读回的内容写进主存储区，否则下一次启动就是数据丢失。
+  void _verifyPayload(String payload) {
+    final List<VaultEntry> decoded;
+    try {
+      decoded = _decodePayload(payload);
+    } catch (e) {
+      throw VaultException.writeVerificationFailed('回读失败 ($e)');
+    }
+
+    if (decoded.length != _entries.length) {
+      throw VaultException.writeVerificationFailed(
+        '条目数不一致：写入 ${_entries.length} 条，回读 ${decoded.length} 条',
+      );
+    }
+  }
+
+  /// 将当前内存中的保险库写回安全存储。
+  ///
+  /// 写入顺序（任一步失败都不会破坏主存储区）：
+  /// 1. 序列化并**回读校验**，不合格直接放弃本次保存
+  /// 2. 把当前主数据留作写前备份 `vault_data.prev`
+  /// 3. 最后才写主存储区 `vault_data`
   Future<void> saveVault() async {
     if (_encryptionKey == null) {
       throw VaultException.keyNotSet();
     }
 
-    // 直接使用策略返回的加密 JSON 持久化；
-    // 不能再经过 entry.toJson()，否则密文字段会被丢弃。
-    final entriesJson =
-        _entries.map(_encryptEntry).toList();
+    final payload = _encodePayload();
 
-    final data = jsonEncode({
-      'entries': entriesJson,
-      'updatedAt': DateTime.now().toIso8601String(),
-    });
+    // 1) 写前校验：不合格就抛错，主存储区保持不变
+    _verifyPayload(payload);
 
-    await _secureStorage.write(key: _keyVaultData, value: data);
+    // 2) 留存写前备份
+    final previous = await _secureStorage.read(key: _keyVaultData);
+    if (!_mainPayloadCorrupt && previous != null && previous.isNotEmpty) {
+      // 主数据是好的：把它留作回退副本
+      await _secureStorage.write(key: _keyVaultDataPrev, value: previous);
+    } else {
+      // 首次写入，或主数据曾损坏（旧的不可用）：
+      // 用刚校验过的新数据兜底，保证 .prev 始终是一份可读的完整数据
+      await _secureStorage.write(key: _keyVaultDataPrev, value: payload);
+    }
+
+    // 3) 最后写主存储区——放在最后，前面任何失败都不会动到它
+    await _secureStorage.write(key: _keyVaultData, value: payload);
+    _mainPayloadCorrupt = false;
   }
 
   /// 根据类型将 JSON 转换为对应的条目类型。

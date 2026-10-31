@@ -17,6 +17,88 @@ class CryptoService {
   static const int _argon2Parallelism = 4;
   static const int _argon2HashLength = 32; // 256 bits
 
+  // HKDF 域分离标签：同一次 Argon2id 输出，按用途切分成互不可推导的密钥。
+  static const String hkdfInfoAuth = 'vaultly/auth';
+  static const String hkdfInfoKek = 'vaultly/kek-wrap';
+  static const String hkdfInfoKeyTag = 'vaultly/key-tag';
+
+  /// HKDF-SHA256（RFC 5869）
+  ///
+  /// 用于把一次 Argon2id 的输出按用途域分离成多把密钥。
+  /// 自实现（约 20 行）而非引入依赖，必须与 RFC 5869 官方测试向量一致。
+  static Uint8List hkdfSha256({
+    required Uint8List ikm,
+    required String info,
+    Uint8List? salt,
+    int length = 32,
+  }) =>
+      hkdfSha256Bytes(
+        ikm: ikm,
+        info: utf8.encode(info),
+        salt: salt,
+        length: length,
+      );
+
+  /// HKDF-SHA256 的字节级实现（RFC 5869 测试向量使用非 UTF-8 的 info）
+  static Uint8List hkdfSha256Bytes({
+    required Uint8List ikm,
+    required List<int> info,
+    Uint8List? salt,
+    int length = 32,
+  }) {
+    const hashLen = 32; // SHA-256
+    final blocks = (length / hashLen).ceil();
+    if (blocks > 255) {
+      throw ArgumentError('HKDF 输出长度超出上限: $length');
+    }
+
+    // extract：salt 缺省为全零（RFC 5869 §2.2）
+    final effectiveSalt =
+        (salt == null || salt.isEmpty) ? Uint8List(hashLen) : salt;
+    final prk = Hmac(sha256, effectiveSalt).convert(ikm).bytes;
+
+    // expand
+    final hmac = Hmac(sha256, prk);
+    final okm = <int>[];
+    var block = <int>[];
+
+    for (var i = 1; i <= blocks; i++) {
+      block = hmac.convert(<int>[...block, ...info, i]).bytes;
+      okm.addAll(block);
+    }
+
+    return Uint8List.fromList(okm.sublist(0, length));
+  }
+
+  /// 口令校验密钥：`HKDF(masterSecret, "vaultly/auth")`
+  ///
+  /// 替代「直接对密码做 sha256」——sha256 是快速哈希，安全存储一旦泄露，
+  /// 离线爆破主密码毫无成本；而本值来自 64MB/3 轮的 Argon2id 输出。
+  static Uint8List deriveAuthKey(Uint8List masterSecret) =>
+      hkdfSha256(ikm: masterSecret, info: hkdfInfoAuth);
+
+  /// 密钥包装密钥（R2 的 DEK/KEK 层次的 KEK 来源）
+  static Uint8List deriveWrapKey(Uint8List masterSecret) =>
+      hkdfSha256(ikm: masterSecret, info: hkdfInfoKek);
+
+  /// 密钥体系指纹：用于判断「云端备份是否还是当前主密码加密的」
+  ///
+  /// 必须由 masterSecret 直接派生，**不能**基于落盘的校验值算——
+  /// 校验方案一升级（如 R1 本身），基于它的指纹就会变，
+  /// 导致升级当天所有设备误报「云端备份已过期」。
+  static String deriveKeyTag(Uint8List masterSecret) =>
+      base64Encode(hkdfSha256(ikm: masterSecret, info: hkdfInfoKeyTag));
+
+  /// 定长时间比较，避免比较密钥/校验值时泄漏时序信息
+  static bool constantTimeEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) {
+      diff |= a[i] ^ b[i];
+    }
+    return diff == 0;
+  }
+
   static Uint8List _generateRandomBytes(int length) {
     final random = Random.secure();
     return Uint8List.fromList(
@@ -164,7 +246,9 @@ class CryptoService {
 
   /// 口令校验哈希：sha256(主密码 ‖ 盐)
   ///
-  /// 只用于本机判断「输入的主密码对不对」，不参与数据加密。
+  /// **遗留格式，仅用于旧安装的迁移校验**。sha256 是快速哈希，
+  /// 安全存储泄露即可低成本离线爆破；新安装一律使用 [deriveAuthKey]，
+  /// 迁移成功后本值会被删除。
   static String deriveVerificationHash(String password, Uint8List salt) {
     final bytes = utf8.encode(password);
     final salted = Uint8List.fromList([...bytes, ...salt]);
@@ -175,12 +259,14 @@ class CryptoService {
     String password,
     Uint8List salt,
   ) {
-    final key = deriveKeyWithArgon2id(password, salt);
+    final masterSecret = deriveKeyWithArgon2id(password, salt);
 
     return KeyMaterial(
-      key: key,
+      key: masterSecret,
       salt: salt,
       hash: deriveVerificationHash(password, salt),
+      authKey: deriveAuthKey(masterSecret),
+      keyTag: deriveKeyTag(masterSecret),
       algorithm: 'argon2id',
       version: 2,
     );
@@ -425,7 +511,15 @@ class EncryptedEnvelope {
 class KeyMaterial {
   final Uint8List key;
   final Uint8List salt;
+  /// 【遗留】sha256(password ‖ salt)，仅供旧格式迁移校验
   final String hash;
+
+  /// 口令校验值：HKDF(masterSecret, "vaultly/auth")
+  final Uint8List authKey;
+
+  /// 密钥体系指纹（备份过期检测）
+  final String keyTag;
+
   final String algorithm;
   final int version;
 
@@ -433,13 +527,18 @@ class KeyMaterial {
     required this.key,
     required this.salt,
     required this.hash,
+    Uint8List? authKey,
+    String? keyTag,
     this.algorithm = 'sha256',
     this.version = 1,
-  });
+  })  : authKey = authKey ?? Uint8List(0),
+        keyTag = keyTag ?? '';
 
   String get keyBase64 => base64Encode(key);
 
   String get saltBase64 => base64Encode(salt);
+
+  String get authKeyBase64 => base64Encode(authKey);
 
   Map<String, dynamic> toJson() => {
     'saltBase64': saltBase64,
