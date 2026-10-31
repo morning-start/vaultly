@@ -227,14 +227,14 @@ class LoginEntry extends VaultEntry {
   final String? notes;
 
   LoginEntry.base(
-    VaultBaseData b, {
+    super.b, {
     this.username,
     this.email,
     this.password,
     this.url,
     this.totpSecret,
     this.notes,
-  }) : super.base(b);
+  }) : super.base();
 
   const LoginEntry({
     required super.id,
@@ -343,7 +343,7 @@ class BankCardEntry extends VaultEntry {
   final CardType? cardType;
 
   BankCardEntry.base(
-    VaultBaseData b, {
+    super.b, {
     this.cardNumber,
     this.cardHolderName,
     this.expiryMonth,
@@ -351,7 +351,7 @@ class BankCardEntry extends VaultEntry {
     this.cvv,
     this.bankName,
     this.cardType,
-  }) : super.base(b);
+  }) : super.base();
 
   const BankCardEntry({
     required super.id,
@@ -465,10 +465,10 @@ class SecureNoteEntry extends VaultEntry {
   final bool isMarkdown;
 
   SecureNoteEntry.base(
-    VaultBaseData b, {
+    super.b, {
     this.content,
     this.isMarkdown = false,
-  }) : super.base(b);
+  }) : super.base();
 
   const SecureNoteEntry({
     required super.id,
@@ -550,7 +550,7 @@ class IdentityEntry extends VaultEntry {
   final String? email;
 
   IdentityEntry.base(
-    VaultBaseData b, {
+    super.b, {
     this.firstName,
     this.lastName,
     this.middleName,
@@ -559,7 +559,7 @@ class IdentityEntry extends VaultEntry {
     this.address,
     this.phone,
     this.email,
-  }) : super.base(b);
+  }) : super.base();
 
   const IdentityEntry({
     required super.id,
