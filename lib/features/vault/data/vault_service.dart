@@ -245,6 +245,26 @@ class VaultService {
     return _entryFromJson(json);
   }
 
+  /// 用新密钥重加密当前内存中的全部条目并持久化。
+  ///
+  /// 前置条件：内存态已经用**旧密钥**解开（明文条目在内存里）。
+  /// 写盘失败时回滚服务层密钥，避免出现「磁盘是旧密钥、内存是新密钥」的不一致。
+  Future<void> rekeyTo(Uint8List newKey) async {
+    if (_encryptionKey == null) {
+      throw VaultException.keyNotSet();
+    }
+
+    final previousKey = _encryptionKey;
+    _encryptionKey = newKey;
+
+    try {
+      await saveVault();
+    } catch (e) {
+      _encryptionKey = previousKey;
+      rethrow;
+    }
+  }
+
   /// 新增条目并刷新持久化数据。
   ///
   /// 模型不可变：这里生成刷新时间戳后的新实例入列，调用方持有的原实例不变。

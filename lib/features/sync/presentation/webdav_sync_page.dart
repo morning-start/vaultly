@@ -125,28 +125,31 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
 
   /// 按备份文件头里的 KDF 参数解析出解密密钥。
   ///
+  /// **注意用的是 `backupKey`（主密码派生），不是 `encryptionKey`（本地 DEK）**：
+  /// 备份必须能被其他设备用同一个主密码解开，因此不能用只属于本机的 DEK。
+  ///
   /// 三种情况：
-  /// 1. 文件头与本机参数一致（本机上传的备份）→ 直接用会话密钥，
+  /// 1. 文件头与本机参数一致（本机上传的备份）→ 直接用本机派生密钥，
   ///    不需要明文口令，生物识别解锁下也能恢复；
   /// 2. 文件头不同（备份来自另一台设备）→ 必须用「主密码 + 文件里的盐值」
   ///    重新派生。这正是换手机后能解开云端备份的关键；
-  /// 3. 旧格式备份没有文件头（盐值只存在于原设备）→ 退回本机会话密钥，
+  /// 3. 旧格式备份没有文件头（盐值只存在于原设备）→ 退回本机派生密钥，
   ///    只有原设备能解开。
   Future<Uint8List> _resolveBackupKey(KdfParams? kdfFromFile) async {
     final authNotifier = ref.read(authNotifierProvider.notifier);
 
-    final sessionKey = authNotifier.encryptionKey;
-    if (sessionKey == null) {
+    final backupKey = authNotifier.backupKey;
+    if (backupKey == null) {
       throw WebDAVException('未找到主密钥，请重新解锁');
     }
 
     if (kdfFromFile == null) {
-      return sessionKey;
+      return backupKey;
     }
 
     final localKdf = await authNotifier.currentKdfParams();
     if (localKdf.matches(kdfFromFile)) {
-      return sessionKey;
+      return backupKey;
     }
 
     final password = authNotifier.masterPassword;
@@ -167,7 +170,8 @@ class _WebDAVSyncPageState extends ConsumerState<WebDAVSyncPage> {
     final configNotifier = ref.read(webDAVConfigProvider.notifier);
     final authNotifier = ref.read(authNotifierProvider.notifier);
 
-    final encryptionKey = authNotifier.encryptionKey;
+    // 上传同样用主密码派生密钥（不是本地 DEK），保证其他设备能解开
+    final encryptionKey = authNotifier.backupKey;
     if (encryptionKey == null) {
       _toast('未找到主密钥，请重新解锁');
       return;
